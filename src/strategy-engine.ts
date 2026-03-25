@@ -1,0 +1,698 @@
+import { Env } from './types';
+
+// ── Timezone Helpers ──
+
+/** Get current ET hour as a decimal (e.g. 14.5 = 2:30 PM ET) */
+function getETHour(date: Date = new Date()): number {
+  const etStr = date.toLocaleString('en-US', { timeZone: 'America/New_York', hour12: false });
+  const timePart = etStr.split(', ')[1] || etStr.split(' ')[1] || '0:0';
+  const parts = timePart.split(':');
+  return parseInt(parts[0], 10) + parseInt(parts[1] || '0', 10) / 60;
+}
+
+/** Get current date string in ET (YYYY-MM-DD) */
+function getETDate(date: Date = new Date()): string {
+  const etStr = date.toLocaleString('en-US', { timeZone: 'America/New_York' });
+  const etDate = new Date(etStr);
+  const y = etDate.getFullYear();
+  const m = String(etDate.getMonth() + 1).padStart(2, '0');
+  const d = String(etDate.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+/** Get ET day of week (0=Sun, 6=Sat) */
+function getETDayOfWeek(date: Date = new Date()): number {
+  const etStr = date.toLocaleString('en-US', { timeZone: 'America/New_York' });
+  return new Date(etStr).getDay();
+}
+
+/** Check if futures market is open: Sun 6PM ET through Fri 5PM ET */
+function isFuturesMarketOpen(date: Date = new Date()): boolean {
+  const day = getETDayOfWeek(date);
+  const hour = getETHour(date);
+
+  // Saturday: closed
+  if (day === 6) return false;
+  // Sunday: open after 6PM
+  if (day === 0) return hour >= 18;
+  // Friday: open until 5PM
+  if (day === 5) return hour < 17;
+  // Mon-Thu: open all day
+  return true;
+}
+
+const INSTRUMENTS = [
+  { id: 1, symbol: 'ES', tick_size: 0.25 },
+  { id: 2, symbol: 'NQ', tick_size: 0.25 },
+];
+
+// ── 1. Scan for Fair Value Gaps ──
+
+export async function scanForFVGs(env: Env): Promise<void> {
+  const timeframes = ['5m', '15m', '1H', '4H'];
+
+  for (const inst of INSTRUMENTS) {
+    for (const tf of timeframes) {
+      try {
+        const { results: candles } = await env.DB.prepare(
+          `SELECT id, timestamp, open, high, low, close FROM candles
+           WHERE instrument_id = ? AND timeframe = ?
+           ORDER BY timestamp DESC LIMIT 20`
+        ).bind(inst.id, tf).all<{
+          id: number; timestamp: string; open: number; high: number; low: number; close: number;
+        }>();
+
+        if (candles.length < 3) continue;
+
+        // Reverse to ascending order
+        const asc = candles.slice().reverse();
+
+        for (let i = 0; i <= asc.length - 3; i++) {
+          const c1 = asc[i];
+          const c2 = asc[i + 1]; // displacement candle
+          const c3 = asc[i + 2];
+
+          let type: 'bullish' | 'bearish' | null = null;
+          let gapHigh: number;
+          let gapLow: number;
+
+          // Bullish FVG: gap between candle 1's high and candle 3's low
+          if (c1.high < c3.low) {
+            type = 'bullish';
+            gapLow = c1.high;
+            gapHigh = c3.low;
+          }
+          // Bearish FVG: gap between candle 3's high and candle 1's low
+          else if (c1.low > c3.high) {
+            type = 'bearish';
+            gapHigh = c1.low;
+            gapLow = c3.high;
+          }
+
+          if (!type) continue;
+
+          // Check for duplicate
+          const existing = await env.DB.prepare(
+            `SELECT id FROM fair_value_gaps
+             WHERE instrument_id = ? AND timeframe = ? AND timestamp = ?`
+          ).bind(inst.id, tf, c2.timestamp).first();
+
+          if (existing) continue;
+
+          await env.DB.prepare(
+            `INSERT INTO fair_value_gaps (instrument_id, timeframe, timestamp, high, low, type, status)
+             VALUES (?, ?, ?, ?, ?, ?, 'active')`
+          ).bind(inst.id, tf, c2.timestamp, gapHigh!, gapLow!, type).run();
+
+          console.log(`FVG detected: ${inst.symbol} ${tf} ${type} at ${gapLow!.toFixed(2)}-${gapHigh!.toFixed(2)}`);
+        }
+      } catch (err) {
+        console.error(`scanForFVGs error ${inst.symbol} ${tf}:`, err);
+      }
+    }
+  }
+}
+
+// ── 2. Update FVG Statuses ──
+
+export async function updateFVGStatuses(env: Env): Promise<void> {
+  const fiveDaysAgo = new Date(Date.now() - 5 * 86400000).toISOString();
+
+  for (const inst of INSTRUMENTS) {
+    try {
+      // Get latest 1m candle close
+      const latest = await env.DB.prepare(
+        `SELECT close, high, low FROM candles
+         WHERE instrument_id = ? AND timeframe = '1m'
+         ORDER BY timestamp DESC LIMIT 1`
+      ).bind(inst.id).first<{ close: number; high: number; low: number }>();
+
+      if (!latest) continue;
+
+      // Get active FVGs from last 5 days
+      const { results: fvgs } = await env.DB.prepare(
+        `SELECT id, type, high, low FROM fair_value_gaps
+         WHERE instrument_id = ? AND status = 'active' AND created_at >= ?`
+      ).bind(inst.id, fiveDaysAgo).all<{
+        id: number; type: string; high: number; low: number;
+      }>();
+
+      for (const fvg of fvgs) {
+        if (fvg.type === 'bullish') {
+          // Price closed below entire zone → inverted
+          if (latest.close < fvg.low) {
+            await env.DB.prepare(
+              `UPDATE fair_value_gaps SET status = 'inverted', inverted_at = datetime('now') WHERE id = ?`
+            ).bind(fvg.id).run();
+            console.log(`FVG inverted: ${inst.symbol} bullish ${fvg.low.toFixed(2)}-${fvg.high.toFixed(2)}`);
+          }
+          // Price low touched zone but close stayed above
+          else if (latest.low <= fvg.high && latest.low >= fvg.low && latest.close >= fvg.low) {
+            await env.DB.prepare(
+              `UPDATE fair_value_gaps SET status = 'respected' WHERE id = ?`
+            ).bind(fvg.id).run();
+          }
+        } else if (fvg.type === 'bearish') {
+          // Price closed above entire zone → inverted
+          if (latest.close > fvg.high) {
+            await env.DB.prepare(
+              `UPDATE fair_value_gaps SET status = 'inverted', inverted_at = datetime('now') WHERE id = ?`
+            ).bind(fvg.id).run();
+            console.log(`FVG inverted: ${inst.symbol} bearish ${fvg.low.toFixed(2)}-${fvg.high.toFixed(2)}`);
+          }
+          // Price high touched zone but close stayed below
+          else if (latest.high >= fvg.low && latest.high <= fvg.high && latest.close <= fvg.high) {
+            await env.DB.prepare(
+              `UPDATE fair_value_gaps SET status = 'respected' WHERE id = ?`
+            ).bind(fvg.id).run();
+          }
+        }
+      }
+    } catch (err) {
+      console.error(`updateFVGStatuses error ${inst.symbol}:`, err);
+    }
+  }
+}
+
+// ── 3. Detect Sweeps ──
+
+interface SweepInfo {
+  instrument_id: number;
+  symbol: string;
+  sweep_direction: 'high' | 'low';
+  sweep_level: number;
+}
+
+export async function detectSweeps(env: Env): Promise<SweepInfo[]> {
+  const todayET = getETDate();
+  const etHour = getETHour();
+
+  // London must be closed (after 5AM ET)
+  if (etHour < 5) return [];
+
+  const sweeps: SweepInfo[] = [];
+
+  for (const inst of INSTRUMENTS) {
+    try {
+      const session = await env.DB.prepare(
+        `SELECT london_high, london_low FROM sessions
+         WHERE date = ? AND instrument_id = ?`
+      ).bind(todayET, inst.id).first<{ london_high: number | null; london_low: number | null }>();
+
+      if (!session || session.london_high == null || session.london_low == null) continue;
+
+      // Get latest 1m candle
+      const latest = await env.DB.prepare(
+        `SELECT timestamp, high, low FROM candles
+         WHERE instrument_id = ? AND timeframe = '1m'
+         ORDER BY timestamp DESC LIMIT 1`
+      ).bind(inst.id).first<{ timestamp: string; high: number; low: number }>();
+
+      if (!latest) continue;
+
+      const brokeLow = latest.low < session.london_low;
+      const brokeHigh = latest.high > session.london_high;
+
+      if (brokeLow && brokeHigh) {
+        // Both broken — check which was most recent by scanning recent candles
+        const { results: recentCandles } = await env.DB.prepare(
+          `SELECT timestamp, high, low FROM candles
+           WHERE instrument_id = ? AND timeframe = '1m'
+           ORDER BY timestamp DESC LIMIT 30`
+        ).bind(inst.id).all<{ timestamp: string; high: number; low: number }>();
+
+        let lastHighBreak = '';
+        let lastLowBreak = '';
+        for (const c of recentCandles) {
+          if (c.high > session.london_high && !lastHighBreak) lastHighBreak = c.timestamp;
+          if (c.low < session.london_low && !lastLowBreak) lastLowBreak = c.timestamp;
+        }
+
+        if (lastLowBreak >= lastHighBreak) {
+          sweeps.push({ instrument_id: inst.id, symbol: inst.symbol, sweep_direction: 'low', sweep_level: session.london_low });
+        } else {
+          sweeps.push({ instrument_id: inst.id, symbol: inst.symbol, sweep_direction: 'high', sweep_level: session.london_high });
+        }
+      } else if (brokeLow) {
+        sweeps.push({ instrument_id: inst.id, symbol: inst.symbol, sweep_direction: 'low', sweep_level: session.london_low });
+      } else if (brokeHigh) {
+        sweeps.push({ instrument_id: inst.id, symbol: inst.symbol, sweep_direction: 'high', sweep_level: session.london_high });
+      }
+
+      if (brokeLow || brokeHigh) {
+        const s = sweeps[sweeps.length - 1];
+        console.log(`Sweep detected: ${inst.symbol} broke London ${s.sweep_direction} at ${s.sweep_level}`);
+      }
+    } catch (err) {
+      console.error(`detectSweeps error ${inst.symbol}:`, err);
+    }
+  }
+
+  return sweeps;
+}
+
+// ── 4. Setup State Machine ──
+
+interface Setup {
+  id: number;
+  instrument_id: number;
+  phase: number;
+  sweep_direction: string | null;
+  sweep_level: number | null;
+  fvg_id: number | null;
+  ifvg_id: number | null;
+  entry_price: number | null;
+  target_price: number | null;
+  stop_price: number | null;
+  risk_reward: number | null;
+  status: string;
+  updated_at: string;
+  created_at: string;
+}
+
+async function createAlert(
+  env: Env,
+  setupId: number,
+  instrumentId: number,
+  alertType: string,
+  phase: number,
+  message: string,
+  data: Record<string, unknown> = {}
+): Promise<number> {
+  const result = await env.DB.prepare(
+    `INSERT INTO setup_alerts (setup_id, instrument_id, alert_type, phase, message,
+     sweep_direction, sweep_level, fvg_high, fvg_low, ifvg_high, ifvg_low,
+     entry_price, target_price, stop_price, risk_reward)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  ).bind(
+    setupId, instrumentId, alertType, phase, message,
+    data.sweep_direction ?? null, data.sweep_level ?? null,
+    data.fvg_high ?? null, data.fvg_low ?? null,
+    data.ifvg_high ?? null, data.ifvg_low ?? null,
+    data.entry_price ?? null, data.target_price ?? null,
+    data.stop_price ?? null, data.risk_reward ?? null
+  ).run();
+  return result.meta.last_row_id as number;
+}
+
+async function triggerHaikuAnalysis(env: Env, alertId: number): Promise<void> {
+  if (!env.ANTHROPIC_API_KEY) return;
+
+  try {
+    const alert = await env.DB.prepare(
+      `SELECT sa.*, i.symbol, i.name, i.tick_size, i.tick_value
+       FROM setup_alerts sa LEFT JOIN instruments i ON sa.instrument_id = i.id
+       WHERE sa.id = ?`
+    ).bind(alertId).first<Record<string, unknown>>();
+    if (!alert) return;
+
+    const systemPrompt = 'You are an ICT (Inner Circle Trader) strategy analyst. Analyze futures trading setups using ICT methodology. Respond ONLY with valid JSON.';
+    const userPrompt = `Analyze this trading setup:
+Instrument: ${alert.symbol} (${alert.name})
+Sweep: Price broke London ${alert.sweep_direction} at ${alert.sweep_level}
+FVG: ${alert.fvg_low} - ${alert.fvg_high}
+IFVG: ${alert.ifvg_low && alert.ifvg_high ? alert.ifvg_low + ' - ' + alert.ifvg_high : 'none'}
+Entry: ${alert.entry_price}, Target: ${alert.target_price}, Stop: ${alert.stop_price}
+R:R: ${alert.risk_reward}
+Respond: {"confidence":0-100,"signal":"ACCORD"|"BASE NOTE"|"HEART NOTE"|"TOP NOTE"|"NO TRADE","fragrance":"Prestige Silver"|"Armani Stronger With You"|"YSL Y","summary":"2-3 sentences","warnings":["array"],"contracts_suggestion":"recommendation"}`;
+
+    const resp = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'x-api-key': env.ANTHROPIC_API_KEY,
+        'content-type': 'application/json',
+        'anthropic-version': '2023-06-01',
+      },
+      body: JSON.stringify({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 500,
+        system: systemPrompt,
+        messages: [{ role: 'user', content: userPrompt }],
+      }),
+    });
+
+    const data = await resp.json<{ content: { text: string }[] }>();
+    let text = data.content[0].text.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
+
+    // Store analysis on the setup
+    if (alert.setup_id) {
+      await env.DB.prepare(
+        `UPDATE setups SET haiku_analysis_json = ?, updated_at = datetime('now') WHERE id = ?`
+      ).bind(text, alert.setup_id).run();
+    }
+  } catch (err) {
+    console.error('Haiku analysis error:', err);
+  }
+}
+
+export async function runSetupStateMachine(env: Env): Promise<void> {
+  const now = new Date();
+  const todayET = getETDate(now);
+  const etHour = getETHour(now);
+
+  for (const inst of INSTRUMENTS) {
+    try {
+      // Get or create today's setup for this instrument
+      let setup = await env.DB.prepare(
+        `SELECT * FROM setups
+         WHERE instrument_id = ? AND date = ? AND status IN ('forming', 'ready')
+         ORDER BY created_at DESC LIMIT 1`
+      ).bind(inst.id, todayET).first<Setup>();
+
+      // Check expiry first
+      if (setup) {
+        if ((setup.phase <= 1 && etHour >= 15) ||
+            (setup.phase === 2 && setup.updated_at)) {
+          // Phase 0/1 after 3PM → expire
+          if (setup.phase <= 1 && etHour >= 15) {
+            await env.DB.prepare(
+              `UPDATE setups SET status = 'expired', updated_at = datetime('now') WHERE id = ?`
+            ).bind(setup.id).run();
+            console.log(`Setup expired: ${inst.symbol} phase ${setup.phase} after 3PM ET`);
+            continue;
+          }
+          // Phase 2 stale for 2 hours → expire
+          if (setup.phase === 2) {
+            const updatedAt = new Date(setup.updated_at + 'Z');
+            const hoursElapsed = (now.getTime() - updatedAt.getTime()) / 3600000;
+            if (hoursElapsed >= 2) {
+              await env.DB.prepare(
+                `UPDATE setups SET status = 'expired', updated_at = datetime('now') WHERE id = ?`
+              ).bind(setup.id).run();
+              console.log(`Setup expired: ${inst.symbol} phase 2 stale for ${hoursElapsed.toFixed(1)}h`);
+              continue;
+            }
+          }
+        }
+      }
+
+      // Create setup if none exists and London hasn't closed yet or we're still in window
+      if (!setup) {
+        const result = await env.DB.prepare(
+          `INSERT INTO setups (instrument_id, date, phase, status, user_id)
+           VALUES (?, ?, 0, 'forming', 'system')`
+        ).bind(inst.id, todayET).run();
+        setup = await env.DB.prepare('SELECT * FROM setups WHERE id = ?')
+          .bind(result.meta.last_row_id).first<Setup>();
+        if (!setup) continue;
+      }
+
+      // ── Phase 0 → Phase 1: London Range → Sweep ──
+      if (setup.phase === 0) {
+        if (etHour < 5) continue; // London not done
+
+        const sweeps = await detectSweeps(env);
+        const sweep = sweeps.find(s => s.instrument_id === inst.id);
+        if (!sweep) continue;
+
+        await env.DB.prepare(
+          `UPDATE setups SET phase = 1, sweep_direction = ?, sweep_level = ?, updated_at = datetime('now')
+           WHERE id = ?`
+        ).bind(sweep.sweep_direction, sweep.sweep_level, setup.id).run();
+
+        const msg = `${inst.symbol}: London ${sweep.sweep_direction} swept at ${sweep.sweep_level.toFixed(2)}. Sillage trail detected.`;
+        await createAlert(env, setup.id, inst.id, 'approaching', 1, msg, {
+          sweep_direction: sweep.sweep_direction,
+          sweep_level: sweep.sweep_level,
+        });
+        console.log(`Setup advanced to phase 1: ${inst.symbol}`);
+        setup.phase = 1;
+        setup.sweep_direction = sweep.sweep_direction;
+        setup.sweep_level = sweep.sweep_level;
+      }
+
+      // ── Phase 1 → Phase 2: Sweep → FVG Retracement ──
+      if (setup.phase === 1 && setup.sweep_direction) {
+        const latest = await env.DB.prepare(
+          `SELECT close FROM candles WHERE instrument_id = ? AND timeframe = '1m'
+           ORDER BY timestamp DESC LIMIT 1`
+        ).bind(inst.id).first<{ close: number }>();
+        if (!latest) continue;
+
+        const threeDaysAgo = new Date(Date.now() - 3 * 86400000).toISOString();
+
+        // For LOW sweep (going long): look for bullish FVG above current price
+        // For HIGH sweep (going short): look for bearish FVG below current price
+        const fvgType = setup.sweep_direction === 'low' ? 'bullish' : 'bearish';
+
+        const { results: fvgs } = await env.DB.prepare(
+          `SELECT id, high, low, timeframe FROM fair_value_gaps
+           WHERE instrument_id = ? AND type = ? AND status IN ('active', 'respected')
+             AND timeframe IN ('1H', '4H') AND created_at >= ?
+           ORDER BY timestamp DESC`
+        ).bind(inst.id, fvgType, threeDaysAgo).all<{
+          id: number; high: number; low: number; timeframe: string;
+        }>();
+
+        if (fvgs.length === 0) continue;
+
+        // Find nearest FVG that price is in or near (within 0.3%)
+        let matchedFvg: typeof fvgs[0] | null = null;
+        for (const fvg of fvgs) {
+          const inZone = latest.close >= fvg.low && latest.close <= fvg.high;
+          const threshold = latest.close * 0.003;
+          const nearZone = setup.sweep_direction === 'low'
+            ? (latest.close <= fvg.high + threshold && latest.close >= fvg.low - threshold)
+            : (latest.close >= fvg.low - threshold && latest.close <= fvg.high + threshold);
+
+          if (inZone || nearZone) {
+            matchedFvg = fvg;
+            break;
+          }
+        }
+
+        if (!matchedFvg) continue;
+
+        await env.DB.prepare(
+          `UPDATE setups SET phase = 2, fvg_id = ?, updated_at = datetime('now') WHERE id = ?`
+        ).bind(matchedFvg.id, setup.id).run();
+
+        const msg = `${inst.symbol}: Retracing into ${matchedFvg.timeframe} ${fvgType} FVG (${matchedFvg.low.toFixed(2)} – ${matchedFvg.high.toFixed(2)})`;
+        await createAlert(env, setup.id, inst.id, 'approaching', 2, msg, {
+          sweep_direction: setup.sweep_direction,
+          sweep_level: setup.sweep_level,
+          fvg_high: matchedFvg.high,
+          fvg_low: matchedFvg.low,
+        });
+        console.log(`Setup advanced to phase 2: ${inst.symbol}`);
+        setup.phase = 2;
+        setup.fvg_id = matchedFvg.id;
+      }
+
+      // ── Phase 2 → Phase 3: FVG Retracement → Continuation ──
+      if (setup.phase === 2 && setup.sweep_direction) {
+        // Look for continuation signal after phase 2 started
+        const updatedAt = setup.updated_at;
+
+        let continuationFvg: { id: number; high: number; low: number; type: string; status: string } | null = null;
+        let isIFVG = false;
+
+        if (setup.sweep_direction === 'low') {
+          // Going long: look for bullish continuation
+          // Option A: new bullish FVG on 5m/15m
+          const newFvg = await env.DB.prepare(
+            `SELECT id, high, low, type, status FROM fair_value_gaps
+             WHERE instrument_id = ? AND type = 'bullish' AND timeframe IN ('5m', '15m')
+               AND created_at > ? ORDER BY created_at DESC LIMIT 1`
+          ).bind(inst.id, updatedAt).first<{ id: number; high: number; low: number; type: string; status: string }>();
+
+          if (newFvg) {
+            continuationFvg = newFvg;
+          } else {
+            // Option B: bearish FVG that inverted (now acts as support)
+            const invertedFvg = await env.DB.prepare(
+              `SELECT id, high, low, type, status FROM fair_value_gaps
+               WHERE instrument_id = ? AND type = 'bearish' AND status = 'inverted'
+                 AND inverted_at > ? ORDER BY inverted_at DESC LIMIT 1`
+            ).bind(inst.id, updatedAt).first<{ id: number; high: number; low: number; type: string; status: string }>();
+            if (invertedFvg) {
+              continuationFvg = invertedFvg;
+              isIFVG = true;
+            }
+          }
+        } else {
+          // Going short: look for bearish continuation
+          const newFvg = await env.DB.prepare(
+            `SELECT id, high, low, type, status FROM fair_value_gaps
+             WHERE instrument_id = ? AND type = 'bearish' AND timeframe IN ('5m', '15m')
+               AND created_at > ? ORDER BY created_at DESC LIMIT 1`
+          ).bind(inst.id, updatedAt).first<{ id: number; high: number; low: number; type: string; status: string }>();
+
+          if (newFvg) {
+            continuationFvg = newFvg;
+          } else {
+            const invertedFvg = await env.DB.prepare(
+              `SELECT id, high, low, type, status FROM fair_value_gaps
+               WHERE instrument_id = ? AND type = 'bullish' AND status = 'inverted'
+                 AND inverted_at > ? ORDER BY inverted_at DESC LIMIT 1`
+            ).bind(inst.id, updatedAt).first<{ id: number; high: number; low: number; type: string; status: string }>();
+            if (invertedFvg) {
+              continuationFvg = invertedFvg;
+              isIFVG = true;
+            }
+          }
+        }
+
+        if (!continuationFvg) continue;
+
+        // Get session levels for target calculation
+        const session = await env.DB.prepare(
+          `SELECT london_high, london_low FROM sessions WHERE date = ? AND instrument_id = ?`
+        ).bind(todayET, inst.id).first<{ london_high: number; london_low: number }>();
+
+        let entry: number, target: number, stop: number;
+        const tickBuffer = 2 * inst.tick_size;
+
+        if (setup.sweep_direction === 'low') {
+          // Long setup
+          entry = continuationFvg.high;
+          target = session?.london_high ?? entry + 20;
+          stop = continuationFvg.low - tickBuffer;
+        } else {
+          // Short setup
+          entry = continuationFvg.low;
+          target = session?.london_low ?? entry - 20;
+          stop = continuationFvg.high + tickBuffer;
+        }
+
+        const rr = Math.abs(target - entry) / Math.abs(entry - stop);
+
+        const updateFields = isIFVG
+          ? `phase = 3, ifvg_id = ?, entry_price = ?, target_price = ?, stop_price = ?, risk_reward = ?, updated_at = datetime('now')`
+          : `phase = 3, fvg_id = ?, entry_price = ?, target_price = ?, stop_price = ?, risk_reward = ?, updated_at = datetime('now')`;
+
+        await env.DB.prepare(
+          `UPDATE setups SET ${updateFields} WHERE id = ?`
+        ).bind(continuationFvg.id, entry, target, stop, Math.round(rr * 100) / 100, setup.id).run();
+
+        const direction = setup.sweep_direction === 'low' ? 'Long' : 'Short';
+        const msg = `${inst.symbol}: ${isIFVG ? 'IFVG' : 'FVG'} continuation confirmed. ${direction} at ${entry.toFixed(2)} → ${target.toFixed(2)}. Stop ${stop.toFixed(2)}. R:R ${rr.toFixed(1)}:1`;
+
+        const alertId = await createAlert(env, setup.id, inst.id, 'ready', 3, msg, {
+          sweep_direction: setup.sweep_direction,
+          sweep_level: setup.sweep_level,
+          fvg_high: continuationFvg.high,
+          fvg_low: continuationFvg.low,
+          ifvg_high: isIFVG ? continuationFvg.high : null,
+          ifvg_low: isIFVG ? continuationFvg.low : null,
+          entry_price: entry,
+          target_price: target,
+          stop_price: stop,
+          risk_reward: Math.round(rr * 100) / 100,
+        });
+
+        console.log(`Setup advanced to phase 3: ${inst.symbol}`);
+
+        // Auto-trigger Haiku analysis
+        await triggerHaikuAnalysis(env, alertId);
+
+        setup.phase = 3;
+      }
+
+      // ── Phase 3 → Phase 4: Continuation → Entry ──
+      if (setup.phase === 3 && setup.sweep_direction) {
+        const gapId = setup.ifvg_id || setup.fvg_id;
+        if (!gapId) continue;
+
+        const gap = await env.DB.prepare(
+          `SELECT high, low FROM fair_value_gaps WHERE id = ?`
+        ).bind(gapId).first<{ high: number; low: number }>();
+        if (!gap) continue;
+
+        // Check latest 15m candles — need 2 candles holding
+        const { results: recent15m } = await env.DB.prepare(
+          `SELECT close, timestamp FROM candles
+           WHERE instrument_id = ? AND timeframe = '15m'
+           ORDER BY timestamp DESC LIMIT 3`
+        ).bind(inst.id).all<{ close: number; timestamp: string }>();
+
+        if (recent15m.length < 2) continue;
+
+        let holding = true;
+        for (const c of recent15m.slice(0, 2)) {
+          if (setup.sweep_direction === 'low') {
+            // For longs: price must not close below gap low
+            if (c.close < gap.low) { holding = false; break; }
+          } else {
+            // For shorts: price must not close above gap high
+            if (c.close > gap.high) { holding = false; break; }
+          }
+        }
+
+        if (!holding) continue;
+
+        // Get session levels for final calculation
+        const session = await env.DB.prepare(
+          `SELECT london_high, london_low FROM sessions WHERE date = ? AND instrument_id = ?`
+        ).bind(todayET, inst.id).first<{ london_high: number; london_low: number }>();
+
+        const tickBuffer = 2 * inst.tick_size;
+        let entry: number, target: number, stop: number;
+
+        if (setup.sweep_direction === 'low') {
+          entry = gap.high;
+          target = session?.london_high ?? entry + 20;
+          stop = gap.low - tickBuffer;
+        } else {
+          entry = gap.low;
+          target = session?.london_low ?? entry - 20;
+          stop = gap.high + tickBuffer;
+        }
+
+        const rr = Math.abs(target - entry) / Math.abs(entry - stop);
+        const direction = setup.sweep_direction === 'low' ? 'Buy' : 'Sell';
+
+        await env.DB.prepare(
+          `UPDATE setups SET phase = 4, status = 'ready',
+           entry_price = ?, target_price = ?, stop_price = ?, risk_reward = ?,
+           updated_at = datetime('now') WHERE id = ?`
+        ).bind(entry, target, stop, Math.round(rr * 100) / 100, setup.id).run();
+
+        const msg = `ACCORD — all notes aligned. ${direction} ${inst.symbol} at ${entry.toFixed(2)} → Target ${target.toFixed(2)}. Stop ${stop.toFixed(2)}. R:R ${rr.toFixed(1)}:1`;
+
+        const alertId = await createAlert(env, setup.id, inst.id, 'execute', 4, msg, {
+          sweep_direction: setup.sweep_direction,
+          sweep_level: setup.sweep_level,
+          fvg_high: gap.high,
+          fvg_low: gap.low,
+          ifvg_high: setup.ifvg_id ? gap.high : null,
+          ifvg_low: setup.ifvg_id ? gap.low : null,
+          entry_price: entry,
+          target_price: target,
+          stop_price: stop,
+          risk_reward: Math.round(rr * 100) / 100,
+        });
+
+        console.log(`Setup advanced to phase 4: ${inst.symbol} — ACCORD`);
+
+        // Final Haiku analysis
+        await triggerHaikuAnalysis(env, alertId);
+      }
+    } catch (err) {
+      console.error(`runSetupStateMachine error ${inst.symbol}:`, err);
+    }
+  }
+
+  // Store last run timestamp
+  try {
+    await env.DB.prepare(
+      `INSERT INTO engine_meta (key, value) VALUES ('last_run', datetime('now'))
+       ON CONFLICT(key) DO UPDATE SET value = datetime('now')`
+    ).run();
+  } catch {
+    // engine_meta table might not exist yet, that's ok
+  }
+}
+
+// ── 5. Main entry point for cron ──
+
+export async function runStrategyEngine(env: Env): Promise<void> {
+  if (!isFuturesMarketOpen()) {
+    console.log('Strategy engine: market closed, skipping');
+    return;
+  }
+
+  await scanForFVGs(env);
+  await updateFVGStatuses(env);
+  await runSetupStateMachine(env);
+}

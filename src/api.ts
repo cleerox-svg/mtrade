@@ -626,5 +626,139 @@ Respond in this exact JSON format:
     return json(results);
   }
 
+  // GET /api/fvg/:symbol
+  const fvgMatch = path.match(/^\/api\/fvg\/([A-Z]+)$/);
+  if (fvgMatch && method === 'GET') {
+    const symbol = fvgMatch[1];
+    const instrumentId = symbol === 'ES' ? 1 : symbol === 'NQ' ? 2 : null;
+    if (!instrumentId) return json({ error: 'Unknown symbol' }, 400);
+
+    const status = url.searchParams.get('status') || 'active';
+    const timeframe = url.searchParams.get('timeframe');
+    const days = parseInt(url.searchParams.get('days') || '5', 10);
+    const since = new Date(Date.now() - days * 86400000).toISOString();
+
+    let query = 'SELECT * FROM fair_value_gaps WHERE instrument_id = ? AND created_at >= ?';
+    const binds: unknown[] = [instrumentId, since];
+
+    if (status !== 'all') {
+      query += ' AND status = ?';
+      binds.push(status);
+    }
+    if (timeframe) {
+      query += ' AND timeframe = ?';
+      binds.push(timeframe);
+    }
+    query += ' ORDER BY timestamp DESC';
+
+    const { results } = await env.DB.prepare(query).bind(...binds).all();
+    return json(results);
+  }
+
+  // GET /api/setups/active
+  if (path === '/api/setups/active' && method === 'GET') {
+    const todayET = new Date().toLocaleString('en-US', { timeZone: 'America/New_York' });
+    const etDate = new Date(todayET);
+    const todayStr = `${etDate.getFullYear()}-${String(etDate.getMonth() + 1).padStart(2, '0')}-${String(etDate.getDate()).padStart(2, '0')}`;
+
+    const { results: setups } = await env.DB.prepare(
+      `SELECT s.*, i.symbol FROM setups s
+       JOIN instruments i ON s.instrument_id = i.id
+       WHERE s.date = ? AND s.status IN ('forming', 'ready')
+       ORDER BY s.created_at DESC`
+    ).bind(todayStr).all();
+
+    // Enrich with FVG, IFVG, alerts, and session data
+    const enriched = [];
+    for (const setup of setups) {
+      const fvg = (setup as Record<string, unknown>).fvg_id
+        ? await env.DB.prepare('SELECT * FROM fair_value_gaps WHERE id = ?')
+            .bind((setup as Record<string, unknown>).fvg_id).first()
+        : null;
+      const ifvg = (setup as Record<string, unknown>).ifvg_id
+        ? await env.DB.prepare('SELECT * FROM fair_value_gaps WHERE id = ?')
+            .bind((setup as Record<string, unknown>).ifvg_id).first()
+        : null;
+      const { results: alerts } = await env.DB.prepare(
+        'SELECT * FROM setup_alerts WHERE setup_id = ? ORDER BY created_at DESC'
+      ).bind((setup as Record<string, unknown>).id).all();
+
+      enriched.push({ ...setup, fvg_data: fvg, ifvg_data: ifvg, alerts });
+    }
+
+    // Get today's session levels
+    const { results: sessions } = await env.DB.prepare(
+      `SELECT s.*, i.symbol FROM sessions s JOIN instruments i ON s.instrument_id = i.id
+       WHERE s.date = ? ORDER BY i.symbol`
+    ).bind(todayStr).all();
+
+    return json({ setups: enriched, sessions });
+  }
+
+  // GET /api/setups/history
+  if (path === '/api/setups/history' && method === 'GET') {
+    const days = parseInt(url.searchParams.get('days') || '14', 10);
+    const since = new Date(Date.now() - days * 86400000).toISOString().substring(0, 10);
+    const { results } = await env.DB.prepare(
+      `SELECT s.*, i.symbol FROM setups s
+       JOIN instruments i ON s.instrument_id = i.id
+       WHERE s.date >= ? ORDER BY s.date DESC, s.created_at DESC`
+    ).bind(since).all();
+    return json(results);
+  }
+
+  // GET /api/engine/status
+  if (path === '/api/engine/status' && method === 'GET') {
+    const todayET = new Date().toLocaleString('en-US', { timeZone: 'America/New_York' });
+    const etDate = new Date(todayET);
+    const todayStr = `${etDate.getFullYear()}-${String(etDate.getMonth() + 1).padStart(2, '0')}-${String(etDate.getDate()).padStart(2, '0')}`;
+
+    let lastRun: string | null = null;
+    try {
+      const meta = await env.DB.prepare("SELECT value FROM engine_meta WHERE key = 'last_run'").first<{ value: string }>();
+      lastRun = meta?.value ?? null;
+    } catch { /* table may not exist */ }
+
+    const fiveDaysAgo = new Date(Date.now() - 5 * 86400000).toISOString();
+
+    const activeFvgs = await env.DB.prepare(
+      "SELECT COUNT(*) as count FROM fair_value_gaps WHERE status = 'active' AND created_at >= ?"
+    ).bind(fiveDaysAgo).first<{ count: number }>();
+
+    const respectedFvgs = await env.DB.prepare(
+      "SELECT COUNT(*) as count FROM fair_value_gaps WHERE status = 'respected' AND created_at >= ?"
+    ).bind(fiveDaysAgo).first<{ count: number }>();
+
+    const invertedFvgs = await env.DB.prepare(
+      "SELECT COUNT(*) as count FROM fair_value_gaps WHERE status = 'inverted' AND created_at >= ?"
+    ).bind(fiveDaysAgo).first<{ count: number }>();
+
+    const activeSetups = await env.DB.prepare(
+      "SELECT COUNT(*) as count FROM setups WHERE date = ? AND status IN ('forming', 'ready')"
+    ).bind(todayStr).first<{ count: number }>();
+
+    const activeAlerts = await env.DB.prepare(
+      'SELECT COUNT(*) as count FROM setup_alerts WHERE is_active = 1'
+    ).first<{ count: number }>();
+
+    const { results: sessions } = await env.DB.prepare(
+      `SELECT s.*, i.symbol FROM sessions s JOIN instruments i ON s.instrument_id = i.id
+       WHERE s.date = ? ORDER BY i.symbol`
+    ).bind(todayStr).all();
+
+    return json({
+      last_run: lastRun,
+      fvg_counts: {
+        active: activeFvgs?.count ?? 0,
+        respected: respectedFvgs?.count ?? 0,
+        inverted: invertedFvgs?.count ?? 0,
+      },
+      active_setups: activeSetups?.count ?? 0,
+      active_alerts: activeAlerts?.count ?? 0,
+      sessions,
+      today: todayStr,
+    });
+  }
+
   return json({ error: 'Not found' }, 404);
 }
