@@ -2,6 +2,7 @@ import { Env, JwtPayload, User } from './types';
 import { verifyJwt } from './jwt';
 import { handleGoogleRedirect, handleCallback, handleLogout } from './auth';
 import { loginPage, appPage } from './pages';
+import { getLearnPage } from './pages-learn';
 import { handleApiRoutes } from './api';
 import { fetchAndStoreCandles, computeSessionLevels } from './market-data';
 import { runStrategyEngine } from './strategy-engine';
@@ -210,6 +211,18 @@ export default {
       }
       const userRow = await env.DB.prepare('SELECT avatar_url FROM users WHERE id = ?').bind(payload.sub).first<{ avatar_url: string }>();
       return new Response(appPage({ name: payload.name, email: payload.email, avatar_url: userRow?.avatar_url ?? '' }), {
+        headers: { 'Content-Type': 'text/html; charset=utf-8' },
+      });
+    }
+
+    // Learn page — requires auth
+    if (path === '/app/learn') {
+      const payload = await getJwtPayload(request, env);
+      if (!payload) {
+        return Response.redirect(new URL('/', url.origin).toString(), 302);
+      }
+      const userRow = await env.DB.prepare('SELECT avatar_url FROM users WHERE id = ?').bind(payload.sub).first<{ avatar_url: string }>();
+      return new Response(getLearnPage({ name: payload.name, email: payload.email, avatar_url: userRow?.avatar_url ?? '' }), {
         headers: { 'Content-Type': 'text/html; charset=utf-8' },
       });
     }
