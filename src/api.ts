@@ -1,4 +1,5 @@
 import { Env, JwtPayload } from './types';
+import { sendTestNotification } from './notifications';
 
 type Json = (data: unknown, status?: number) => Response;
 
@@ -758,6 +759,19 @@ Respond in this exact JSON format:
       sessions,
       today: todayStr,
     });
+  }
+
+  // POST /api/notifications/test
+  if (path === '/api/notifications/test' && method === 'POST') {
+    if (!env.DISCORD_WEBHOOK_URL) {
+      return json({ success: false, error: 'DISCORD_WEBHOOK_URL not configured' }, 400);
+    }
+    try {
+      const sent = await sendTestNotification(env);
+      return json({ success: sent });
+    } catch (err) {
+      return json({ success: false, error: String(err) }, 500);
+    }
   }
 
   return json({ error: 'Not found' }, 404);

@@ -1367,6 +1367,8 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
     <button class="fab-add" id="fab-add" aria-label="Log trade">+</button>
 
     <button class="demo-alert-link" id="demo-alert-btn">Create Demo Alert</button>
+    <button class="demo-alert-link" id="test-discord-btn" style="margin-left:12px">Test Discord</button>
+    <span id="discord-status" style="font-family:'JetBrains Mono',monospace;font-size:9px;margin-left:6px;opacity:0;transition:opacity 0.3s"></span>
 
     <div id="engine-status" style="text-align:center;padding:8px 0;font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--muted);letter-spacing:0.5px"></div>
 
@@ -2844,6 +2846,31 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
       fetch('/api/alerts/demo', { method: 'POST', credentials: 'same-origin' })
         .then(function() { pollAlerts(); })
         .catch(function(err) { console.error('Failed to create demo alert', err); });
+    };
+
+    // Test Discord button
+    document.getElementById('test-discord-btn').onclick = function() {
+      var statusEl = document.getElementById('discord-status');
+      statusEl.style.opacity = '1';
+      statusEl.textContent = '...';
+      statusEl.style.color = 'var(--muted)';
+      fetch('/api/notifications/test', { method: 'POST', credentials: 'same-origin' })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+          if (data.success) {
+            statusEl.textContent = '\u2713 Sent';
+            statusEl.style.color = '#34d058';
+          } else {
+            statusEl.textContent = '\u2717 Failed';
+            statusEl.style.color = 'var(--red)';
+          }
+          setTimeout(function() { statusEl.style.opacity = '0'; }, 3000);
+        })
+        .catch(function() {
+          statusEl.textContent = '\u2717 Failed';
+          statusEl.style.color = 'var(--red)';
+          setTimeout(function() { statusEl.style.opacity = '0'; }, 3000);
+        });
     };
   })();
   </script>

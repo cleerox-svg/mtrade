@@ -5,6 +5,7 @@ import { loginPage, appPage } from './pages';
 import { handleApiRoutes } from './api';
 import { fetchAndStoreCandles, computeSessionLevels } from './market-data';
 import { runStrategyEngine } from './strategy-engine';
+import { sendDrawdownWarning, sendConsistencyWarning, hasNotificationToday, logNotification } from './notifications';
 
 function getCookie(request: Request, name: string): string | null {
   const header = request.headers.get('Cookie');
@@ -48,6 +49,94 @@ async function handleBuiltinApi(
   }
 
   return null;
+}
+
+async function checkApexRiskAlerts(env: Env): Promise<void> {
+  if (!env.DISCORD_WEBHOOK_URL) return;
+
+  try {
+    const { results: accounts } = await env.DB.prepare(
+      'SELECT * FROM apex_accounts WHERE is_active = 1'
+    ).all<Record<string, unknown>>();
+
+    for (const account of accounts) {
+      const userId = account.user_id as string;
+      const label = account.label as string;
+      const drawdownLimit = account.drawdown_limit as number;
+      const accountSize = account.account_size as number;
+
+      const { results: rows } = await env.DB.prepare(
+        'SELECT * FROM apex_daily_pnl WHERE apex_account_id = ? ORDER BY date ASC'
+      ).bind(account.id).all<Record<string, unknown>>();
+
+      if (rows.length === 0) continue;
+
+      const totalPnl = rows.reduce((s, r) => s + (r.pnl as number), 0);
+
+      // Drawdown calculation
+      let drawdownUsed = 0;
+      if (account.drawdown_type === 'trailing') {
+        let peak = accountSize;
+        let running = peak;
+        for (const r of rows) {
+          running += r.pnl as number;
+          if (running > peak) peak = running;
+        }
+        drawdownUsed = peak - running;
+      } else {
+        const losses = rows.filter(r => (r.pnl as number) < 0);
+        drawdownUsed = Math.abs(losses.reduce((s, r) => s + (r.pnl as number), 0));
+      }
+
+      const drawdownPct = drawdownLimit > 0 ? (drawdownUsed / drawdownLimit) * 100 : 0;
+      const balance = accountSize + totalPnl;
+
+      // Drawdown warning at 70% and critical at 85%
+      if (drawdownPct >= 85) {
+        const alreadySent = await hasNotificationToday(env, userId, 'drawdown_critical');
+        if (!alreadySent) {
+          await sendDrawdownWarning(env, { label }, {
+            drawdown_pct: drawdownPct, drawdown_used: drawdownUsed,
+            drawdown_limit: drawdownLimit, balance,
+          });
+          await logNotification(env, userId, 'drawdown_critical');
+        }
+      } else if (drawdownPct >= 70) {
+        const alreadySent = await hasNotificationToday(env, userId, 'drawdown_warning');
+        if (!alreadySent) {
+          await sendDrawdownWarning(env, { label }, {
+            drawdown_pct: drawdownPct, drawdown_used: drawdownUsed,
+            drawdown_limit: drawdownLimit, balance,
+          });
+          await logNotification(env, userId, 'drawdown_warning');
+        }
+      }
+
+      // Consistency warning — check if within 5% of limit
+      const profitDays = rows.filter(r => (r.pnl as number) > 0);
+      const totalProfit = profitDays.reduce((s, r) => s + (r.pnl as number), 0);
+      const consistencyLimit = 30;
+      if (totalProfit > 0 && profitDays.length > 0) {
+        const bestDay = Math.max(...profitDays.map(r => r.pnl as number));
+        const bestDayPct = (bestDay / totalProfit) * 100;
+        const consistencyPct = Math.round(100 - Math.max(0, bestDayPct - consistencyLimit));
+        const headroom = consistencyLimit - (100 - consistencyPct);
+
+        if (headroom <= 5 && headroom > 0) {
+          const alreadySent = await hasNotificationToday(env, userId, 'consistency_warning');
+          if (!alreadySent) {
+            await sendConsistencyWarning(env, { label }, {
+              consistency_pct: consistencyPct, consistency_limit: consistencyLimit,
+              best_day: bestDay, total_pnl: totalPnl,
+            });
+            await logNotification(env, userId, 'consistency_warning');
+          }
+        }
+      }
+    }
+  } catch (err) {
+    console.error('Apex risk alerts error:', err);
+  }
 }
 
 export default {
@@ -104,6 +193,12 @@ export default {
       await fetchAndStoreCandles(env);
       await computeSessionLevels(env);
       await runStrategyEngine(env);
+
+      // Run Apex risk checks every 5 minutes (when minute is divisible by 5)
+      const minute = new Date().getMinutes();
+      if (minute % 5 === 0) {
+        await checkApexRiskAlerts(env);
+      }
     } catch (err) {
       console.error('Cron error:', err);
     }
