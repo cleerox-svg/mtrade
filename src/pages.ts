@@ -762,7 +762,9 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
     #tv-chart-wrap iframe { border: none !important; }
 
     /* Candlestick Chart */
-    .chart-svg { width: 100%; height: 220px; display: block; background: #0a0a10; border-radius: 10px; }
+    .chart-svg { width: 100%; height: 260px; display: block; background: #0a0a10; border-radius: 10px; }
+    @media (min-width: 600px) { .chart-svg { height: 400px; } }
+    .chart-wrap { position: relative; }
     .chart-legend {
       display: flex;
       flex-wrap: wrap;
@@ -782,6 +784,59 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
       height: 10px;
       border-radius: 2px;
       flex-shrink: 0;
+    }
+    /* Timeframe selector */
+    .tf-row {
+      display: flex;
+      gap: 6px;
+      margin-bottom: 8px;
+    }
+    .tf-btn {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px;
+      letter-spacing: 1px;
+      background: transparent;
+      border: 1px solid rgba(255,255,255,0.1);
+      color: var(--label);
+      border-radius: 6px;
+      padding: 4px 10px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .tf-btn.active {
+      background: rgba(251,44,90,0.1);
+      border-color: rgba(251,44,90,0.35);
+      color: var(--red);
+    }
+    /* Chart crosshair tooltip */
+    .chart-crosshair-label {
+      position: absolute;
+      pointer-events: none;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 8px;
+      background: var(--white);
+      color: #0a0a10;
+      padding: 1px 4px;
+      border-radius: 2px;
+      white-space: nowrap;
+      z-index: 5;
+    }
+    /* LIVE / DELAYED tag */
+    .chart-live-tag {
+      position: absolute;
+      top: 8px;
+      left: 8px;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 8px;
+      letter-spacing: 0.5px;
+      z-index: 5;
+      pointer-events: none;
+    }
+    .chart-live-tag .tag-dot {
+      width: 5px; height: 5px; border-radius: 50%; display: inline-block;
     }
 
     /* Entry pulse animation */
@@ -1706,8 +1761,8 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
     var widgetInstance = null;
 
     var symbolMap = {
-      NQ: 'CME_MINI:NQ1!',
-      ES: 'CME_MINI:ES1!'
+      NQ: 'OANDA:NAS100USD',
+      ES: 'OANDA:SPX500USD'
     };
 
     function renderWidget() {
@@ -1759,6 +1814,9 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
   /* ── Strategy Chart (SVG with real data + annotations) ── */
   (function() {
     var chartEl = document.getElementById('price-chart');
+    var selectedTimeframe = '15m';
+    var CANDLE_LIMIT = 80;
+    var lastFetchTime = 0;
 
     var fallbackData = {
       NQ: { londonHigh: 21487.50, londonLow: 21422.75, fvg: { high: 21440, low: 21428 }, ifvg: { high: 21462, low: 21455 } },
@@ -1772,11 +1830,12 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
     var alertLevels = null;
 
     function fetchCandleData(sym) {
-      return fetch('/api/candles/' + sym + '/15m?limit=60')
+      return fetch('/api/candles/' + sym + '/' + selectedTimeframe + '?limit=' + CANDLE_LIMIT)
         .then(function(r) { return r.json(); })
         .then(function(data) {
           if (data.candles && data.candles.length > 0) {
             cachedCandles[sym] = data.candles.reverse();
+            lastFetchTime = Date.now();
           }
         }).catch(function() {});
     }
@@ -1810,7 +1869,7 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
         var o = price, c = price + change;
         var h = Math.max(o, c) + Math.abs(change) * (0.3 + Math.random() * 0.7);
         var l = Math.min(o, c) - Math.abs(change) * (0.3 + Math.random() * 0.7);
-        candles.push({ open: +o.toFixed(2), high: +h.toFixed(2), low: +l.toFixed(2), close: +c.toFixed(2) });
+        candles.push({ open: +o.toFixed(2), high: +h.toFixed(2), low: +l.toFixed(2), close: +c.toFixed(2), time: Date.now() - (count - i) * 60000 });
         price = c;
       }
       return candles;
@@ -1837,24 +1896,43 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
       maxP += range * 0.05;
       range = maxP - minP;
 
-      var svgW = 800, svgH = 300, padR = 65, padL = 4, padT = 8, padB = 8;
+      var isDesktop = window.innerWidth >= 600;
+      var svgW = 800, svgH = isDesktop ? 400 : 300, padR = 65, padL = 4, padT = 8, padB = 20;
       var chartW = svgW - padL - padR, chartH = svgH - padT - padB;
       function priceY(p) { return padT + chartH - ((p - minP) / range) * chartH; }
 
       var candleW = chartW / candles.length;
-      var bodyW = Math.max(candleW - 1, 1);
+      var bodyW = isDesktop ? Math.max(candleW * 0.7, 2) : Math.max(candleW - 1, 1);
 
-      var svg = '<svg class="chart-svg" viewBox="0 0 ' + svgW + ' ' + svgH + '" preserveAspectRatio="none">';
+      var svg = '<svg class="chart-svg" viewBox="0 0 ' + svgW + ' ' + svgH + '" preserveAspectRatio="none" style="height:' + (isDesktop ? 400 : 260) + 'px">';
 
+      // Gradient definition for area fill
+      svg += '<defs><linearGradient id="areaGrad" x1="0" y1="0" x2="0" y2="1">';
+      svg += '<stop offset="0%" stop-color="rgba(251,44,90,0.06)"/>';
+      svg += '<stop offset="100%" stop-color="rgba(251,44,90,0)"/>';
+      svg += '</linearGradient></defs>';
+
+      // Grid lines
       for (var g = 1; g <= 3; g++) {
         var gy = padT + (chartH * g / 4);
         svg += '<line x1="' + padL + '" y1="' + gy + '" x2="' + (svgW - padR) + '" y2="' + gy + '" stroke="rgba(255,255,255,0.04)" stroke-width="1"/>';
       }
+
+      // Y-axis price labels (5 evenly spaced)
       for (var yi = 0; yi <= 4; yi++) {
         var yPrice = minP + (range * yi / 4);
         var yPos = priceY(yPrice);
         svg += '<text x="' + (svgW - padR + 6) + '" y="' + (yPos + 3) + '" fill="var(--muted)" font-family="JetBrains Mono,monospace" font-size="8">' + yPrice.toFixed(2) + '</text>';
       }
+
+      // Area fill below close prices
+      var areaPoints = '' + padL + ',' + (padT + chartH);
+      candles.forEach(function(c, i) {
+        var x = padL + i * candleW + candleW / 2;
+        areaPoints += ' ' + x + ',' + priceY(c.close);
+      });
+      areaPoints += ' ' + (padL + (candles.length - 1) * candleW + candleW / 2) + ',' + (padT + chartH);
+      svg += '<polygon points="' + areaPoints + '" fill="url(#areaGrad)"/>';
 
       // Entry/target/stop zones
       if (entry != null && target != null) {
@@ -1866,18 +1944,16 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
         }
       }
 
-      // FVG zone
+      // FVG zone with dashed borders
       if (d.fvg && d.fvg.high != null) {
         var fvgTopY = priceY(d.fvg.high), fvgBotY = priceY(d.fvg.low);
-        svg += '<rect x="' + padL + '" y="' + fvgTopY + '" width="' + chartW + '" height="' + (fvgBotY - fvgTopY) + '" fill="rgba(251,44,90,0.1)"/>';
-        svg += '<line x1="' + padL + '" y1="' + fvgTopY + '" x2="' + (padL + chartW) + '" y2="' + fvgTopY + '" stroke="var(--red)" stroke-width="0.5" stroke-dasharray="4,3" opacity="0.4"/>';
-        svg += '<line x1="' + padL + '" y1="' + fvgBotY + '" x2="' + (padL + chartW) + '" y2="' + fvgBotY + '" stroke="var(--red)" stroke-width="0.5" stroke-dasharray="4,3" opacity="0.4"/>';
+        svg += '<rect x="' + padL + '" y="' + fvgTopY + '" width="' + chartW + '" height="' + (fvgBotY - fvgTopY) + '" fill="rgba(251,44,90,0.1)" stroke="var(--red)" stroke-width="0.5" stroke-dasharray="4,3" opacity="0.7"/>';
       }
 
-      // IFVG zone
+      // IFVG zone with dashed borders
       if (d.ifvg && d.ifvg.high != null) {
         var ifvgTopY = priceY(d.ifvg.high), ifvgBotY = priceY(d.ifvg.low);
-        svg += '<rect x="' + padL + '" y="' + ifvgTopY + '" width="' + chartW + '" height="' + (ifvgBotY - ifvgTopY) + '" fill="rgba(251,191,36,0.1)"/>';
+        svg += '<rect x="' + padL + '" y="' + ifvgTopY + '" width="' + chartW + '" height="' + (ifvgBotY - ifvgTopY) + '" fill="rgba(251,191,36,0.1)" stroke="var(--amber)" stroke-width="0.5" stroke-dasharray="4,3" opacity="0.7"/>';
       }
 
       // London H/L lines
@@ -1911,10 +1987,17 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
         svg += '</g>';
       }
 
+      // Current price line (latest close)
+      var lastClose = candles[candles.length - 1].close;
+      var lastCloseY = priceY(lastClose);
+      svg += '<line x1="' + padL + '" y1="' + lastCloseY + '" x2="' + (padL + chartW) + '" y2="' + lastCloseY + '" stroke="var(--white)" stroke-width="1" opacity="0.5"/>';
+      svg += '<rect x="' + (svgW - padR + 2) + '" y="' + (lastCloseY - 7) + '" width="58" height="14" rx="2" fill="var(--white)"/>';
+      svg += '<text x="' + (svgW - padR + 5) + '" y="' + (lastCloseY + 3) + '" fill="#0a0a10" font-family="JetBrains Mono,monospace" font-size="8" font-weight="bold">' + lastClose.toFixed(2) + '</text>';
+
       // Candles
       candles.forEach(function(c, i) {
-        var x = padL + i * candleW;
-        var cx = x + bodyW / 2;
+        var x = padL + i * candleW + (candleW - bodyW) / 2;
+        var cx = padL + i * candleW + candleW / 2;
         var bullish = c.close >= c.open;
         var bodyColor = bullish ? 'var(--red)' : '#475569';
         var wickColor = bullish ? 'var(--red-soft)' : '#64748b';
@@ -1925,8 +2008,112 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
         svg += '<rect x="' + x + '" y="' + bodyTop + '" width="' + bodyW + '" height="' + bodyH + '" fill="' + bodyColor + '" rx="0.5"/>';
       });
 
+      // Crosshair overlay (invisible rect to capture pointer events)
+      svg += '<rect class="chart-hit-area" x="' + padL + '" y="' + padT + '" width="' + chartW + '" height="' + chartH + '" fill="transparent" style="pointer-events:all"/>';
+      svg += '<line class="ch-v" x1="0" y1="' + padT + '" x2="0" y2="' + (padT + chartH) + '" stroke="rgba(255,255,255,0.2)" stroke-width="0.5" stroke-dasharray="3,3" style="display:none;pointer-events:none"/>';
+      svg += '<line class="ch-h" x1="' + padL + '" y1="0" x2="' + (padL + chartW) + '" y2="0" stroke="rgba(255,255,255,0.2)" stroke-width="0.5" stroke-dasharray="3,3" style="display:none;pointer-events:none"/>';
+
       svg += '</svg>';
+
+      // Store chart geometry for crosshair calculations
+      svg += '<script type="application/json" class="chart-geo">' + JSON.stringify({
+        padL: padL, padT: padT, padR: padR, padB: padB,
+        chartW: chartW, chartH: chartH, svgW: svgW, svgH: svgH,
+        minP: minP, maxP: maxP, range: range, candleCount: candles.length, candleW: candleW
+      }) + '</' + 'script>';
+
       return svg;
+    }
+
+    function setupCrosshair(container) {
+      var svgEl = container.querySelector('.chart-svg');
+      var hitArea = container.querySelector('.chart-hit-area');
+      if (!svgEl || !hitArea) return;
+      var geoScript = container.querySelector('.chart-geo');
+      if (!geoScript) return;
+      var geo = JSON.parse(geoScript.textContent);
+
+      var chV = svgEl.querySelector('.ch-v');
+      var chH = svgEl.querySelector('.ch-h');
+      var priceLabel = document.createElement('div');
+      priceLabel.className = 'chart-crosshair-label';
+      priceLabel.style.display = 'none';
+      container.appendChild(priceLabel);
+      var timeLabel = document.createElement('div');
+      timeLabel.className = 'chart-crosshair-label';
+      timeLabel.style.display = 'none';
+      container.appendChild(timeLabel);
+
+      var isMobile = 'ontouchstart' in window;
+      var holdTimer = null;
+      var crosshairActive = false;
+
+      function showCrosshair(clientX, clientY) {
+        var rect = svgEl.getBoundingClientRect();
+        var scaleX = geo.svgW / rect.width;
+        var scaleY = geo.svgH / rect.height;
+        var svgX = (clientX - rect.left) * scaleX;
+        var svgY = (clientY - rect.top) * scaleY;
+
+        if (svgX < geo.padL || svgX > geo.padL + geo.chartW || svgY < geo.padT || svgY > geo.padT + geo.chartH) {
+          hideCrosshair(); return;
+        }
+
+        chV.setAttribute('x1', svgX); chV.setAttribute('x2', svgX); chV.style.display = '';
+        chH.setAttribute('y1', svgY); chH.setAttribute('y2', svgY); chH.style.display = '';
+
+        var price = geo.maxP - ((svgY - geo.padT) / geo.chartH) * geo.range;
+        priceLabel.textContent = price.toFixed(2);
+        priceLabel.style.display = '';
+        priceLabel.style.right = '2px';
+        priceLabel.style.top = ((svgY / geo.svgH) * 100) + '%';
+        priceLabel.style.left = '';
+
+        var candleIdx = Math.floor((svgX - geo.padL) / geo.candleW);
+        var now = new Date();
+        var tfMins = selectedTimeframe === '5m' ? 5 : selectedTimeframe === '1H' ? 60 : selectedTimeframe === '4H' ? 240 : 15;
+        var candleTime = new Date(now.getTime() - (geo.candleCount - 1 - candleIdx) * tfMins * 60000);
+        var hh = String(candleTime.getHours()).padStart(2, '0');
+        var mm = String(candleTime.getMinutes()).padStart(2, '0');
+        timeLabel.textContent = hh + ':' + mm;
+        timeLabel.style.display = '';
+        timeLabel.style.bottom = '2px';
+        timeLabel.style.left = ((svgX / geo.svgW) * 100) + '%';
+        timeLabel.style.top = '';
+        timeLabel.style.right = '';
+      }
+
+      function hideCrosshair() {
+        chV.style.display = 'none'; chH.style.display = 'none';
+        priceLabel.style.display = 'none'; timeLabel.style.display = 'none';
+        crosshairActive = false;
+      }
+
+      if (isMobile) {
+        hitArea.addEventListener('touchstart', function(e) {
+          holdTimer = setTimeout(function() {
+            crosshairActive = true;
+            var t = e.touches[0];
+            showCrosshair(t.clientX, t.clientY);
+          }, 300);
+        }, { passive: true });
+        hitArea.addEventListener('touchmove', function(e) {
+          if (crosshairActive) {
+            e.preventDefault();
+            var t = e.touches[0];
+            showCrosshair(t.clientX, t.clientY);
+          } else {
+            clearTimeout(holdTimer);
+          }
+        }, { passive: false });
+        hitArea.addEventListener('touchend', function() {
+          clearTimeout(holdTimer);
+          hideCrosshair();
+        }, { passive: true });
+      } else {
+        svgEl.addEventListener('mousemove', function(e) { showCrosshair(e.clientX, e.clientY); });
+        svgEl.addEventListener('mouseleave', hideCrosshair);
+      }
     }
 
     function renderChartWithData() {
@@ -1964,20 +2151,51 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
       // Use real candles if available, else generate fallback
       if (!candles || candles.length === 0) {
         var startPrice = fb === fallbackData.NQ ? 21450 : 5890;
-        candles = generateFallbackCandles(startPrice, 60);
+        candles = generateFallbackCandles(startPrice, CANDLE_LIMIT);
         if (!entry) { entry = d.ifvg.high; target = d.londonHigh; stop = d.ifvg.low - 2; }
       }
 
       var svgHtml = drawSvgChart(candles, d, entry, target, stop);
 
+      // LIVE / DELAYED tag
+      var ageMs = Date.now() - lastFetchTime;
+      var isLive = lastFetchTime > 0 && ageMs < 120000;
+      var liveTag = '';
+      if (lastFetchTime > 0) {
+        if (isLive) {
+          liveTag = '<div class="chart-live-tag"><span class="tag-dot" style="background:var(--green);animation:breathe 2s ease-in-out infinite"></span><span style="color:var(--green)">LIVE</span></div>';
+        } else {
+          liveTag = '<div class="chart-live-tag"><span class="tag-dot" style="background:var(--amber)"></span><span style="color:var(--amber)">DELAYED</span></div>';
+        }
+      }
+
+      // Timeframe selector
+      var tfHtml = '<div class="tf-row">';
+      ['5m', '15m', '1H', '4H'].forEach(function(tf) {
+        tfHtml += '<button class="tf-btn' + (selectedTimeframe === tf ? ' active' : '') + '" data-tf="' + tf + '">' + tf + '</button>';
+      });
+      tfHtml += '</div>';
+
       var legend = '<div class="chart-legend">' +
         '<div class="chart-legend-item"><span class="chart-legend-swatch" style="background:rgba(251,44,90,0.3);border:1px dashed var(--red)"></span>FVG</div>' +
-        '<div class="chart-legend-item"><span class="chart-legend-swatch" style="background:rgba(251,191,36,0.25)"></span>IFVG</div>' +
+        '<div class="chart-legend-item"><span class="chart-legend-swatch" style="background:rgba(251,191,36,0.25);border:1px dashed var(--amber)"></span>IFVG</div>' +
         '<div class="chart-legend-item"><span class="chart-legend-swatch" style="background:var(--red);width:14px;height:2px;border-radius:0"></span>LDN H</div>' +
         '<div class="chart-legend-item"><span class="chart-legend-swatch" style="background:var(--muted);width:14px;height:2px;border-radius:0"></span>LDN L</div>' +
         '</div>';
 
-      chartEl.innerHTML = '<div class="card" style="animation:slideUp 0.3s ease"><div class="card-title">\\u25C8 STRATEGY CHART</div>' + svgHtml + legend + '</div>';
+      chartEl.innerHTML = '<div class="card" style="animation:slideUp 0.3s ease"><div class="card-title">\\u25C8 STRATEGY CHART</div>' + tfHtml + '<div class="chart-wrap">' + liveTag + svgHtml + '</div>' + legend + '</div>';
+
+      // Bind timeframe selector
+      chartEl.querySelectorAll('.tf-btn').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+          selectedTimeframe = btn.dataset.tf;
+          loadAndRender();
+        });
+      });
+
+      // Setup crosshair
+      var wrap = chartEl.querySelector('.chart-wrap');
+      if (wrap) setupCrosshair(wrap);
     }
 
     function loadAndRender() {
