@@ -11,3 +11,6 @@ binding = "DB"
 database_name = "mtrade-db"
 database_id = "54ffc831-f9ff-4d24-bfbf-1b6f8f580261"
 migrations_dir = "migrations"
+
+[triggers]
+crons = ["*/1 * * * *"]

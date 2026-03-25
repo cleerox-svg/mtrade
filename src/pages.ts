@@ -701,6 +701,66 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
     }
     .modal-submit:disabled { opacity: 0.4; cursor: default; }
 
+    /* Live Price */
+    .live-price-row {
+      display: flex;
+      align-items: baseline;
+      gap: 10px;
+      margin-bottom: 4px;
+    }
+    .live-price-value {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 34px;
+      font-weight: 700;
+      color: var(--white);
+      line-height: 1;
+    }
+    .live-price-change {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+      padding: 2px 6px;
+      border-radius: 4px;
+    }
+    .live-price-change.up { background: rgba(52,211,153,0.15); color: var(--green); }
+    .live-price-change.down { background: rgba(239,68,68,0.15); color: var(--danger); }
+    .live-price-change.flat { background: rgba(148,163,184,0.15); color: var(--label); }
+    .live-price-indicator {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 8px;
+      color: var(--label);
+      letter-spacing: 1px;
+    }
+    .live-price-indicator .dot {
+      display: inline-block;
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+      margin-right: 4px;
+      vertical-align: middle;
+    }
+    .live-price-indicator .dot.live { background: var(--green); animation: breathe 2s ease-in-out infinite; }
+    .live-price-indicator .dot.delayed { background: var(--amber); }
+    .live-session-levels {
+      display: flex;
+      gap: 16px;
+      margin-top: 8px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px;
+    }
+    .live-session-levels .level-label { color: var(--muted); margin-right: 4px; }
+    .live-session-levels .level-value { color: var(--label); }
+
+    /* TradingView Chart */
+    #tv-chart-wrap {
+      width: 100%;
+      height: 280px;
+      border-radius: 10px;
+      overflow: hidden;
+      background: #0a0a10;
+      margin-bottom: 8px;
+    }
+    #tv-chart-wrap iframe { border: none !important; }
+
     /* Candlestick Chart */
     .chart-svg { width: 100%; height: 220px; display: block; background: #0a0a10; border-radius: 10px; }
     .chart-legend {
@@ -1110,6 +1170,7 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
         border-radius: 14px;
       }
       .chart-svg { height: 300px; }
+      #tv-chart-wrap { height: 400px; }
       .phase-label { font-size: 13px; }
       .phase-desc { font-size: 11px; }
       .alert-overlay { padding: 20px; }
@@ -1150,7 +1211,9 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
     <div id="ai-analysis"></div>
     <div id="instrument-selector"></div>
     <div id="apex-selector"></div>
+    <div id="live-price-card"></div>
     <div id="dashboard-panel"></div>
+    <div id="tv-chart-container"></div>
     <div id="price-chart"></div>
     <div id="signal-tracker"></div>
     <div id="pnl-log"></div>
@@ -1559,124 +1622,279 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
   </script>
 
   <script>
-  /* ── Candlestick Chart ── */
+  /* ── Live Price Display ── */
+  (function() {
+    var priceCard = document.getElementById('live-price-card');
+    var priceData = {};
+    var sessionData = {};
+
+    function renderPriceCard() {
+      var sym = window.selectedInstrument || 'NQ';
+      var p = priceData[sym];
+      var html = '<div class="card" style="animation:slideUp 0.3s ease">';
+      html += '<div class="card-title">\\u25C8 LIVE PRICE</div>';
+      html += '<div class="live-price-row">';
+      if (p) {
+        html += '<span class="live-price-value">' + p.price.toFixed(2) + '</span>';
+        var cls = p.change_pct > 0 ? 'up' : p.change_pct < 0 ? 'down' : 'flat';
+        var sign = p.change_pct > 0 ? '+' : '';
+        html += '<span class="live-price-change ' + cls + '">' + sign + p.change_pct.toFixed(2) + '%</span>';
+      } else {
+        html += '<span class="live-price-value" style="color:var(--muted)">--</span>';
+      }
+      html += '</div>';
+
+      // Status indicator
+      html += '<div class="live-price-indicator">';
+      if (p) {
+        var age = (Date.now() - new Date(p.timestamp).getTime()) / 60000;
+        if (age < 5) {
+          html += '<span class="dot live"></span>LIVE';
+        } else {
+          html += '<span class="dot delayed"></span>DELAYED ' + Math.round(age) + 'M';
+        }
+      } else {
+        html += '<span class="dot delayed"></span>LOADING';
+      }
+      html += '</div>';
+
+      // Session levels
+      var sess = sessionData[sym];
+      html += '<div class="live-session-levels">';
+      html += '<span><span class="level-label">LDN H</span><span class="level-value">' + (sess && sess.london_high != null ? sess.london_high.toFixed(2) : '\\u2014') + '</span></span>';
+      html += '<span><span class="level-label">LDN L</span><span class="level-value">' + (sess && sess.london_low != null ? sess.london_low.toFixed(2) : '\\u2014') + '</span></span>';
+      html += '<span><span class="level-label">NY H</span><span class="level-value">' + (sess && sess.ny_high != null ? sess.ny_high.toFixed(2) : '\\u2014') + '</span></span>';
+      html += '<span><span class="level-label">NY L</span><span class="level-value">' + (sess && sess.ny_low != null ? sess.ny_low.toFixed(2) : '\\u2014') + '</span></span>';
+      html += '</div>';
+
+      html += '</div>';
+      priceCard.innerHTML = html;
+    }
+
+    function fetchPrices() {
+      fetch('/api/market/price').then(function(r) { return r.json(); }).then(function(data) {
+        priceData = data;
+        renderPriceCard();
+      }).catch(function() {});
+    }
+
+    function fetchSessions() {
+      fetch('/api/sessions/today').then(function(r) { return r.json(); }).then(function(data) {
+        if (Array.isArray(data)) {
+          data.forEach(function(s) { sessionData[s.symbol] = s; });
+        }
+        renderPriceCard();
+      }).catch(function() {});
+    }
+
+    renderPriceCard();
+    fetchPrices();
+    fetchSessions();
+    setInterval(fetchPrices, 15000);
+    setInterval(fetchSessions, 60000);
+    document.addEventListener('instrument-changed', function() { renderPriceCard(); });
+  })();
+  </script>
+
+  <script>
+  /* ── TradingView Chart Widget ── */
+  (function() {
+    var tvContainer = document.getElementById('tv-chart-container');
+    var scriptLoaded = false;
+    var widgetInstance = null;
+
+    var symbolMap = {
+      NQ: 'CME_MINI:NQ1!',
+      ES: 'CME_MINI:ES1!'
+    };
+
+    function renderWidget() {
+      var sym = window.selectedInstrument || 'NQ';
+      var tvSymbol = symbolMap[sym] || symbolMap.NQ;
+
+      tvContainer.innerHTML = '<div class="card" style="animation:slideUp 0.3s ease"><div class="card-title">\\u25C8 TRADINGVIEW</div><div id="tv-chart-wrap"></div></div>';
+
+      if (!scriptLoaded) {
+        var s = document.createElement('script');
+        s.src = 'https://s3.tradingview.com/tv.js';
+        s.onload = function() {
+          scriptLoaded = true;
+          createWidget(tvSymbol);
+        };
+        document.head.appendChild(s);
+      } else {
+        createWidget(tvSymbol);
+      }
+    }
+
+    function createWidget(tvSymbol) {
+      if (typeof TradingView === 'undefined') return;
+      widgetInstance = new TradingView.widget({
+        container_id: 'tv-chart-wrap',
+        symbol: tvSymbol,
+        interval: '15',
+        timezone: 'America/New_York',
+        theme: 'dark',
+        style: '1',
+        width: '100%',
+        height: document.getElementById('tv-chart-wrap').offsetHeight || 280,
+        hide_top_toolbar: false,
+        hide_side_toolbar: true,
+        allow_symbol_change: false,
+        save_image: false,
+        backgroundColor: '#0a0a10',
+        gridColor: 'rgba(255,255,255,0.03)',
+        locale: 'en',
+      });
+    }
+
+    renderWidget();
+    document.addEventListener('instrument-changed', function() { renderWidget(); });
+  })();
+  </script>
+
+  <script>
+  /* ── Strategy Chart (SVG with real data + annotations) ── */
   (function() {
     var chartEl = document.getElementById('price-chart');
 
-    var demoData = {
-      NQ: { start: 21450, londonHigh: 21487.50, londonLow: 21422.75, fvg: { high: 21440, low: 21428 }, ifvg: { high: 21462, low: 21455 } },
-      ES: { start: 5890, londonHigh: 5902.25, londonLow: 5878.50, fvg: { high: 5886, low: 5880 }, ifvg: { high: 5894, low: 5890 } }
+    var fallbackData = {
+      NQ: { londonHigh: 21487.50, londonLow: 21422.75, fvg: { high: 21440, low: 21428 }, ifvg: { high: 21462, low: 21455 } },
+      ES: { londonHigh: 5902.25, londonLow: 5878.50, fvg: { high: 5886, low: 5880 }, ifvg: { high: 5894, low: 5890 } }
     };
 
-    function generateCandles(start, count) {
+    var cachedCandles = {};
+    var cachedSessions = {};
+    var alertLevels = null;
+
+    function fetchCandleData(sym) {
+      return fetch('/api/candles/' + sym + '/15m?limit=60')
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+          if (data.candles && data.candles.length > 0) {
+            cachedCandles[sym] = data.candles.reverse();
+          }
+        }).catch(function() {});
+    }
+
+    function fetchSessionData() {
+      return fetch('/api/sessions/today')
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+          if (Array.isArray(data)) {
+            data.forEach(function(s) { cachedSessions[s.symbol] = s; });
+          }
+        }).catch(function() {});
+    }
+
+    function generateFallbackCandles(start, count) {
       var candles = [];
       var price = start;
       for (var i = 0; i < count; i++) {
         var change = (Math.random() - 0.48) * (start * 0.003);
-        var o = price;
-        var c = price + change;
-        var wickUp = Math.abs(change) * (0.3 + Math.random() * 0.7);
-        var wickDown = Math.abs(change) * (0.3 + Math.random() * 0.7);
-        var h = Math.max(o, c) + wickUp;
-        var l = Math.min(o, c) - wickDown;
+        var o = price, c = price + change;
+        var h = Math.max(o, c) + Math.abs(change) * (0.3 + Math.random() * 0.7);
+        var l = Math.min(o, c) - Math.abs(change) * (0.3 + Math.random() * 0.7);
         candles.push({ open: +o.toFixed(2), high: +h.toFixed(2), low: +l.toFixed(2), close: +c.toFixed(2) });
         price = c;
       }
       return candles;
     }
 
-    function renderChart() {
-      var sym = window.selectedInstrument || 'NQ';
-      var d = demoData[sym];
-      var candles = generateCandles(d.start, 60);
-      var entry = d.ifvg.high;
-      var target = d.londonHigh;
-      var stop = d.ifvg.low - 2;
-
-      // Find price range
+    function drawSvgChart(candles, d, entry, target, stop) {
       var allPrices = [];
       candles.forEach(function(c) { allPrices.push(c.high, c.low); });
-      allPrices.push(d.londonHigh, d.londonLow, d.fvg.high, d.fvg.low, d.ifvg.high, d.ifvg.low, entry, target, stop);
-      var minP = Math.min.apply(null, allPrices);
-      var maxP = Math.max.apply(null, allPrices);
+      if (d.londonHigh != null) allPrices.push(d.londonHigh);
+      if (d.londonLow != null) allPrices.push(d.londonLow);
+      if (d.fvg) { allPrices.push(d.fvg.high, d.fvg.low); }
+      if (d.ifvg) { allPrices.push(d.ifvg.high, d.ifvg.low); }
+      if (entry != null) allPrices.push(entry);
+      if (target != null) allPrices.push(target);
+      if (stop != null) allPrices.push(stop);
+
+      var filtered = allPrices.filter(function(p) { return p != null && isFinite(p); });
+      if (filtered.length === 0) return '<div style="color:var(--muted);text-align:center;padding:40px">No candle data yet</div>';
+
+      var minP = Math.min.apply(null, filtered);
+      var maxP = Math.max.apply(null, filtered);
       var range = maxP - minP || 1;
-      var padPct = 0.05;
-      minP -= range * padPct;
-      maxP += range * padPct;
+      minP -= range * 0.05;
+      maxP += range * 0.05;
       range = maxP - minP;
 
-      var svgW = 800;
-      var svgH = 300;
-      var padR = 65;
-      var padL = 4;
-      var padT = 8;
-      var padB = 8;
-      var chartW = svgW - padL - padR;
-      var chartH = svgH - padT - padB;
-
+      var svgW = 800, svgH = 300, padR = 65, padL = 4, padT = 8, padB = 8;
+      var chartW = svgW - padL - padR, chartH = svgH - padT - padB;
       function priceY(p) { return padT + chartH - ((p - minP) / range) * chartH; }
 
-      var candleW = chartW / 60;
+      var candleW = chartW / candles.length;
       var bodyW = Math.max(candleW - 1, 1);
 
       var svg = '<svg class="chart-svg" viewBox="0 0 ' + svgW + ' ' + svgH + '" preserveAspectRatio="none">';
 
-      // Grid lines
       for (var g = 1; g <= 3; g++) {
         var gy = padT + (chartH * g / 4);
         svg += '<line x1="' + padL + '" y1="' + gy + '" x2="' + (svgW - padR) + '" y2="' + gy + '" stroke="rgba(255,255,255,0.04)" stroke-width="1"/>';
       }
-
-      // Y-axis labels
       for (var yi = 0; yi <= 4; yi++) {
         var yPrice = minP + (range * yi / 4);
         var yPos = priceY(yPrice);
         svg += '<text x="' + (svgW - padR + 6) + '" y="' + (yPos + 3) + '" fill="var(--muted)" font-family="JetBrains Mono,monospace" font-size="8">' + yPrice.toFixed(2) + '</text>';
       }
 
-      // Entry-to-target green zone
-      var targetY = priceY(target);
-      var entryY = priceY(entry);
-      var stopY = priceY(stop);
-      svg += '<rect x="' + padL + '" y="' + Math.min(targetY, entryY) + '" width="' + chartW + '" height="' + Math.abs(entryY - targetY) + '" fill="rgba(52,211,153,0.03)"/>';
-      // Entry-to-stop red zone
-      svg += '<rect x="' + padL + '" y="' + Math.min(entryY, stopY) + '" width="' + chartW + '" height="' + Math.abs(stopY - entryY) + '" fill="rgba(239,68,68,0.03)"/>';
+      // Entry/target/stop zones
+      if (entry != null && target != null) {
+        var targetY = priceY(target), entryY = priceY(entry);
+        svg += '<rect x="' + padL + '" y="' + Math.min(targetY, entryY) + '" width="' + chartW + '" height="' + Math.abs(entryY - targetY) + '" fill="rgba(52,211,153,0.03)"/>';
+        if (stop != null) {
+          var stopY = priceY(stop);
+          svg += '<rect x="' + padL + '" y="' + Math.min(entryY, stopY) + '" width="' + chartW + '" height="' + Math.abs(stopY - entryY) + '" fill="rgba(239,68,68,0.03)"/>';
+        }
+      }
 
       // FVG zone
-      var fvgTopY = priceY(d.fvg.high);
-      var fvgBotY = priceY(d.fvg.low);
-      svg += '<rect x="' + padL + '" y="' + fvgTopY + '" width="' + chartW + '" height="' + (fvgBotY - fvgTopY) + '" fill="rgba(251,44,90,0.1)"/>';
-      svg += '<line x1="' + padL + '" y1="' + fvgTopY + '" x2="' + (padL + chartW) + '" y2="' + fvgTopY + '" stroke="var(--red)" stroke-width="0.5" stroke-dasharray="4,3" opacity="0.4"/>';
-      svg += '<line x1="' + padL + '" y1="' + fvgBotY + '" x2="' + (padL + chartW) + '" y2="' + fvgBotY + '" stroke="var(--red)" stroke-width="0.5" stroke-dasharray="4,3" opacity="0.4"/>';
+      if (d.fvg && d.fvg.high != null) {
+        var fvgTopY = priceY(d.fvg.high), fvgBotY = priceY(d.fvg.low);
+        svg += '<rect x="' + padL + '" y="' + fvgTopY + '" width="' + chartW + '" height="' + (fvgBotY - fvgTopY) + '" fill="rgba(251,44,90,0.1)"/>';
+        svg += '<line x1="' + padL + '" y1="' + fvgTopY + '" x2="' + (padL + chartW) + '" y2="' + fvgTopY + '" stroke="var(--red)" stroke-width="0.5" stroke-dasharray="4,3" opacity="0.4"/>';
+        svg += '<line x1="' + padL + '" y1="' + fvgBotY + '" x2="' + (padL + chartW) + '" y2="' + fvgBotY + '" stroke="var(--red)" stroke-width="0.5" stroke-dasharray="4,3" opacity="0.4"/>';
+      }
 
       // IFVG zone
-      var ifvgTopY = priceY(d.ifvg.high);
-      var ifvgBotY = priceY(d.ifvg.low);
-      svg += '<rect x="' + padL + '" y="' + ifvgTopY + '" width="' + chartW + '" height="' + (ifvgBotY - ifvgTopY) + '" fill="rgba(251,191,36,0.1)"/>';
+      if (d.ifvg && d.ifvg.high != null) {
+        var ifvgTopY = priceY(d.ifvg.high), ifvgBotY = priceY(d.ifvg.low);
+        svg += '<rect x="' + padL + '" y="' + ifvgTopY + '" width="' + chartW + '" height="' + (ifvgBotY - ifvgTopY) + '" fill="rgba(251,191,36,0.1)"/>';
+      }
 
-      // London High line
-      var ldnHY = priceY(d.londonHigh);
-      svg += '<line x1="' + padL + '" y1="' + ldnHY + '" x2="' + (padL + chartW) + '" y2="' + ldnHY + '" stroke="var(--red)" stroke-width="0.8" stroke-dasharray="6,4" opacity="0.7"/>';
-      svg += '<text x="' + (svgW - padR - 2) + '" y="' + (ldnHY - 3) + '" fill="var(--red-soft)" font-family="JetBrains Mono,monospace" font-size="9" text-anchor="end">LDN H</text>';
+      // London H/L lines
+      if (d.londonHigh != null) {
+        var ldnHY = priceY(d.londonHigh);
+        svg += '<line x1="' + padL + '" y1="' + ldnHY + '" x2="' + (padL + chartW) + '" y2="' + ldnHY + '" stroke="var(--red)" stroke-width="0.8" stroke-dasharray="6,4" opacity="0.7"/>';
+        svg += '<text x="' + (svgW - padR - 2) + '" y="' + (ldnHY - 3) + '" fill="var(--red-soft)" font-family="JetBrains Mono,monospace" font-size="9" text-anchor="end">LDN H</text>';
+      }
+      if (d.londonLow != null) {
+        var ldnLY = priceY(d.londonLow);
+        svg += '<line x1="' + padL + '" y1="' + ldnLY + '" x2="' + (padL + chartW) + '" y2="' + ldnLY + '" stroke="var(--muted)" stroke-width="0.8" stroke-dasharray="6,4" opacity="0.6"/>';
+        svg += '<text x="' + (svgW - padR - 2) + '" y="' + (ldnLY - 3) + '" fill="var(--muted)" font-family="JetBrains Mono,monospace" font-size="9" text-anchor="end">LDN L</text>';
+      }
 
-      // London Low line
-      var ldnLY = priceY(d.londonLow);
-      svg += '<line x1="' + padL + '" y1="' + ldnLY + '" x2="' + (padL + chartW) + '" y2="' + ldnLY + '" stroke="var(--muted)" stroke-width="0.8" stroke-dasharray="6,4" opacity="0.6"/>';
-      svg += '<text x="' + (svgW - padR - 2) + '" y="' + (ldnLY - 3) + '" fill="var(--muted)" font-family="JetBrains Mono,monospace" font-size="9" text-anchor="end">LDN L</text>';
-
-      // Target line
-      svg += '<line x1="' + padL + '" y1="' + targetY + '" x2="' + (padL + chartW) + '" y2="' + targetY + '" stroke="var(--green)" stroke-width="1"/>';
-      svg += '<text x="' + (padL + 4) + '" y="' + (targetY - 3) + '" fill="var(--green)" font-family="JetBrains Mono,monospace" font-size="9">TARGET</text>';
-
-      // Stop line
-      svg += '<line x1="' + padL + '" y1="' + stopY + '" x2="' + (padL + chartW) + '" y2="' + stopY + '" stroke="var(--danger)" stroke-width="1"/>';
-      svg += '<text x="' + (padL + 4) + '" y="' + (stopY - 3) + '" fill="var(--danger)" font-family="JetBrains Mono,monospace" font-size="9">STOP</text>';
-
-      // Entry line with pulse glow
-      svg += '<g class="entry-line-glow">';
-      svg += '<line x1="' + padL + '" y1="' + entryY + '" x2="' + (padL + chartW) + '" y2="' + entryY + '" stroke="var(--red)" stroke-width="1"/>';
-      svg += '<text x="' + (padL + 4) + '" y="' + (entryY - 3) + '" fill="var(--red)" font-family="JetBrains Mono,monospace" font-size="9">ENTRY &#9656;</text>';
-      svg += '</g>';
+      // Target/stop/entry lines
+      if (target != null) {
+        var tY = priceY(target);
+        svg += '<line x1="' + padL + '" y1="' + tY + '" x2="' + (padL + chartW) + '" y2="' + tY + '" stroke="var(--green)" stroke-width="1"/>';
+        svg += '<text x="' + (padL + 4) + '" y="' + (tY - 3) + '" fill="var(--green)" font-family="JetBrains Mono,monospace" font-size="9">TARGET</text>';
+      }
+      if (stop != null) {
+        var sY = priceY(stop);
+        svg += '<line x1="' + padL + '" y1="' + sY + '" x2="' + (padL + chartW) + '" y2="' + sY + '" stroke="var(--danger)" stroke-width="1"/>';
+        svg += '<text x="' + (padL + 4) + '" y="' + (sY - 3) + '" fill="var(--danger)" font-family="JetBrains Mono,monospace" font-size="9">STOP</text>';
+      }
+      if (entry != null) {
+        var eY = priceY(entry);
+        svg += '<g class="entry-line-glow">';
+        svg += '<line x1="' + padL + '" y1="' + eY + '" x2="' + (padL + chartW) + '" y2="' + eY + '" stroke="var(--red)" stroke-width="1"/>';
+        svg += '<text x="' + (padL + 4) + '" y="' + (eY - 3) + '" fill="var(--red)" font-family="JetBrains Mono,monospace" font-size="9">ENTRY &#9656;</text>';
+        svg += '</g>';
+      }
 
       // Candles
       candles.forEach(function(c, i) {
@@ -1693,137 +1911,44 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
       });
 
       svg += '</svg>';
-
-      // Legend
-      var legend = '<div class="chart-legend">' +
-        '<div class="chart-legend-item"><span class="chart-legend-swatch" style="background:rgba(251,44,90,0.3);border:1px dashed var(--red)"></span>FVG</div>' +
-        '<div class="chart-legend-item"><span class="chart-legend-swatch" style="background:rgba(251,191,36,0.25)"></span>IFVG</div>' +
-        '<div class="chart-legend-item"><span class="chart-legend-swatch" style="background:var(--red);width:14px;height:2px;border-radius:0"></span>LDN H</div>' +
-        '<div class="chart-legend-item"><span class="chart-legend-swatch" style="background:var(--muted);width:14px;height:2px;border-radius:0"></span>LDN L</div>' +
-        '</div>';
-
-      chartEl.innerHTML = '<div class="card" style="animation:slideUp 0.3s ease"><div class="card-title">\u25C8 PRICE ACTION</div>' + svg + legend + '</div>';
+      return svg;
     }
-
-    var alertLevels = null;
 
     function renderChartWithData() {
       var sym = window.selectedInstrument || 'NQ';
-      var d;
+      var candles = cachedCandles[sym];
+      var sess = cachedSessions[sym] || {};
+      var fb = fallbackData[sym];
+
+      // Build annotation data from session levels or alert or fallback
+      var d = {};
       if (alertLevels && (alertLevels.symbol === sym || !alertLevels.symbol)) {
-        d = {
-          start: alertLevels.entry_price || demoData[sym].start,
-          londonHigh: alertLevels.sweep_level || demoData[sym].londonHigh,
-          londonLow: alertLevels.sweep_direction === 'low' ? (alertLevels.sweep_level || demoData[sym].londonLow) : demoData[sym].londonLow,
-          fvg: { high: alertLevels.fvg_high || demoData[sym].fvg.high, low: alertLevels.fvg_low || demoData[sym].fvg.low },
-          ifvg: { high: alertLevels.ifvg_high || demoData[sym].ifvg.high, low: alertLevels.ifvg_low || demoData[sym].ifvg.low }
-        };
-        if (alertLevels.sweep_direction === 'high') {
-          d.londonHigh = alertLevels.sweep_level || demoData[sym].londonHigh;
-        }
-        // Override entry/target/stop from alert
-        chartEl._alertEntry = alertLevels.entry_price;
-        chartEl._alertTarget = alertLevels.target_price;
-        chartEl._alertStop = alertLevels.stop_price;
+        d.londonHigh = alertLevels.sweep_level || sess.london_high || fb.londonHigh;
+        d.londonLow = alertLevels.sweep_direction === 'low' ? (alertLevels.sweep_level || sess.london_low || fb.londonLow) : (sess.london_low || fb.londonLow);
+        if (alertLevels.sweep_direction === 'high') d.londonHigh = alertLevels.sweep_level || sess.london_high || fb.londonHigh;
+        d.fvg = { high: alertLevels.fvg_high || fb.fvg.high, low: alertLevels.fvg_low || fb.fvg.low };
+        d.ifvg = { high: alertLevels.ifvg_high || fb.ifvg.high, low: alertLevels.ifvg_low || fb.ifvg.low };
+        var entry = alertLevels.entry_price;
+        var target = alertLevels.target_price;
+        var stop = alertLevels.stop_price;
       } else {
-        d = demoData[sym];
-        chartEl._alertEntry = null;
-        chartEl._alertTarget = null;
-        chartEl._alertStop = null;
+        d.londonHigh = sess.london_high != null ? sess.london_high : fb.londonHigh;
+        d.londonLow = sess.london_low != null ? sess.london_low : fb.londonLow;
+        d.fvg = fb.fvg;
+        d.ifvg = fb.ifvg;
+        var entry = null;
+        var target = null;
+        var stop = null;
       }
 
-      var candles = generateCandles(d.start, 60);
-      var entry = chartEl._alertEntry || d.ifvg.high;
-      var target = chartEl._alertTarget || d.londonHigh;
-      var stop = chartEl._alertStop || (d.ifvg.low - 2);
-
-      var allPrices = [];
-      candles.forEach(function(c) { allPrices.push(c.high, c.low); });
-      allPrices.push(d.londonHigh, d.londonLow, d.fvg.high, d.fvg.low, d.ifvg.high, d.ifvg.low, entry, target, stop);
-      var minP = Math.min.apply(null, allPrices);
-      var maxP = Math.max.apply(null, allPrices);
-      var range = maxP - minP || 1;
-      var padPct = 0.05;
-      minP -= range * padPct;
-      maxP += range * padPct;
-      range = maxP - minP;
-
-      var svgW = 800;
-      var svgH = 300;
-      var padR = 65;
-      var padL = 4;
-      var padT = 8;
-      var padB = 8;
-      var chartW = svgW - padL - padR;
-      var chartH = svgH - padT - padB;
-
-      function priceY(p) { return padT + chartH - ((p - minP) / range) * chartH; }
-
-      var candleW = chartW / 60;
-      var bodyW = Math.max(candleW - 1, 1);
-
-      var svg = '<svg class="chart-svg" viewBox="0 0 ' + svgW + ' ' + svgH + '" preserveAspectRatio="none">';
-
-      for (var g = 1; g <= 3; g++) {
-        var gy = padT + (chartH * g / 4);
-        svg += '<line x1="' + padL + '" y1="' + gy + '" x2="' + (svgW - padR) + '" y2="' + gy + '" stroke="rgba(255,255,255,0.04)" stroke-width="1"/>';
+      // Use real candles if available, else generate fallback
+      if (!candles || candles.length === 0) {
+        var startPrice = fb === fallbackData.NQ ? 21450 : 5890;
+        candles = generateFallbackCandles(startPrice, 60);
+        if (!entry) { entry = d.ifvg.high; target = d.londonHigh; stop = d.ifvg.low - 2; }
       }
 
-      for (var yi = 0; yi <= 4; yi++) {
-        var yPrice = minP + (range * yi / 4);
-        var yPos = priceY(yPrice);
-        svg += '<text x="' + (svgW - padR + 6) + '" y="' + (yPos + 3) + '" fill="var(--muted)" font-family="JetBrains Mono,monospace" font-size="8">' + yPrice.toFixed(2) + '</text>';
-      }
-
-      var targetY = priceY(target);
-      var entryY = priceY(entry);
-      var stopY = priceY(stop);
-      svg += '<rect x="' + padL + '" y="' + Math.min(targetY, entryY) + '" width="' + chartW + '" height="' + Math.abs(entryY - targetY) + '" fill="rgba(52,211,153,0.03)"/>';
-      svg += '<rect x="' + padL + '" y="' + Math.min(entryY, stopY) + '" width="' + chartW + '" height="' + Math.abs(stopY - entryY) + '" fill="rgba(239,68,68,0.03)"/>';
-
-      var fvgTopY = priceY(d.fvg.high);
-      var fvgBotY = priceY(d.fvg.low);
-      svg += '<rect x="' + padL + '" y="' + fvgTopY + '" width="' + chartW + '" height="' + (fvgBotY - fvgTopY) + '" fill="rgba(251,44,90,0.1)"/>';
-      svg += '<line x1="' + padL + '" y1="' + fvgTopY + '" x2="' + (padL + chartW) + '" y2="' + fvgTopY + '" stroke="var(--red)" stroke-width="0.5" stroke-dasharray="4,3" opacity="0.4"/>';
-      svg += '<line x1="' + padL + '" y1="' + fvgBotY + '" x2="' + (padL + chartW) + '" y2="' + fvgBotY + '" stroke="var(--red)" stroke-width="0.5" stroke-dasharray="4,3" opacity="0.4"/>';
-
-      var ifvgTopY = priceY(d.ifvg.high);
-      var ifvgBotY = priceY(d.ifvg.low);
-      svg += '<rect x="' + padL + '" y="' + ifvgTopY + '" width="' + chartW + '" height="' + (ifvgBotY - ifvgTopY) + '" fill="rgba(251,191,36,0.1)"/>';
-
-      var ldnHY = priceY(d.londonHigh);
-      svg += '<line x1="' + padL + '" y1="' + ldnHY + '" x2="' + (padL + chartW) + '" y2="' + ldnHY + '" stroke="var(--red)" stroke-width="0.8" stroke-dasharray="6,4" opacity="0.7"/>';
-      svg += '<text x="' + (svgW - padR - 2) + '" y="' + (ldnHY - 3) + '" fill="var(--red-soft)" font-family="JetBrains Mono,monospace" font-size="9" text-anchor="end">LDN H</text>';
-
-      var ldnLY = priceY(d.londonLow);
-      svg += '<line x1="' + padL + '" y1="' + ldnLY + '" x2="' + (padL + chartW) + '" y2="' + ldnLY + '" stroke="var(--muted)" stroke-width="0.8" stroke-dasharray="6,4" opacity="0.6"/>';
-      svg += '<text x="' + (svgW - padR - 2) + '" y="' + (ldnLY - 3) + '" fill="var(--muted)" font-family="JetBrains Mono,monospace" font-size="9" text-anchor="end">LDN L</text>';
-
-      svg += '<line x1="' + padL + '" y1="' + targetY + '" x2="' + (padL + chartW) + '" y2="' + targetY + '" stroke="var(--green)" stroke-width="1"/>';
-      svg += '<text x="' + (padL + 4) + '" y="' + (targetY - 3) + '" fill="var(--green)" font-family="JetBrains Mono,monospace" font-size="9">TARGET</text>';
-
-      svg += '<line x1="' + padL + '" y1="' + stopY + '" x2="' + (padL + chartW) + '" y2="' + stopY + '" stroke="var(--danger)" stroke-width="1"/>';
-      svg += '<text x="' + (padL + 4) + '" y="' + (stopY - 3) + '" fill="var(--danger)" font-family="JetBrains Mono,monospace" font-size="9">STOP</text>';
-
-      svg += '<g class="entry-line-glow">';
-      svg += '<line x1="' + padL + '" y1="' + entryY + '" x2="' + (padL + chartW) + '" y2="' + entryY + '" stroke="var(--red)" stroke-width="1"/>';
-      svg += '<text x="' + (padL + 4) + '" y="' + (entryY - 3) + '" fill="var(--red)" font-family="JetBrains Mono,monospace" font-size="9">ENTRY &#9656;</text>';
-      svg += '</g>';
-
-      candles.forEach(function(c, i) {
-        var x = padL + i * candleW;
-        var cx = x + bodyW / 2;
-        var bullish = c.close >= c.open;
-        var bodyColor = bullish ? 'var(--red)' : '#475569';
-        var wickColor = bullish ? 'var(--red-soft)' : '#64748b';
-        var bodyTop = priceY(Math.max(c.open, c.close));
-        var bodyBot = priceY(Math.min(c.open, c.close));
-        var bodyH = Math.max(bodyBot - bodyTop, 1);
-        svg += '<line x1="' + cx + '" y1="' + priceY(c.high) + '" x2="' + cx + '" y2="' + priceY(c.low) + '" stroke="' + wickColor + '" stroke-width="1"/>';
-        svg += '<rect x="' + x + '" y="' + bodyTop + '" width="' + bodyW + '" height="' + bodyH + '" fill="' + bodyColor + '" rx="0.5"/>';
-      });
-
-      svg += '</svg>';
+      var svgHtml = drawSvgChart(candles, d, entry, target, stop);
 
       var legend = '<div class="chart-legend">' +
         '<div class="chart-legend-item"><span class="chart-legend-swatch" style="background:rgba(251,44,90,0.3);border:1px dashed var(--red)"></span>FVG</div>' +
@@ -1832,11 +1957,19 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
         '<div class="chart-legend-item"><span class="chart-legend-swatch" style="background:var(--muted);width:14px;height:2px;border-radius:0"></span>LDN L</div>' +
         '</div>';
 
-      chartEl.innerHTML = '<div class="card" style="animation:slideUp 0.3s ease"><div class="card-title">\\u25C8 PRICE ACTION</div>' + svg + legend + '</div>';
+      chartEl.innerHTML = '<div class="card" style="animation:slideUp 0.3s ease"><div class="card-title">\\u25C8 STRATEGY CHART</div>' + svgHtml + legend + '</div>';
     }
 
-    renderChartWithData();
-    document.addEventListener('instrument-changed', function() { renderChartWithData(); });
+    function loadAndRender() {
+      var sym = window.selectedInstrument || 'NQ';
+      Promise.all([fetchCandleData(sym), fetchSessionData()]).then(function() {
+        renderChartWithData();
+      });
+    }
+
+    loadAndRender();
+    setInterval(loadAndRender, 60000);
+    document.addEventListener('instrument-changed', function() { loadAndRender(); });
     document.addEventListener('alert-levels', function(e) {
       alertLevels = e.detail;
       renderChartWithData();
