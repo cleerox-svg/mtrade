@@ -128,13 +128,33 @@ export async function handleApiRoutes(
   // POST /api/apex/accounts
   if (path === '/api/apex/accounts' && method === 'POST') {
     const body = await request.json<Record<string, unknown>>();
+
+    let accountSize = body.account_size as number;
+    let drawdownLimit = body.drawdown_limit as number;
+    let profitTarget = body.profit_target as number;
+    let maxContracts = body.max_contracts as number;
+    let scalingLimit = body.scaling_limit as number;
+
+    // If template_id provided, load template and use its values as defaults
+    if (body.template_id) {
+      const tpl = await env.DB.prepare(
+        'SELECT * FROM apex_account_templates WHERE id = ?'
+      ).bind(body.template_id).first<Record<string, unknown>>();
+      if (!tpl) return json({ error: 'Template not found' }, 404);
+      accountSize = (body.account_size as number) || (tpl.account_size as number);
+      drawdownLimit = (body.drawdown_limit as number) || (tpl.drawdown_limit as number);
+      profitTarget = (body.profit_target as number) || (tpl.profit_target as number);
+      maxContracts = (body.max_contracts as number) || (tpl.max_contracts as number);
+      scalingLimit = (body.scaling_limit as number) || (tpl.scaling_limit as number);
+    }
+
     const result = await env.DB.prepare(
       `INSERT INTO apex_accounts (user_id, label, account_size, account_type, drawdown_type, drawdown_limit, profit_target, max_contracts, scaling_limit)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
     ).bind(
-      user.sub, body.label, body.account_size, body.account_type,
-      body.drawdown_type, body.drawdown_limit, body.profit_target,
-      body.max_contracts, body.scaling_limit
+      user.sub, body.label, accountSize, body.account_type,
+      body.drawdown_type, drawdownLimit, profitTarget,
+      maxContracts, scalingLimit
     ).run();
     return json({ id: result.meta.last_row_id }, 201);
   }

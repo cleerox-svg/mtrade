@@ -1327,6 +1327,351 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
       color: var(--bright);
     }
 
+    /* Strategy Config Card */
+    .strat-card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      cursor: pointer;
+      user-select: none;
+    }
+    .strat-card-header .card-title { margin-bottom: 0; }
+    .strat-chevron {
+      font-size: 12px;
+      color: var(--muted);
+      transition: transform 0.25s;
+    }
+    .strat-chevron.open { transform: rotate(180deg); }
+    .strat-body { overflow: hidden; transition: max-height 0.35s ease, opacity 0.25s; }
+    .strat-body.collapsed { max-height: 0 !important; opacity: 0; pointer-events: none; }
+    .strat-body.expanded { opacity: 1; pointer-events: auto; }
+
+    .preset-row {
+      display: flex;
+      gap: 8px;
+      margin: 14px 0;
+    }
+    .preset-btn {
+      flex: 1;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 1px;
+      padding: 8px 16px;
+      border-radius: 8px;
+      min-height: 44px;
+      cursor: pointer;
+      border: 1px solid rgba(255,255,255,0.1);
+      background: transparent;
+      color: var(--label);
+      transition: all 0.2s;
+    }
+    .preset-btn.preset-conservative.active {
+      background: rgba(52,211,153,0.08);
+      border-color: var(--green);
+      color: var(--green);
+    }
+    .preset-btn.preset-normal.active {
+      background: rgba(251,44,90,0.08);
+      border-color: var(--red);
+      color: var(--red);
+    }
+    .preset-btn.preset-aggressive.active {
+      background: rgba(239,68,68,0.08);
+      border-color: var(--danger);
+      color: var(--danger);
+    }
+
+    .kill-switch-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 14px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      background: transparent;
+      margin-bottom: 6px;
+      transition: all 0.25s;
+    }
+    .kill-switch-row.active {
+      background: rgba(239,68,68,0.06);
+      border-color: var(--danger);
+    }
+    .kill-switch-label {
+      font-family: 'Outfit', sans-serif;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--bright);
+    }
+    .kill-switch-track {
+      position: absolute;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(255,255,255,0.08);
+      border-radius: 14px;
+      transition: background 0.25s, box-shadow 0.25s;
+    }
+    .kill-switch-toggle {
+      position: relative;
+      width: 52px;
+      height: 28px;
+      flex-shrink: 0;
+      cursor: pointer;
+    }
+    .kill-switch-toggle input {
+      opacity: 0; width: 0; height: 0; position: absolute;
+    }
+    .kill-switch-track::after {
+      content: '';
+      position: absolute;
+      top: 3px; left: 3px;
+      width: 22px; height: 22px;
+      background: #fff;
+      border-radius: 50%;
+      transition: transform 0.25s;
+    }
+    .kill-switch-toggle input:checked + .kill-switch-track {
+      background: var(--danger);
+      box-shadow: 0 0 12px rgba(239,68,68,0.5);
+    }
+    .kill-switch-toggle input:checked + .kill-switch-track::after {
+      transform: translateX(24px);
+    }
+    .kill-switch-hint {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 9px;
+      color: var(--muted);
+      margin-bottom: 16px;
+    }
+
+    .strat-divider {
+      font-family: 'Outfit', sans-serif;
+      font-size: 9px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
+      color: var(--muted);
+      padding: 12px 0 6px;
+      border-top: 1px solid var(--border);
+      margin-top: 4px;
+    }
+    .strat-toggle-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 0;
+    }
+    .strat-toggle-label {
+      font-family: 'Outfit', sans-serif;
+      font-size: 12px;
+      color: var(--text);
+    }
+    .strat-toggle-help {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 9px;
+      color: var(--muted);
+      margin-top: 1px;
+    }
+    .strat-number-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 0;
+    }
+    .strat-number-input {
+      width: 80px;
+      background: #0a0a10;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 8px 10px;
+      color: var(--text);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+      text-align: center;
+      outline: none;
+      min-height: 36px;
+    }
+    .strat-number-input:focus { border-color: var(--red); }
+    .strat-number-display {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 9px;
+      color: var(--muted);
+      margin-top: 2px;
+      text-align: right;
+    }
+    .strat-clear-btn {
+      background: none;
+      border: 1px solid var(--border);
+      color: var(--muted);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 9px;
+      padding: 4px 8px;
+      border-radius: 6px;
+      cursor: pointer;
+      margin-left: 6px;
+    }
+    .strat-clear-btn:hover { border-color: var(--danger); color: var(--danger); }
+
+    /* Instrument micro labels */
+    .instrument-micro {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 7px;
+      color: var(--muted);
+      display: block;
+      margin-top: 1px;
+      letter-spacing: 0.5px;
+    }
+    @media (max-width: 767px) {
+      #instrument-row {
+        display: grid !important;
+        grid-template-columns: 1fr 1fr;
+        width: 100%;
+      }
+    }
+
+    /* Template cards for account creation */
+    .template-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+      margin-bottom: 16px;
+    }
+    @media (min-width: 768px) {
+      .template-grid { grid-template-columns: repeat(6, 1fr); }
+    }
+    .template-card {
+      background: rgba(255,255,255,0.02);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 10px 8px;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .template-card:hover { border-color: rgba(255,255,255,0.15); }
+    .template-card.selected {
+      border-color: var(--red);
+      background: rgba(251,44,90,0.05);
+    }
+    .template-card .tpl-size {
+      font-family: 'Outfit', sans-serif;
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--bright);
+    }
+    .template-card .tpl-details {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 9px;
+      color: var(--muted);
+      margin-top: 4px;
+      line-height: 1.4;
+    }
+    .template-card .tpl-tag {
+      display: inline-block;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 8px;
+      font-weight: 600;
+      letter-spacing: 0.5px;
+      color: var(--amber);
+      border: 1px solid rgba(251,191,36,0.3);
+      border-radius: 4px;
+      padding: 1px 5px;
+      margin-top: 4px;
+    }
+    .tpl-step2 {
+      animation: slideUp 0.3s ease;
+    }
+    .tpl-readonly-row {
+      display: flex;
+      justify-content: space-between;
+      padding: 6px 0;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+    }
+    .tpl-readonly-label { color: var(--label); }
+    .tpl-readonly-value { color: var(--bright); }
+    .tpl-type-toggle {
+      display: flex;
+      gap: 6px;
+      margin-bottom: 8px;
+    }
+    .tpl-type-btn {
+      flex: 1;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.5px;
+      padding: 8px;
+      border-radius: 8px;
+      min-height: 36px;
+      cursor: pointer;
+      border: 1px solid rgba(255,255,255,0.1);
+      background: transparent;
+      color: var(--label);
+      transition: all 0.2s;
+    }
+    .tpl-type-btn.active {
+      background: rgba(251,44,90,0.1);
+      border-color: rgba(251,44,90,0.35);
+      color: var(--red);
+    }
+
+    /* Portfolio View */
+    .portfolio-summary {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+    @media (min-width: 768px) {
+      .portfolio-summary { grid-template-columns: repeat(4, 1fr); }
+    }
+    .portfolio-stat {
+      background: rgba(255,255,255,0.02);
+      border-radius: 8px;
+      padding: 10px;
+      text-align: center;
+    }
+    .portfolio-stat-label {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 9px;
+      color: var(--label);
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      margin-bottom: 4px;
+    }
+    .portfolio-stat-value {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--bright);
+    }
+    .portfolio-account-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 10px;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    .portfolio-account-row:hover { background: rgba(255,255,255,0.03); }
+    .portfolio-account-label {
+      font-family: 'Outfit', sans-serif;
+      font-size: 12px;
+      color: var(--bright);
+      font-weight: 600;
+    }
+    .portfolio-account-stats {
+      display: flex;
+      gap: 16px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px;
+    }
+    .portfolio-flag {
+      color: var(--danger);
+      font-weight: 700;
+    }
+
     /* Compliance Results */
     .compliance-results {
       margin-top: 12px;
@@ -1767,6 +2112,7 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
     </div>
     <div id="pnl-log"></div>
     <div id="notifications-settings"></div>
+    <div id="strategy-config"></div>
     <div id="trade-modal-root"></div>
 
     <button class="fab-add" id="fab-add" aria-label="Log trade">+</button>
@@ -1823,14 +2169,21 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
     /* ── Instrument Selector ── */
     (function initInstrumentSelector() {
       const el = document.getElementById('instrument-selector');
-      const instruments = ['ES', 'NQ'];
+      const instruments = [
+        { sym: 'ES', label: 'ES', micro: null },
+        { sym: 'NQ', label: 'NQ', micro: null },
+        { sym: 'MES', label: 'MES', micro: 'MICRO' },
+        { sym: 'MNQ', label: 'MNQ', micro: 'MICRO' }
+      ];
       el.innerHTML = '<div class="card"><div class="toggle-row" id="instrument-row"></div></div>';
       const row = document.getElementById('instrument-row');
 
       function render() {
-        row.innerHTML = instruments.map(function(sym) {
-          return '<button class="toggle-btn' + (window.selectedInstrument === sym ? ' active' : '') +
-            '" data-instrument="' + sym + '">' + sym + '</button>';
+        row.innerHTML = instruments.map(function(inst) {
+          return '<button class="toggle-btn' + (window.selectedInstrument === inst.sym ? ' active' : '') +
+            '" data-instrument="' + inst.sym + '">' + inst.label +
+            (inst.micro ? '<span class="instrument-micro">' + inst.micro + '</span>' : '') +
+            '</button>';
         }).join('');
       }
       render();
@@ -1847,86 +2200,228 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
     /* ── Apex Account Selector ── */
     (function initApexSelector() {
       var el = document.getElementById('apex-selector');
-
-      var presets = {
-        '50000':  { drawdown: 2500, target: 3000, contracts: 10, scaling: 5 },
-        '100000': { drawdown: 3000, target: 6000, contracts: 14, scaling: 7 },
-        '150000': { drawdown: 5000, target: 9000, contracts: 17, scaling: 9 }
-      };
+      var cachedAccounts = [];
+      var templates = [];
+      var selectedTemplate = null;
+      var portfolioMode = false;
 
       function renderAccounts(accounts) {
+        cachedAccounts = accounts;
+        var showPortfolio = accounts.filter(function(a) { return a.is_active !== 0; }).length >= 2;
+
         el.innerHTML = '<div class="card"><div class="toggle-row" id="account-row"></div></div>';
         var row = document.getElementById('account-row');
 
-        if (!window.selectedAccountId && accounts.length) {
+        if (!window.selectedAccountId && accounts.length && !portfolioMode) {
           window.selectedAccountId = accounts[0].id;
           document.dispatchEvent(new CustomEvent('account-changed', { detail: { accountId: window.selectedAccountId } }));
         }
 
-        row.innerHTML = accounts.map(function(a) {
-          var isActive = String(window.selectedAccountId) === String(a.id);
+        var btns = '';
+        if (showPortfolio) {
+          btns += '<button class="toggle-btn' + (portfolioMode ? ' active' : '') +
+            '" data-account="portfolio" style="flex:0 0 auto;padding:10px 14px">\\u25A6 PORTFOLIO</button>';
+        }
+        btns += accounts.map(function(a) {
+          var isActive = !portfolioMode && String(window.selectedAccountId) === String(a.id);
           return '<button class="toggle-btn' + (isActive ? ' active' : '') +
             '" data-account="' + a.id + '">' + (a.label || a.id) + (isActive ? '<span class="account-active-dot"></span>' : '') + '</button>';
         }).join('');
 
+        row.innerHTML = btns;
+
         row.addEventListener('click', function(e) {
           var btn = e.target.closest('.toggle-btn');
           if (!btn) return;
+          if (btn.dataset.account === 'portfolio') {
+            portfolioMode = true;
+            window.selectedAccountId = null;
+            renderAccounts(accounts);
+            renderPortfolio(accounts);
+            return;
+          }
+          portfolioMode = false;
           window.selectedAccountId = btn.dataset.account;
           renderAccounts(accounts);
           document.dispatchEvent(new CustomEvent('account-changed', { detail: { accountId: window.selectedAccountId } }));
         });
+
+        if (portfolioMode) renderPortfolio(accounts);
+      }
+
+      function renderPortfolio(accounts) {
+        var panel = document.getElementById('dashboard-panel');
+        panel.innerHTML = '<div class="card" style="animation:slideUp 0.3s ease"><div class="card-title">\\u25C8 PORTFOLIO</div>' +
+          '<div class="portfolio-summary" id="portfolio-summary">' +
+          '<div class="portfolio-stat"><div class="portfolio-stat-label">BALANCE</div><div class="portfolio-stat-value skeleton-shimmer" style="height:20px;width:80px;margin:0 auto"></div></div>' +
+          '<div class="portfolio-stat"><div class="portfolio-stat-label">P&L</div><div class="portfolio-stat-value skeleton-shimmer" style="height:20px;width:80px;margin:0 auto"></div></div>' +
+          '<div class="portfolio-stat"><div class="portfolio-stat-label">CONSISTENCY</div><div class="portfolio-stat-value skeleton-shimmer" style="height:20px;width:60px;margin:0 auto"></div></div>' +
+          '<div class="portfolio-stat"><div class="portfolio-stat-label">DRAWDOWN</div><div class="portfolio-stat-value skeleton-shimmer" style="height:20px;width:60px;margin:0 auto"></div></div>' +
+          '</div><div id="portfolio-accounts"></div></div>';
+
+        var activeAccounts = accounts.filter(function(a) { return a.is_active !== 0; });
+        var promises = activeAccounts.map(function(a) {
+          return fetch('/api/apex/' + a.id + '/dashboard', { credentials: 'same-origin' })
+            .then(function(r) { return r.json(); })
+            .then(function(d) { return { account: a, dash: d }; })
+            .catch(function() { return { account: a, dash: null }; });
+        });
+
+        Promise.all(promises).then(function(results) {
+          var totalBalance = 0;
+          var totalPnl = 0;
+          var worstConsistency = 0;
+          var totalDdExposure = 0;
+
+          results.forEach(function(r) {
+            if (!r.dash) return;
+            totalBalance += (r.account.account_size || 0) + (r.dash.total_pnl || 0);
+            totalPnl += r.dash.total_pnl || 0;
+            if (r.dash.consistency_pct > worstConsistency) worstConsistency = r.dash.consistency_pct;
+            totalDdExposure += r.dash.drawdown_pct || 0;
+          });
+
+          var consColor = worstConsistency > 45 ? 'var(--danger)' : worstConsistency > 35 ? 'var(--amber)' : 'var(--bright)';
+          var pnlColor = totalPnl >= 0 ? 'var(--green)' : 'var(--danger)';
+
+          var sumEl = document.getElementById('portfolio-summary');
+          sumEl.innerHTML =
+            '<div class="portfolio-stat"><div class="portfolio-stat-label">BALANCE</div><div class="portfolio-stat-value">' + window.__fmtDollar(totalBalance) + '</div></div>' +
+            '<div class="portfolio-stat"><div class="portfolio-stat-label">P&L</div><div class="portfolio-stat-value" style="color:' + pnlColor + '">' + window.__fmtDollar(totalPnl) + '</div></div>' +
+            '<div class="portfolio-stat"><div class="portfolio-stat-label">CONSISTENCY</div><div class="portfolio-stat-value" style="color:' + consColor + '">' + worstConsistency.toFixed(1) + '%' + (worstConsistency > 45 ? ' <span class="portfolio-flag">!</span>' : '') + '</div></div>' +
+            '<div class="portfolio-stat"><div class="portfolio-stat-label">DD EXPOSURE</div><div class="portfolio-stat-value">' + (totalDdExposure / Math.max(results.length, 1)).toFixed(1) + '%</div></div>';
+
+          var acctHtml = '';
+          results.forEach(function(r) {
+            if (!r.dash) return;
+            var bal = (r.account.account_size || 0) + (r.dash.total_pnl || 0);
+            var pColor = (r.dash.total_pnl || 0) >= 0 ? 'var(--green)' : 'var(--danger)';
+            var cColor = (r.dash.consistency_pct || 0) > 45 ? 'var(--danger)' : 'var(--label)';
+            acctHtml += '<div class="portfolio-account-row" data-acct-id="' + r.account.id + '">';
+            acctHtml += '<div class="portfolio-account-label">' + (r.account.label || r.account.id) + '</div>';
+            acctHtml += '<div class="portfolio-account-stats">';
+            acctHtml += '<span style="color:var(--bright)">' + window.__fmtDollar(bal) + '</span>';
+            acctHtml += '<span style="color:' + pColor + '">' + window.__fmtDollar(r.dash.total_pnl) + '</span>';
+            acctHtml += '<span style="color:' + cColor + '">' + (r.dash.consistency_pct || 0).toFixed(1) + '%</span>';
+            acctHtml += '<span style="color:var(--label)">' + (r.dash.drawdown_pct || 0).toFixed(1) + '% DD</span>';
+            acctHtml += '</div></div>';
+          });
+
+          var acctEl = document.getElementById('portfolio-accounts');
+          acctEl.innerHTML = acctHtml;
+
+          acctEl.querySelectorAll('.portfolio-account-row').forEach(function(row) {
+            row.onclick = function() {
+              portfolioMode = false;
+              window.selectedAccountId = this.dataset.acctId;
+              renderAccounts(cachedAccounts);
+              document.dispatchEvent(new CustomEvent('account-changed', { detail: { accountId: window.selectedAccountId } }));
+            };
+          });
+        });
       }
 
       function renderCreateForm() {
-        el.innerHTML =
-          '<div class="card">' +
-            '<div style="margin-bottom:12px;font-family:JetBrains Mono,monospace;font-size:10px;color:var(--label);letter-spacing:1px;text-transform:uppercase">CREATE APEX ACCOUNT</div>' +
-            '<div class="form-grid">' +
-              '<div class="form-group"><label class="form-label">LABEL</label><input type="text" id="apex-label" class="form-input" placeholder="My Account"></div>' +
-              '<div class="form-group"><label class="form-label">ACCOUNT SIZE</label><select id="apex-size" class="form-select"><option value="">Select…</option><option value="50000">50,000</option><option value="100000">100,000</option><option value="150000">150,000</option></select></div>' +
-              '<div class="form-group"><label class="form-label">ACCOUNT TYPE</label><select id="apex-type" class="form-select"><option value="legacy">Legacy</option><option value="v4">V4</option></select></div>' +
-              '<div class="form-group"><label class="form-label">DRAWDOWN TYPE</label><select id="apex-dd-type" class="form-select"><option value="trailing">Trailing</option><option value="eod">EOD</option><option value="static">Static</option></select></div>' +
-              '<div class="form-group"><label class="form-label">DRAWDOWN</label><input type="number" id="apex-drawdown" class="form-input" readonly></div>' +
-              '<div class="form-group"><label class="form-label">TARGET</label><input type="number" id="apex-target" class="form-input" readonly></div>' +
-              '<div class="form-group"><label class="form-label">CONTRACTS</label><input type="number" id="apex-contracts" class="form-input" readonly></div>' +
-              '<div class="form-group"><label class="form-label">SCALING</label><input type="number" id="apex-scaling" class="form-input" readonly></div>' +
-            '</div>' +
-            '<button id="apex-submit" class="btn-submit" disabled>CREATE ACCOUNT</button>' +
+        selectedTemplate = null;
+        var html = '<div class="card">' +
+          '<div style="margin-bottom:12px;font-family:JetBrains Mono,monospace;font-size:10px;color:var(--label);letter-spacing:1px;text-transform:uppercase">CREATE APEX ACCOUNT</div>' +
+          '<div class="template-grid" id="template-grid"></div>' +
+          '<div id="template-step2"></div>' +
           '</div>';
+        el.innerHTML = html;
 
-        var sizeEl = document.getElementById('apex-size');
-        sizeEl.addEventListener('change', function() {
-          var p = presets[sizeEl.value];
-          if (p) {
-            document.getElementById('apex-drawdown').value = p.drawdown;
-            document.getElementById('apex-target').value = p.target;
-            document.getElementById('apex-contracts').value = p.contracts;
-            document.getElementById('apex-scaling').value = p.scaling;
-            document.getElementById('apex-submit').disabled = false;
-          } else {
-            document.getElementById('apex-drawdown').value = '';
-            document.getElementById('apex-target').value = '';
-            document.getElementById('apex-contracts').value = '';
-            document.getElementById('apex-scaling').value = '';
-            document.getElementById('apex-submit').disabled = true;
-          }
+        if (templates.length) {
+          renderTemplateGrid();
+        } else {
+          fetch('/api/apex/templates', { credentials: 'same-origin' })
+            .then(function(r) { return r.json(); })
+            .then(function(data) { templates = data; renderTemplateGrid(); })
+            .catch(function() {});
+        }
+      }
+
+      function renderTemplateGrid() {
+        var grid = document.getElementById('template-grid');
+        grid.innerHTML = templates.map(function(t) {
+          var isSelected = selectedTemplate && selectedTemplate.id === t.id;
+          var isStatic = (t.label || '').indexOf('Static') !== -1;
+          return '<div class="template-card' + (isSelected ? ' selected' : '') + '" data-tpl-id="' + t.id + '">' +
+            '<div class="tpl-size">' + t.label + '</div>' +
+            '<div class="tpl-details">DD $' + Number(t.drawdown_limit).toLocaleString() + '<br>Target $' + Number(t.profit_target).toLocaleString() + '</div>' +
+            (isStatic ? '<div class="tpl-tag">STATIC</div>' : '') +
+            '</div>';
+        }).join('');
+
+        grid.querySelectorAll('.template-card').forEach(function(card) {
+          card.onclick = function() {
+            var tplId = Number(this.dataset.tplId);
+            selectedTemplate = templates.find(function(t) { return t.id === tplId; });
+            renderTemplateGrid();
+            renderStep2();
+          };
         });
+      }
+
+      function renderStep2() {
+        if (!selectedTemplate) { document.getElementById('template-step2').innerHTML = ''; return; }
+        var t = selectedTemplate;
+        var defaultLabel = t.label + ' Legacy #1';
+
+        var html = '<div class="tpl-step2">';
+        html += '<div class="form-group"><label class="form-label">LABEL</label><input type="text" id="apex-label" class="form-input" value="' + defaultLabel + '"></div>';
+
+        html += '<div class="form-group"><label class="form-label">ACCOUNT TYPE</label>';
+        html += '<div class="tpl-type-toggle" id="apex-type-toggle">';
+        html += '<button class="tpl-type-btn active" data-val="legacy">LEGACY</button>';
+        html += '<button class="tpl-type-btn" data-val="v4">V4</button>';
+        html += '</div></div>';
+
+        html += '<div class="form-group"><label class="form-label">DRAWDOWN TYPE</label>';
+        html += '<div class="tpl-type-toggle" id="apex-dd-toggle">';
+        html += '<button class="tpl-type-btn active" data-val="trailing">TRAILING</button>';
+        html += '<button class="tpl-type-btn" data-val="eod">EOD</button>';
+        html += '<button class="tpl-type-btn" data-val="static">STATIC</button>';
+        html += '</div></div>';
+
+        html += '<div style="border-top:1px solid var(--border);padding-top:10px;margin-bottom:12px">';
+        html += '<div class="tpl-readonly-row"><span class="tpl-readonly-label">Account Size</span><span class="tpl-readonly-value">$' + Number(t.account_size).toLocaleString() + '</span></div>';
+        html += '<div class="tpl-readonly-row"><span class="tpl-readonly-label">Drawdown Limit</span><span class="tpl-readonly-value">$' + Number(t.drawdown_limit).toLocaleString() + '</span></div>';
+        html += '<div class="tpl-readonly-row"><span class="tpl-readonly-label">Profit Target</span><span class="tpl-readonly-value">$' + Number(t.profit_target).toLocaleString() + '</span></div>';
+        html += '<div class="tpl-readonly-row"><span class="tpl-readonly-label">Max Contracts</span><span class="tpl-readonly-value">' + t.max_contracts + '</span></div>';
+        html += '<div class="tpl-readonly-row"><span class="tpl-readonly-label">Scaling Limit</span><span class="tpl-readonly-value">' + t.scaling_limit + '</span></div>';
+        html += '</div>';
+
+        html += '<button id="apex-submit" class="btn-submit">CREATE ACCOUNT</button>';
+        html += '</div>';
+
+        document.getElementById('template-step2').innerHTML = html;
+
+        // Type toggle bindings
+        function bindToggleGroup(groupId) {
+          var group = document.getElementById(groupId);
+          group.querySelectorAll('.tpl-type-btn').forEach(function(btn) {
+            btn.onclick = function() {
+              group.querySelectorAll('.tpl-type-btn').forEach(function(b) { b.classList.remove('active'); });
+              this.classList.add('active');
+            };
+          });
+        }
+        bindToggleGroup('apex-type-toggle');
+        bindToggleGroup('apex-dd-toggle');
 
         document.getElementById('apex-submit').addEventListener('click', function() {
           var btn = this;
           btn.disabled = true;
-          btn.textContent = 'CREATING…';
+          btn.textContent = 'CREATING\\u2026';
+
+          var accountType = document.querySelector('#apex-type-toggle .tpl-type-btn.active').dataset.val;
+          var ddType = document.querySelector('#apex-dd-toggle .tpl-type-btn.active').dataset.val;
 
           var body = {
-            label: document.getElementById('apex-label').value || 'Apex Account',
-            account_size: Number(sizeEl.value),
-            account_type: document.getElementById('apex-type').value,
-            drawdown_type: document.getElementById('apex-dd-type').value,
-            drawdown: Number(document.getElementById('apex-drawdown').value),
-            profit_target: Number(document.getElementById('apex-target').value),
-            max_contracts: Number(document.getElementById('apex-contracts').value),
-            scaling_contracts: Number(document.getElementById('apex-scaling').value)
+            template_id: selectedTemplate.id,
+            label: document.getElementById('apex-label').value || selectedTemplate.label + ' Account',
+            account_type: accountType,
+            drawdown_type: ddType
           };
 
           fetch('/api/apex/accounts', {
@@ -1936,7 +2431,7 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
             body: JSON.stringify(body)
           }).then(function(r) { return r.json(); })
             .then(function() {
-              window.__showToast('\\u2713 Account created \\u2014 ' + (body.label || 'Apex Account'), 'success');
+              window.__showToast('\\u2713 Account created \\u2014 ' + body.label, 'success');
               loadAccounts();
             })
             .catch(function(err) {
@@ -2275,7 +2770,9 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
 
     var symbolMap = {
       NQ: 'OANDA:NAS100USD',
-      ES: 'OANDA:SPX500USD'
+      ES: 'OANDA:SPX500USD',
+      MES: 'OANDA:SPX500USD',
+      MNQ: 'OANDA:NAS100USD'
     };
 
     function renderWidget() {
@@ -3768,6 +4265,263 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
         render();
       })
       .catch(function(err) { console.error('Failed to load notification settings:', err); });
+  })();
+  </script>
+
+  <script>
+  /* ── Strategy Config Card ── */
+  (function() {
+    var container = document.getElementById('strategy-config');
+    var config = null;
+    var saveTimer = null;
+    var collapsed = true;
+
+    var fragranceNames = {
+      0: 'No Signal', 5: 'No Signal', 10: 'No Signal', 15: 'No Signal', 20: 'Zara',
+      25: 'Zara', 30: 'H&M', 35: 'H&M', 40: 'YSL', 45: 'YSL',
+      50: 'Armani', 55: 'Armani', 60: 'Armani', 65: 'Tom Ford',
+      70: 'Tom Ford', 75: 'Prestige', 80: 'Prestige', 85: 'Prestige',
+      90: 'Baccarat', 95: 'Baccarat', 100: 'Baccarat'
+    };
+
+    function getFragrance(val) {
+      var v = Math.round(val / 5) * 5;
+      return fragranceNames[v] || '';
+    }
+
+    function toggleHtml(id, checked) {
+      return '<label class="toggle-switch"><input type="checkbox" id="' + id + '"' + (checked ? ' checked' : '') + '><span class="toggle-track"></span></label>';
+    }
+
+    function debouncedSave(updates) {
+      if (saveTimer) clearTimeout(saveTimer);
+      Object.assign(config, updates);
+      saveTimer = setTimeout(function() {
+        fetch('/api/strategy/config', {
+          method: 'PUT',
+          credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(updates)
+        }).then(function(r) { return r.json(); })
+          .then(function(updated) {
+            config = updated;
+            window.__showToast('\\u2713 Saved', 'success');
+          })
+          .catch(function() { window.__showToast('\\u2717 Save failed', 'error'); });
+      }, 500);
+    }
+
+    function applyPreset(name) {
+      fetch('/api/strategy/config/preset', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ preset: name })
+      }).then(function(r) { return r.json(); })
+        .then(function(updated) {
+          config = updated;
+          render();
+          window.__showToast('\\u2713 ' + name.charAt(0).toUpperCase() + name.slice(1) + ' preset applied', 'success');
+        })
+        .catch(function() { window.__showToast('\\u2717 Preset failed', 'error'); });
+    }
+
+    function toggleKillSwitch(enabled) {
+      fetch('/api/strategy/kill-switch', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enabled: enabled })
+      }).then(function(r) { return r.json(); })
+        .then(function(updated) {
+          config = updated;
+          render();
+          window.__showToast(enabled ? '\\u26A0 Kill switch activated' : '\\u2713 Kill switch deactivated', enabled ? 'warning' : 'success');
+        })
+        .catch(function() { window.__showToast('\\u2717 Failed', 'error'); });
+    }
+
+    function render() {
+      if (!config) { container.innerHTML = ''; return; }
+      var c = config;
+      var ksActive = c.kill_switch === 1;
+      var preset = c.active_preset || 'normal';
+
+      var html = '<div class="card" style="animation:slideUp 0.3s ease">';
+      html += '<div class="strat-card-header" id="strat-header">';
+      html += '<div class="card-title">\\u25C8 STRATEGY CONFIG</div>';
+      html += '<span class="strat-chevron' + (collapsed ? '' : ' open') + '" id="strat-chevron">\\u25BC</span>';
+      html += '</div>';
+      html += '<div class="strat-body' + (collapsed ? ' collapsed' : ' expanded') + '" id="strat-body" style="max-height:' + (collapsed ? '0' : '2000px') + '">';
+
+      // Preset buttons
+      html += '<div class="preset-row">';
+      html += '<button class="preset-btn preset-conservative' + (preset === 'conservative' ? ' active' : '') + '" data-preset="conservative">CONSERVATIVE</button>';
+      html += '<button class="preset-btn preset-normal' + (preset === 'normal' ? ' active' : '') + '" data-preset="normal">NORMAL</button>';
+      html += '<button class="preset-btn preset-aggressive' + (preset === 'aggressive' ? ' active' : '') + '" data-preset="aggressive">AGGRESSIVE</button>';
+      html += '</div>';
+
+      // Kill switch
+      html += '<div class="kill-switch-row' + (ksActive ? ' active' : '') + '">';
+      if (ksActive) {
+        html += '<div><div class="kill-switch-label" style="color:var(--danger)">KILL SWITCH ACTIVE \\u2014 engine paused until tomorrow</div></div>';
+      } else {
+        html += '<div><div class="kill-switch-label">KILL SWITCH \\u2014 No more trades today</div></div>';
+      }
+      html += '<label class="kill-switch-toggle"><input type="checkbox" id="kill-switch-toggle"' + (ksActive ? ' checked' : '') + '><span class="kill-switch-track"></span></label>';
+      html += '</div>';
+      html += '<div class="kill-switch-hint">Resets at midnight ET</div>';
+
+      // Session toggles
+      html += '<div class="strat-divider">SESSION</div>';
+      html += '<div class="strat-toggle-row">';
+      html += '<div class="strat-toggle-label">Trade London sweeps</div>';
+      html += toggleHtml('strat-london', c.trade_london_sweep);
+      html += '</div>';
+      html += '<div class="strat-toggle-row">';
+      html += '<div class="strat-toggle-label">Trade NY sweeps</div>';
+      html += toggleHtml('strat-ny', c.trade_ny_sweep);
+      html += '</div>';
+
+      // FVG toggles
+      html += '<div class="strat-divider">FVG</div>';
+      html += '<div class="strat-toggle-row">';
+      html += '<div class="strat-toggle-label">Scan 1H FVGs</div>';
+      html += toggleHtml('strat-fvg1h', c.fvg_scan_1h);
+      html += '</div>';
+      html += '<div class="strat-toggle-row">';
+      html += '<div class="strat-toggle-label">Scan 4H FVGs</div>';
+      html += toggleHtml('strat-fvg4h', c.fvg_scan_4h);
+      html += '</div>';
+      html += '<div class="strat-toggle-row">';
+      html += '<div><div class="strat-toggle-label">Require IFVG for continuation</div>';
+      html += '<div class="strat-toggle-help">Only fires BASE NOTE on Inverse FVGs</div></div>';
+      html += toggleHtml('strat-ifvg', c.continuation_require_ifvg);
+      html += '</div>';
+
+      // Entry settings
+      html += '<div class="strat-divider">ENTRY</div>';
+      html += '<div class="strat-number-row">';
+      html += '<div class="strat-toggle-label">Min R:R</div>';
+      html += '<div style="text-align:right"><input type="number" class="strat-number-input" id="strat-minrr" value="' + (c.min_rr || 2.0) + '" min="1.0" max="5.0" step="0.5">';
+      html += '<div class="strat-number-display">' + (c.min_rr || 2.0).toFixed(1) + ':1</div></div>';
+      html += '</div>';
+      html += '<div class="strat-toggle-row">';
+      html += '<div class="strat-toggle-label">Require candle close beyond London</div>';
+      html += toggleHtml('strat-sweep-close', c.sweep_require_close);
+      html += '</div>';
+      html += '<div class="strat-number-row">';
+      html += '<div class="strat-toggle-label">Min AI confidence</div>';
+      html += '<div style="text-align:right"><input type="number" class="strat-number-input" id="strat-confidence" value="' + (c.min_confidence || 60) + '" min="0" max="100" step="5">';
+      html += '<div class="strat-number-display">' + getFragrance(c.min_confidence || 60) + '</div></div>';
+      html += '</div>';
+
+      // Position settings
+      html += '<div class="strat-divider">POSITION</div>';
+      html += '<div class="strat-number-row">';
+      html += '<div class="strat-toggle-label">Default contracts</div>';
+      html += '<input type="number" class="strat-number-input" id="strat-contracts" value="' + (c.default_contracts || 1) + '" min="1" max="10" step="1">';
+      html += '</div>';
+      html += '<div class="strat-number-row">';
+      html += '<div class="strat-toggle-label">Max contracts override</div>';
+      html += '<div style="display:flex;align-items:center"><input type="number" class="strat-number-input" id="strat-max-contracts" value="' + (c.max_contracts_override || '') + '" min="1" max="20" step="1" placeholder="\\u2014">';
+      html += '<button class="strat-clear-btn" id="strat-clear-max">\\u2715</button></div>';
+      html += '</div>';
+
+      html += '</div>'; // strat-body
+      html += '</div>'; // card
+      container.innerHTML = html;
+      bindEvents();
+    }
+
+    function bindEvents() {
+      // Collapse toggle
+      var header = document.getElementById('strat-header');
+      if (header) header.onclick = function() {
+        collapsed = !collapsed;
+        var body = document.getElementById('strat-body');
+        var chev = document.getElementById('strat-chevron');
+        if (collapsed) {
+          body.className = 'strat-body collapsed';
+          body.style.maxHeight = '0';
+          chev.className = 'strat-chevron';
+        } else {
+          body.className = 'strat-body expanded';
+          body.style.maxHeight = '2000px';
+          chev.className = 'strat-chevron open';
+        }
+      };
+
+      // Preset buttons
+      var presetBtns = container.querySelectorAll('.preset-btn');
+      for (var i = 0; i < presetBtns.length; i++) {
+        presetBtns[i].onclick = function() { applyPreset(this.dataset.preset); };
+      }
+
+      // Kill switch
+      var ks = document.getElementById('kill-switch-toggle');
+      if (ks) ks.onchange = function() { toggleKillSwitch(this.checked); };
+
+      // Toggle bindings
+      var toggleMap = {
+        'strat-london': 'trade_london_sweep',
+        'strat-ny': 'trade_ny_sweep',
+        'strat-fvg1h': 'fvg_scan_1h',
+        'strat-fvg4h': 'fvg_scan_4h',
+        'strat-ifvg': 'continuation_require_ifvg',
+        'strat-sweep-close': 'sweep_require_close'
+      };
+      Object.keys(toggleMap).forEach(function(elId) {
+        var el = document.getElementById(elId);
+        if (el) el.onchange = function() {
+          var update = {};
+          update[toggleMap[elId]] = this.checked ? 1 : 0;
+          debouncedSave(update);
+        };
+      });
+
+      // Number inputs
+      var minRr = document.getElementById('strat-minrr');
+      if (minRr) minRr.oninput = function() {
+        var v = parseFloat(this.value);
+        if (!isNaN(v) && v >= 1.0 && v <= 5.0) {
+          this.nextElementSibling.textContent = v.toFixed(1) + ':1';
+          debouncedSave({ min_rr: v });
+        }
+      };
+
+      var conf = document.getElementById('strat-confidence');
+      if (conf) conf.oninput = function() {
+        var v = parseInt(this.value);
+        if (!isNaN(v) && v >= 0 && v <= 100) {
+          this.nextElementSibling.textContent = getFragrance(v);
+          debouncedSave({ min_confidence: v });
+        }
+      };
+
+      var contracts = document.getElementById('strat-contracts');
+      if (contracts) contracts.oninput = function() {
+        var v = parseInt(this.value);
+        if (!isNaN(v) && v >= 1 && v <= 10) debouncedSave({ default_contracts: v });
+      };
+
+      var maxC = document.getElementById('strat-max-contracts');
+      if (maxC) maxC.oninput = function() {
+        var v = parseInt(this.value);
+        if (!isNaN(v) && v >= 1 && v <= 20) debouncedSave({ max_contracts_override: v });
+      };
+
+      var clearMax = document.getElementById('strat-clear-max');
+      if (clearMax) clearMax.onclick = function() {
+        document.getElementById('strat-max-contracts').value = '';
+        debouncedSave({ max_contracts_override: null });
+      };
+    }
+
+    fetch('/api/strategy/config', { credentials: 'same-origin' })
+      .then(function(r) { return r.json(); })
+      .then(function(data) { config = data; render(); })
+      .catch(function(err) { console.error('Failed to load strategy config:', err); });
   })();
   </script>
 
