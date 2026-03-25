@@ -73,7 +73,6 @@ export function getLearnPage(user: { name: string; email: string; avatar_url: st
       font-family: 'Outfit', sans-serif;
       font-weight: 900;
       font-size: 24px;
-      color: var(--red);
       letter-spacing: 5px;
       line-height: 1;
     }
@@ -310,7 +309,7 @@ export function getLearnPage(user: { name: string; email: string; avatar_url: st
   <div class="container">
     <div class="header">
       <div class="header-brand">
-        <h1>MTRADE</h1>
+        <h1><span style="color:#fb2c5a">M</span><span style="color:#ffffff">TRADE</span></h1>
         <div class="tagline">MATTHEW'S ICT MONITOR</div>
       </div>
       <div class="header-right">

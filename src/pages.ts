@@ -92,7 +92,7 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
     :root {
       --bg: #08080c;
       --card: #0e0e14;
-      --border: rgba(255,255,255,0.06);
+      --border: rgba(251,44,90,0.08);
       --red: #fb2c5a;
       --red-soft: #fb7185;
       --white: #ffffff;
@@ -285,7 +285,6 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
       font-family: 'Outfit', sans-serif;
       font-weight: 900;
       font-size: 24px;
-      color: var(--red);
       letter-spacing: 5px;
       line-height: 1;
     }
@@ -423,7 +422,7 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
       background: rgba(251,44,90,0.1);
       border-color: rgba(251,44,90,0.35);
       color: var(--red);
-      box-shadow: 0 0 20px rgba(251,44,90,0.1);
+      box-shadow: 0 0 20px rgba(251,44,90,0.15);
     }
 
     /* Form inputs */
@@ -714,7 +713,7 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
       background: var(--red);
       color: white;
       font-size: 24px;
-      box-shadow: 0 4px 20px rgba(251,44,90,0.4);
+      box-shadow: 0 4px 24px rgba(251,44,90,0.5);
       z-index: 100;
       cursor: pointer;
       border: none;
@@ -861,6 +860,7 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
       font-weight: 700;
       color: var(--white);
       line-height: 1;
+      text-shadow: 0 0 30px rgba(251,44,90,0.2);
     }
     .live-price-change {
       font-family: 'JetBrains Mono', monospace;
@@ -1032,7 +1032,7 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
       box-shadow: 0 0 8px rgba(251,191,36,0.5);
     }
     .phase-dot.pending {
-      background: rgba(255,255,255,0.08);
+      background: rgba(255,255,255,0.15);
     }
     .phase-label {
       font-family: 'Outfit', sans-serif;
@@ -1051,9 +1051,9 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
       margin-left: auto;
       flex-shrink: 0;
     }
-    .phase-row.pending-row { opacity: 0.3; }
-    .phase-row.pending-row .phase-label { color: var(--subtle); }
-    .phase-row.pending-row .phase-desc { color: var(--subtle); }
+    .phase-row.pending-row { opacity: 0.5; }
+    .phase-row.pending-row .phase-label { color: #64748b; }
+    .phase-row.pending-row .phase-desc { color: #64748b; }
 
     .signal-status-box {
       background: rgba(255,255,255,0.02);
@@ -1102,8 +1102,8 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
 
     /* Alert overlay card */
     @keyframes alertBorderPulse {
-      0%, 100% { border-color: rgba(251,44,90,0.2); }
-      50% { border-color: rgba(251,44,90,0.6); }
+      0%, 100% { border-color: rgba(251,44,90,0.1); }
+      50% { border-color: rgba(251,44,90,0.5); }
     }
     @keyframes alertBreathe {
       0%, 100% { transform: scale(1); }
@@ -2068,7 +2068,7 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
   <div class="container" id="main-container">
     <div class="header">
       <div class="header-brand">
-        <h1 style="display:inline-flex;align-items:center">MTRADE<span class="alert-dot" id="alert-dot"></span></h1>
+        <h1 style="display:inline-flex;align-items:center"><span style="color:#fb2c5a">M</span><span style="color:#ffffff">TRADE</span><span class="alert-dot" id="alert-dot"></span></h1>
         <div class="tagline">MATTHEW'S ICT MONITOR</div>
       </div>
       <div class="header-right">
@@ -3375,7 +3375,7 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
           labelColor = 'var(--amber)';
         } else {
           dotClass = 'pending';
-          labelColor = 'var(--subtle)';
+          labelColor = '#64748b';
           rowClass = ' pending-row';
         }
 
