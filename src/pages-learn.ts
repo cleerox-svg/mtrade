@@ -225,6 +225,115 @@ export function getLearnPage(user: { name: string; email: string; avatar_url: st
   </div>
 
   <script>
+    // --- KB Search & Category Listing ---
+    (function() {
+      var debounceTimer = null;
+      var allArticles = [];
+
+      // --- SEARCH BAR ---
+      var searchContainer = document.getElementById('kb-search');
+      var searchCard = document.createElement('div');
+      searchCard.style.cssText = 'background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:16px;';
+      var searchInput = document.createElement('input');
+      searchInput.type = 'text';
+      searchInput.placeholder = 'Search concepts, rules, features...';
+      searchInput.style.cssText = 'width:100%;background:#0a0a10;color:var(--text);border:1px solid var(--border);border-radius:10px;padding:14px 16px;font-size:14px;font-family:JetBrains Mono,monospace;outline:none;';
+      searchInput.addEventListener('focus', function() { searchInput.style.borderColor = 'var(--red)'; });
+      searchInput.addEventListener('blur', function() { searchInput.style.borderColor = 'var(--border)'; });
+      searchCard.appendChild(searchInput);
+      var resultsBox = document.createElement('div');
+      resultsBox.style.cssText = 'display:none;margin-top:12px;';
+      searchCard.appendChild(resultsBox);
+      searchContainer.appendChild(searchCard);
+
+      searchInput.addEventListener('input', function() {
+        clearTimeout(debounceTimer);
+        var val = searchInput.value.trim();
+        if (!val) { resultsBox.style.display = 'none'; resultsBox.innerHTML = ''; return; }
+        debounceTimer = setTimeout(function() {
+          fetch('/api/kb/search?q=' + encodeURIComponent(val), { credentials: 'same-origin' })
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+              resultsBox.innerHTML = '';
+              if (!data.length) { resultsBox.style.display = 'none'; return; }
+              resultsBox.style.display = 'block';
+              data.forEach(function(item, i) {
+                var row = document.createElement('div');
+                row.style.cssText = 'padding:10px 0;cursor:pointer;' + (i < data.length - 1 ? 'border-bottom:1px solid var(--border);' : '');
+                var title = document.createElement('div');
+                title.textContent = item.title;
+                title.style.cssText = 'font-size:13px;color:var(--bright);font-weight:600;font-family:Outfit,sans-serif;';
+                var tag = document.createElement('span');
+                tag.textContent = item.category;
+                tag.style.cssText = 'font-size:8px;background:rgba(255,255,255,0.04);color:var(--label);padding:2px 6px;border-radius:4px;margin-left:8px;font-family:JetBrains Mono,monospace;text-transform:uppercase;letter-spacing:1px;vertical-align:middle;';
+                title.appendChild(tag);
+                var snippet = document.createElement('div');
+                snippet.textContent = item.snippet || '';
+                snippet.style.cssText = 'font-size:11px;color:var(--muted);margin-top:4px;font-family:JetBrains Mono,monospace;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;';
+                row.appendChild(title);
+                row.appendChild(snippet);
+                row.addEventListener('click', function() {
+                  searchInput.value = '';
+                  resultsBox.style.display = 'none';
+                  resultsBox.innerHTML = '';
+                  var target = document.getElementById('article-' + item.slug);
+                  if (target) {
+                    target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    var card = target.closest('.kb-article-card');
+                    if (card) card.click();
+                  }
+                });
+                resultsBox.appendChild(row);
+              });
+            });
+        }, 300);
+      });
+
+      // --- CATEGORY LISTING ---
+      var contentContainer = document.getElementById('kb-content');
+      fetch('/api/kb/articles', { credentials: 'same-origin' })
+        .then(function(r) { return r.json(); })
+        .then(function(articles) {
+          allArticles = articles;
+          var categories = {};
+          articles.forEach(function(a) {
+            if (!categories[a.category]) categories[a.category] = [];
+            categories[a.category].push(a);
+          });
+
+          Object.keys(categories).forEach(function(cat) {
+            var header = document.createElement('div');
+            header.textContent = cat;
+            header.style.cssText = 'font-family:Outfit,sans-serif;font-size:14px;font-weight:700;color:var(--red-soft);text-transform:uppercase;letter-spacing:2px;margin-top:24px;margin-bottom:8px;';
+            contentContainer.appendChild(header);
+
+            categories[cat].forEach(function(article) {
+              var card = document.createElement('div');
+              card.className = 'kb-article-card';
+              card.style.cssText = 'background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px 16px;margin-bottom:6px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;';
+              var titleEl = document.createElement('span');
+              titleEl.textContent = article.title;
+              titleEl.style.cssText = 'font-family:Outfit,sans-serif;font-size:13px;font-weight:600;color:var(--bright);';
+              var chevron = document.createElement('span');
+              chevron.textContent = '\u25B8';
+              chevron.style.cssText = 'color:var(--muted);font-size:12px;';
+              card.appendChild(titleEl);
+              card.appendChild(chevron);
+
+              var expandDiv = document.createElement('div');
+              expandDiv.id = 'article-' + article.slug;
+              expandDiv.style.cssText = 'display:none;width:100%;';
+              card.appendChild(expandDiv);
+
+              card.addEventListener('click', function() {
+                console.log(article.slug);
+              });
+              contentContainer.appendChild(card);
+            });
+          });
+        });
+    })();
+
     function updateClock() {
       var now = new Date();
       var h = String(now.getUTCHours()).padStart(2, '0');

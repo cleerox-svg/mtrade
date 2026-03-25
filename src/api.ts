@@ -982,5 +982,25 @@ Respond in this exact JSON format:
     }
   }
 
+  // GET /api/kb/articles
+  if (path === '/api/kb/articles' && method === 'GET') {
+    const { results } = await env.DB.prepare(
+      'SELECT id, category, slug, title, sort_order FROM kb_articles ORDER BY category, sort_order'
+    ).all();
+    return json(results);
+  }
+
+  // GET /api/kb/search?q=...
+  if (path === '/api/kb/search' && method === 'GET') {
+    const q = url.searchParams.get('q') || '';
+    if (!q.trim()) return json([]);
+    const like = `%${q}%`;
+    const { results } = await env.DB.prepare(
+      `SELECT id, category, slug, title, substr(content, 1, 200) as snippet
+       FROM kb_articles WHERE title LIKE ? OR content LIKE ? ORDER BY sort_order LIMIT 20`
+    ).bind(like, like).all();
+    return json(results);
+  }
+
   return json({ error: 'Not found' }, 404);
 }
