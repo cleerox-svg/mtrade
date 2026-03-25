@@ -81,6 +81,12 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>MTRADE — Dashboard</title>
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#fb2c5a">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="apple-touch-icon" href="/icon-192.png">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Outfit:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
   <style>
     :root {
@@ -144,6 +150,127 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
     @keyframes spin {
       from { transform: rotate(0deg); }
       to { transform: rotate(360deg); }
+    }
+    @keyframes shimmer {
+      0% { background-position: 200% 0; }
+      100% { background-position: -200% 0; }
+    }
+    @keyframes toastIn {
+      from { opacity: 0; transform: translateX(-50%) translateY(-20px); }
+      to { opacity: 1; transform: translateX(-50%) translateY(0); }
+    }
+    @keyframes toastOut {
+      from { opacity: 1; transform: translateX(-50%) translateY(0); }
+      to { opacity: 0; transform: translateX(-50%) translateY(-20px); }
+    }
+
+    /* Shimmer skeleton */
+    .skeleton-shimmer {
+      background: linear-gradient(90deg, var(--card) 25%, #141420 50%, var(--card) 75%);
+      background-size: 200% 100%;
+      animation: shimmer 1.5s infinite;
+      border-radius: 6px;
+    }
+
+    /* Data fade-in */
+    .data-loaded { animation: fadeIn 0.3s ease forwards; }
+    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+    /* Stagger cascade delays */
+    .stagger-1 { animation-delay: 100ms; }
+    .stagger-2 { animation-delay: 200ms; }
+    .stagger-3 { animation-delay: 300ms; }
+    .stagger-4 { animation-delay: 400ms; }
+    .stagger-5 { animation-delay: 500ms; }
+
+    /* Toast container */
+    .toast-container {
+      position: fixed;
+      top: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 300;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      max-width: 400px;
+      width: calc(100vw - 40px);
+      pointer-events: none;
+    }
+    .toast {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 12px 20px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 13px;
+      color: var(--bright);
+      animation: toastIn 0.3s ease;
+      pointer-events: auto;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .toast.success { border-left: 3px solid var(--green); }
+    .toast.error { border-left: 3px solid var(--danger); }
+    .toast.warning { border-left: 3px solid var(--amber); }
+    .toast.dismissing { animation: toastOut 0.3s ease forwards; }
+
+    /* Pull-to-refresh indicator */
+    .ptr-indicator {
+      position: fixed;
+      top: -40px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      border: 2px solid transparent;
+      border-top-color: var(--red);
+      animation: spin 0.8s linear infinite;
+      transition: top 0.2s ease;
+      z-index: 250;
+    }
+    .ptr-indicator.visible { top: 12px; }
+
+    /* Logout dropdown */
+    .logout-dropdown {
+      position: absolute;
+      top: 100%;
+      right: 0;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 8px;
+      display: flex;
+      gap: 6px;
+      margin-top: 4px;
+      animation: slideUp 0.2s ease;
+      z-index: 50;
+    }
+    .logout-dropdown button {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px;
+      letter-spacing: 1px;
+      padding: 6px 14px;
+      border-radius: 6px;
+      cursor: pointer;
+      border: none;
+      min-height: 32px;
+    }
+    .logout-yes { background: var(--red); color: white; }
+    .logout-no { background: transparent; border: 1px solid var(--border); color: var(--muted); }
+
+    /* Active account dot */
+    .account-active-dot {
+      display: inline-block;
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--green);
+      box-shadow: 0 0 4px var(--green);
+      margin-left: 4px;
+      vertical-align: middle;
     }
 
     /* Header */
@@ -1061,6 +1188,254 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
     }
     .demo-alert-link:hover { color: var(--muted); }
 
+    /* Notification Settings */
+    .notif-webhook-row {
+      display: flex;
+      gap: 8px;
+      align-items: flex-start;
+      margin-bottom: 4px;
+    }
+    .notif-webhook-row .modal-input {
+      flex: 1;
+      margin-bottom: 0;
+    }
+    .notif-btn {
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--red);
+      font-family: 'Outfit', sans-serif;
+      font-size: 11px;
+      font-weight: 700;
+      border-radius: 8px;
+      padding: 12px 14px;
+      cursor: pointer;
+      white-space: nowrap;
+      min-height: 44px;
+    }
+    .notif-btn:hover { border-color: var(--red); }
+    .notif-help {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 9px;
+      color: var(--muted);
+      margin-bottom: 16px;
+      line-height: 1.5;
+    }
+    .notif-test-status {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 9px;
+      margin-left: 6px;
+      transition: opacity 0.3s;
+    }
+    .notif-toggle-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 0;
+      border-bottom: 1px solid var(--border);
+    }
+    .notif-toggle-row:last-child { border-bottom: none; }
+    .notif-toggle-label {
+      font-family: 'Outfit', sans-serif;
+      font-size: 12px;
+      color: var(--text);
+    }
+    .notif-toggle-sub {
+      font-size: 10px;
+      color: var(--muted);
+      margin-top: 1px;
+    }
+    .toggle-switch {
+      position: relative;
+      width: 44px;
+      height: 24px;
+      flex-shrink: 0;
+      cursor: pointer;
+    }
+    .toggle-switch input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+      position: absolute;
+    }
+    .toggle-track {
+      position: absolute;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(255,255,255,0.08);
+      border-radius: 12px;
+      transition: background 0.25s, box-shadow 0.25s;
+    }
+    .toggle-track::after {
+      content: '';
+      position: absolute;
+      top: 2px;
+      left: 2px;
+      width: 20px;
+      height: 20px;
+      background: #fff;
+      border-radius: 50%;
+      transition: transform 0.25s;
+    }
+    .toggle-switch input:checked + .toggle-track {
+      background: var(--red);
+      box-shadow: 0 0 8px rgba(251,44,90,0.4);
+    }
+    .toggle-switch input:checked + .toggle-track::after {
+      transform: translateX(20px);
+    }
+    .notif-toggles-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+    }
+    @media (min-width: 768px) {
+      .notif-toggles-grid {
+        grid-template-columns: 1fr 1fr;
+        column-gap: 24px;
+      }
+    }
+    .notif-master-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 0;
+      margin-bottom: 4px;
+      border-bottom: 1px solid var(--border);
+    }
+    .notif-master-label {
+      font-family: 'Outfit', sans-serif;
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--bright);
+    }
+
+    /* Compliance Results */
+    .compliance-results {
+      margin-top: 12px;
+      animation: slideUp 0.3s ease;
+    }
+    .compliance-check-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 10px;
+      background: rgba(255,255,255,0.02);
+      border-radius: 8px;
+      margin-bottom: 4px;
+    }
+    .compliance-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+    .compliance-dot.pass { background: var(--green); box-shadow: 0 0 4px var(--green); }
+    .compliance-dot.warn { background: var(--amber); box-shadow: 0 0 4px var(--amber); }
+    .compliance-dot.fail { background: var(--danger); box-shadow: 0 0 4px var(--danger); }
+    .compliance-label {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px;
+      color: var(--label);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      min-width: 72px;
+    }
+    .compliance-msg {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      color: var(--text);
+      flex: 1;
+    }
+    .compliance-rec {
+      padding: 10px;
+      border-radius: 8px;
+      margin-top: 8px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+    }
+    .compliance-rec.reduce {
+      background: rgba(251,191,36,0.08);
+      border: 1px solid rgba(251,191,36,0.2);
+      color: var(--amber);
+    }
+    .compliance-rec.skip {
+      background: rgba(239,68,68,0.08);
+      border: 1px solid rgba(239,68,68,0.2);
+      color: var(--danger);
+    }
+    .compliance-actions {
+      display: flex;
+      gap: 8px;
+      margin-top: 12px;
+    }
+    .compliance-confirm {
+      flex: 1;
+      padding: 14px;
+      font-family: 'Outfit', sans-serif;
+      font-size: 14px;
+      font-weight: 700;
+      border-radius: 10px;
+      border: none;
+      cursor: pointer;
+      min-height: 44px;
+      color: white;
+    }
+    .compliance-confirm.all-pass { background: var(--green); }
+    .compliance-confirm.warnings { background: var(--amber); color: #000; }
+    .compliance-confirm:disabled { opacity: 0.4; cursor: default; }
+    .compliance-cancel {
+      flex: 1;
+      padding: 14px;
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--muted);
+      font-family: 'Outfit', sans-serif;
+      font-size: 14px;
+      font-weight: 700;
+      border-radius: 10px;
+      cursor: pointer;
+      min-height: 44px;
+    }
+    .alert-compliance-summary {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px;
+      padding: 6px 10px;
+      border-radius: 6px;
+      margin-top: 8px;
+    }
+    .alert-compliance-summary.warn {
+      background: rgba(251,191,36,0.08);
+      color: var(--amber);
+      border: 1px solid rgba(251,191,36,0.15);
+    }
+    .alert-compliance-summary.fail {
+      background: rgba(239,68,68,0.08);
+      color: var(--danger);
+      border: 1px solid rgba(239,68,68,0.15);
+    }
+    .alert-btn-reduce {
+      flex: 1;
+      background: rgba(251,191,36,0.1);
+      border: 1px solid var(--amber);
+      color: var(--amber);
+      font-family: 'Outfit', sans-serif;
+      font-size: 14px;
+      font-weight: 700;
+      border-radius: 10px;
+      padding: 14px;
+      cursor: pointer;
+      min-height: 44px;
+    }
+    .compliance-spinner {
+      display: inline-block;
+      width: 14px;
+      height: 14px;
+      border: 2px solid transparent;
+      border-top-color: currentColor;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      vertical-align: middle;
+      margin-right: 6px;
+    }
+
     /* AI Analysis */
     .ai-analysis-card { margin-bottom: 12px; }
     .ai-analysis-header {
@@ -1323,7 +1698,9 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
   </style>
 </head>
 <body>
-  <div class="container">
+  <div class="toast-container" id="toast-container"></div>
+  <div class="ptr-indicator" id="ptr-indicator"></div>
+  <div class="container" id="main-container">
     <div class="header">
       <div class="header-brand">
         <h1 style="display:inline-flex;align-items:center">MTRADE<span class="alert-dot" id="alert-dot"></span></h1>
@@ -1337,9 +1714,10 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
             <span class="session-label inactive">--</span>
           </div>
         </div>
-        <div class="header-user">
+        <div class="header-user" style="position:relative">
           ${user.avatar_url ? `<img src="${user.avatar_url}" alt="${user.name}">` : ''}
-          <a href="/auth/logout">LOGOUT</a>
+          <a href="#" id="logout-btn" onclick="event.preventDefault();window.__showLogoutConfirm()">LOGOUT</a>
+          <div id="logout-dropdown" style="display:none"></div>
         </div>
       </div>
     </div>
@@ -1359,16 +1737,16 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
         <div id="ai-analysis"></div>
         <div id="signal-tracker"></div>
         <div id="dashboard-panel"></div>
+        <div id="performance-card"></div>
       </div>
     </div>
     <div id="pnl-log"></div>
+    <div id="notifications-settings"></div>
     <div id="trade-modal-root"></div>
 
     <button class="fab-add" id="fab-add" aria-label="Log trade">+</button>
 
     <button class="demo-alert-link" id="demo-alert-btn">Create Demo Alert</button>
-    <button class="demo-alert-link" id="test-discord-btn" style="margin-left:12px">Test Discord</button>
-    <span id="discord-status" style="font-family:'JetBrains Mono',monospace;font-size:9px;margin-left:6px;opacity:0;transition:opacity 0.3s"></span>
 
     <div id="engine-status" style="text-align:center;padding:8px 0;font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--muted);letter-spacing:0.5px"></div>
 
@@ -1461,8 +1839,9 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
         }
 
         row.innerHTML = accounts.map(function(a) {
-          return '<button class="toggle-btn' + (window.selectedAccountId === a.id ? ' active' : '') +
-            '" data-account="' + a.id + '">' + (a.label || a.id) + '</button>';
+          var isActive = String(window.selectedAccountId) === String(a.id);
+          return '<button class="toggle-btn' + (isActive ? ' active' : '') +
+            '" data-account="' + a.id + '">' + (a.label || a.id) + (isActive ? '<span class="account-active-dot"></span>' : '') + '</button>';
         }).join('');
 
         row.addEventListener('click', function(e) {
@@ -1531,10 +1910,14 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(body)
           }).then(function(r) { return r.json(); })
-            .then(function() { loadAccounts(); })
+            .then(function() {
+              window.__showToast('\\u2713 Account created \\u2014 ' + (body.label || 'Apex Account'), 'success');
+              loadAccounts();
+            })
             .catch(function(err) {
               btn.disabled = false;
               btn.textContent = 'CREATE ACCOUNT';
+              window.__showToast('\\u2717 Something went wrong \\u2014 try again', 'error');
               console.error('Failed to create account', err);
             });
         });
@@ -1569,10 +1952,18 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
     }
 
     function showSkeleton() {
-      panel.innerHTML =
-        '<div class="skeleton-rect"></div>' +
-        '<div class="skeleton-rect"></div>' +
-        '<div class="skeleton-rect"></div>';
+      panel.innerHTML = '<div class="card">' +
+        '<div style="display:flex;justify-content:space-between;margin-bottom:14px">' +
+        '<div><div class="skeleton-shimmer" style="width:60px;height:10px;margin-bottom:6px"></div><div class="skeleton-shimmer" style="width:140px;height:26px"></div></div>' +
+        '<div style="text-align:right"><div class="skeleton-shimmer" style="width:40px;height:10px;margin-bottom:6px;margin-left:auto"></div><div class="skeleton-shimmer" style="width:120px;height:26px"></div></div>' +
+        '</div>' +
+        '<div class="skeleton-shimmer" style="width:100%;height:36px;margin-bottom:12px"></div>' +
+        '<div class="skeleton-shimmer" style="width:100%;height:5px;margin-bottom:12px"></div>' +
+        '<div class="skeleton-shimmer" style="width:100%;height:5px;margin-bottom:12px"></div>' +
+        '<div class="skeleton-shimmer" style="width:100%;height:5px;margin-bottom:16px"></div>' +
+        '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">' +
+        '<div class="skeleton-shimmer" style="height:48px;border-radius:8px"></div>'.repeat(6) +
+        '</div></div>';
     }
 
     function fmt(n) {
@@ -1836,7 +2227,12 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
       }).catch(function() {});
     }
 
-    renderPriceCard();
+    // Show shimmer skeleton initially
+    priceCard.innerHTML = '<div class="card"><div class="card-title">\\u25C8 LIVE PRICE</div>' +
+      '<div class="skeleton-shimmer" style="width:200px;height:36px;margin-bottom:8px"></div>' +
+      '<div class="skeleton-shimmer" style="width:60px;height:14px;margin-bottom:8px"></div>' +
+      '<div style="display:flex;gap:16px"><div class="skeleton-shimmer" style="width:80px;height:12px"></div><div class="skeleton-shimmer" style="width:80px;height:12px"></div></div>' +
+      '</div>';
     fetchPrices();
     fetchSessions();
     setInterval(fetchPrices, 15000);
@@ -2294,8 +2690,14 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
       if (wrap) setupCrosshair(wrap);
     }
 
+    function showChartSkeleton() {
+      chartEl.innerHTML = '<div class="card"><div class="card-title">\\u25C8 STRATEGY CHART</div>' +
+        '<div class="skeleton-shimmer" style="width:100%;height:240px;border-radius:10px"></div></div>';
+    }
+
     function loadAndRender() {
       var sym = window.selectedInstrument || 'NQ';
+      if (!cachedCandles[sym]) showChartSkeleton();
       Promise.all([fetchCandleData(sym), fetchSessionData(), fetchFvgData(sym)]).then(function() {
         renderChartWithData();
       });
@@ -2478,9 +2880,22 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
     }
 
     // ── P&L Log ──
+    function showPnlSkeleton() {
+      var html = '<div class="card"><div class="card-title">DAILY P&L</div><div class="pnl-list">';
+      for (var i = 0; i < 5; i++) {
+        html += '<div class="pnl-row"><div class="skeleton-shimmer" style="width:70px;height:12px"></div>' +
+          '<div class="skeleton-shimmer" style="width:30px;height:12px;margin:0 8px"></div>' +
+          '<div style="flex:1"></div>' +
+          '<div class="skeleton-shimmer" style="width:80px;height:14px"></div></div>';
+      }
+      html += '</div></div>';
+      pnlLog.innerHTML = html;
+    }
+
     function fetchPnlLog() {
       var accountId = getSelectedAccountId();
       if (!accountId) { pnlLog.innerHTML = ''; return; }
+      showPnlSkeleton();
       fetch('/api/apex/' + accountId + '/daily-pnl?days=30')
         .then(function(r) { return r.json(); })
         .then(function(rows) { renderPnlLog(rows); })
@@ -2499,8 +2914,9 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
         var prefix = positive ? '+$' : '-$';
         var instrument = r.instrument || '';
         var trades = r.trade_count || 0;
+        var displayDate = r.date ? window.__formatET(r.date + 'T12:00:00Z').replace(/, .*/, '') : r.date;
         html += '<div class="pnl-row">' +
-          '<span class="pnl-date">' + r.date + '</span>' +
+          '<span class="pnl-date">' + displayDate + '</span>' +
           (instrument ? '<span class="pnl-instrument">' + instrument + '</span>' : '') +
           '<span class="pnl-trades">' + trades + ' trade' + (trades !== 1 ? 's' : '') + '</span>' +
           '<span class="pnl-amount" style="color:' + color + '">' + prefix + fmt(r.pnl) + '</span>' +
@@ -2562,14 +2978,20 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
         '<button class="modal-toggle-btn" id="tm-short" type="button">SHORT</button>' +
         '</div>' +
 
+        '<div class="modal-label">Date</div>' +
+        '<input class="modal-input" id="tm-date" type="date" value="' + (function() { var d = new Date(); return d.toLocaleDateString('en-CA', { timeZone: 'America/New_York' }); })() + '">' +
+
         '<div class="modal-label">Contracts</div>' +
         '<input class="modal-input" id="tm-contracts" type="number" value="1" min="1" inputmode="numeric">' +
 
         '<div class="modal-label">Entry Price</div>' +
         '<input class="modal-input" id="tm-entry" type="number" step="0.25" inputmode="decimal">' +
 
-        '<div class="modal-label">Exit Price</div>' +
+        '<div class="modal-label">Exit Price (Target)</div>' +
         '<input class="modal-input" id="tm-exit" type="number" step="0.25" inputmode="decimal">' +
+
+        '<div class="modal-label">Stop Price</div>' +
+        '<input class="modal-input" id="tm-stop" type="number" step="0.25" inputmode="decimal">' +
 
         '<div class="modal-label">P&L</div>' +
         '<div class="modal-pnl-display" id="tm-pnl-display">--</div>' +
@@ -2578,6 +3000,7 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
         '<textarea class="modal-input" id="tm-notes" rows="3" style="resize:vertical"></textarea>' +
 
         '<button class="modal-submit" id="tm-submit" disabled>LOG TRADE</button>' +
+        '<div id="tm-compliance-results"></div>' +
         '</div></div>';
 
       modalRoot.innerHTML = html;
@@ -2621,22 +3044,133 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
         document.getElementById(id).addEventListener('input', updatePnlDisplay);
       });
 
-      // Submit
-      document.getElementById('tm-submit').onclick = submitTrade;
+      // Submit — first runs compliance, then allows confirm
+      document.getElementById('tm-submit').onclick = runComplianceCheck;
     }
 
     function closeModal() {
       modalRoot.innerHTML = '';
     }
 
-    function submitTrade() {
+    function getCheckNames() {
+      return { contracts: 'Contracts', mae: 'MAE', drawdown: 'Drawdown', consistency: 'Consistency', daily_loss: 'Daily Loss' };
+    }
+
+    function renderComplianceResults(result) {
+      var container = document.getElementById('tm-compliance-results');
+      var names = getCheckNames();
+      var html = '<div class="compliance-results">';
+
+      for (var i = 0; i < result.checks.length; i++) {
+        var c = result.checks[i];
+        if (c.check === 'recommendation') continue;
+        var dotClass = c.passed ? (c.severity === 'warning' ? 'warn' : 'pass') : 'fail';
+        if (c.passed && c.severity === 'critical') dotClass = 'warn';
+        html += '<div class="compliance-check-row">';
+        html += '<span class="compliance-dot ' + dotClass + '"></span>';
+        html += '<span class="compliance-label">' + (names[c.check] || c.check) + '</span>';
+        html += '<span class="compliance-msg">' + (c.message || '') + '</span>';
+        html += '</div>';
+      }
+
+      var rec = result.recommendation;
+      if (rec.action === 'reduce') {
+        html += '<div class="compliance-rec reduce">Recommended: ' + rec.recommended_contracts + ' contract' + (rec.recommended_contracts > 1 ? 's' : '') + ' — ' + rec.reasoning + '</div>';
+      } else if (rec.action === 'skip') {
+        html += '<div class="compliance-rec skip">Trade not recommended — ' + rec.reasoning + '</div>';
+      }
+
+      // Buttons
+      var hasCriticalFail = result.checks.some(function(c) { return !c.passed && c.severity === 'critical'; });
+      var anyFail = !result.passed;
+      var hasWarnings = result.checks.some(function(c) { return c.severity === 'warning' || c.severity === 'critical'; });
+      var canConfirm = !hasCriticalFail && !(anyFail && rec.action === 'skip');
+
+      html += '<div class="compliance-actions">';
+      var confirmClass = result.passed && !hasWarnings ? 'all-pass' : 'warnings';
+      html += '<button class="compliance-confirm ' + confirmClass + '" id="tm-confirm"' + (canConfirm ? '' : ' disabled') + '>CONFIRM & LOG</button>';
+      html += '<button class="compliance-cancel" id="tm-cancel-compliance">CANCEL</button>';
+      html += '</div>';
+      html += '</div>';
+
+      container.innerHTML = html;
+
+      document.getElementById('tm-confirm').onclick = function() { doSubmitTrade(); };
+      document.getElementById('tm-cancel-compliance').onclick = function() { container.innerHTML = ''; document.getElementById('tm-submit').textContent = 'LOG TRADE'; document.getElementById('tm-submit').disabled = false; };
+    }
+
+    function runComplianceCheck() {
       var btn = document.getElementById('tm-submit');
+      var accountId = getSelectedAccountId();
+      var entry = parseFloat(document.getElementById('tm-entry').value);
+      var exit = parseFloat(document.getElementById('tm-exit').value);
+      var stop = parseFloat(document.getElementById('tm-stop').value);
+      var contracts = parseInt(document.getElementById('tm-contracts').value) || 1;
+
+      if (!accountId || isNaN(entry) || isNaN(exit)) {
+        doSubmitTrade();
+        return;
+      }
+
+      // If no stop price, skip compliance and log directly
+      if (isNaN(stop)) {
+        doSubmitTrade();
+        return;
+      }
+
       btn.disabled = true;
-      btn.textContent = 'SAVING...';
+      btn.innerHTML = '<span class="compliance-spinner"></span>CHECKING...';
+
+      fetch('/api/apex/' + accountId + '/compliance-check', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          instrument_id: modalState.instrument_id,
+          direction: modalState.direction,
+          contracts: contracts,
+          entry_price: entry,
+          stop_price: stop,
+          target_price: exit
+        })
+      })
+      .then(function(r) { return r.json(); })
+      .then(function(result) {
+        if (result.error) {
+          btn.disabled = false;
+          btn.textContent = 'LOG TRADE';
+          return;
+        }
+
+        // Fast path: all checks pass with no warnings — log directly
+        var hasWarnings = result.checks.some(function(c) { return c.severity === 'warning' || c.severity === 'critical' || !c.passed; });
+        if (result.passed && !hasWarnings) {
+          doSubmitTrade();
+          return;
+        }
+
+        // Show compliance results
+        btn.style.display = 'none';
+        window.__showToast('\\u26A0 Check compliance results before confirming', 'warning');
+        renderComplianceResults(result);
+      })
+      .catch(function() {
+        btn.disabled = false;
+        btn.textContent = 'LOG TRADE';
+      });
+    }
+
+    function doSubmitTrade() {
+      var btn = document.getElementById('tm-submit');
+      if (btn) {
+        btn.disabled = true;
+        btn.textContent = 'SAVING...';
+        btn.style.display = '';
+      }
 
       var pnl = calcPnl();
       var accountId = getSelectedAccountId();
-      var today = new Date().toISOString().slice(0, 10);
+      var dateEl = document.getElementById('tm-date');
+      var today = dateEl ? dateEl.value : new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
 
       var payload = {
         instrument_id: modalState.instrument_id,
@@ -2664,13 +3198,22 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
         });
       })
       .then(function() {
+        var inst = INSTRUMENTS[modalState.instrument_id];
+        var sym = inst ? inst.symbol : '';
+        var dir = modalState.direction;
+        var pnlStr = pnl != null ? (pnl >= 0 ? '+' : '') + '$' + Math.abs(pnl).toFixed(2) : '';
+        window.__showToast('\\u2713 Trade logged \\u2014 ' + sym + ' ' + dir + ' ' + pnlStr, 'success');
         closeModal();
         document.dispatchEvent(new Event('account-changed'));
         fetchPnlLog();
       })
       .catch(function() {
-        btn.disabled = false;
-        btn.textContent = 'LOG TRADE';
+        window.__showToast('\\u2717 Something went wrong \\u2014 try again', 'error');
+        if (btn) {
+          btn.disabled = false;
+          btn.textContent = 'LOG TRADE';
+          btn.style.display = '';
+        }
       });
     }
 
@@ -2743,7 +3286,7 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
       return html;
     }
 
-    function handleImIn(alert) {
+    function logTradeFromAlert(alert, contracts) {
       var dir = getDirection(alert);
       var instId = alert.instrument_id || 2;
       var today = new Date().toISOString().slice(0, 10);
@@ -2752,7 +3295,7 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
         instrument_id: instId,
         date: today,
         direction: dir,
-        contracts: 1,
+        contracts: contracts || 1,
         entry_price: alert.entry_price,
         exit_price: alert.target_price,
         pnl: 0,
@@ -2768,15 +3311,118 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
         return fetch('/api/alerts/' + alert.id + '/dismiss', { method: 'PUT' });
       })
       .then(function() {
+        window.__showToast('\\u2713 Trade entry logged', 'success');
         document.dispatchEvent(new Event('account-changed'));
         pollAlerts();
       })
-      .catch(function(err) { console.error('Failed to log trade from alert', err); });
+      .catch(function(err) {
+        window.__showToast('\\u2717 Something went wrong \\u2014 try again', 'error');
+        console.error('Failed to log trade from alert', err);
+      });
+    }
+
+    function handleImIn(alert) {
+      var dir = getDirection(alert);
+      var instId = alert.instrument_id || 2;
+      var accountId = window.selectedAccountId;
+
+      // If no account or no stop/entry, skip compliance
+      if (!accountId || !alert.entry_price || !alert.stop_price) {
+        logTradeFromAlert(alert, 1);
+        return;
+      }
+
+      var inBtn = overlayEl.querySelector('.alert-btn-in[data-alert-id="' + alert.id + '"]');
+      if (inBtn) {
+        inBtn.disabled = true;
+        inBtn.innerHTML = '<span class="compliance-spinner"></span>CHECKING...';
+      }
+
+      fetch('/api/apex/' + accountId + '/compliance-check', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          instrument_id: instId,
+          direction: dir,
+          contracts: 1,
+          entry_price: alert.entry_price,
+          stop_price: alert.stop_price,
+          target_price: alert.target_price || alert.entry_price
+        })
+      })
+      .then(function(r) { return r.json(); })
+      .then(function(result) {
+        if (result.error) {
+          logTradeFromAlert(alert, 1);
+          return;
+        }
+
+        var hasWarnings = result.checks.some(function(c) { return c.severity === 'warning' || c.severity === 'critical'; });
+        var anyFail = !result.passed;
+
+        if (result.passed && !hasWarnings) {
+          // All clear — log immediately
+          logTradeFromAlert(alert, 1);
+          return;
+        }
+
+        // Show compliance inline on alert card
+        var alertCard = overlayEl.querySelector('.alert-overlay');
+        if (!alertCard) { logTradeFromAlert(alert, 1); return; }
+
+        // Remove old actions
+        var oldActions = alertCard.querySelector('.alert-actions');
+        if (oldActions) oldActions.remove();
+
+        // Remove old compliance summary if exists
+        var oldSummary = alertCard.querySelector('.alert-compliance-summary');
+        if (oldSummary) oldSummary.remove();
+
+        var rec = result.recommendation;
+        var recContracts = rec.recommended_contracts || 0;
+
+        if (anyFail && rec.action === 'skip') {
+          // Compliance failed — show failure, disable I'M IN
+          var failMsgs = result.checks.filter(function(c) { return !c.passed; }).map(function(c) { return c.message; }).join(' · ');
+          var failHtml = '<div class="alert-compliance-summary fail">' + failMsgs + '</div>';
+          failHtml += '<div class="alert-actions"><button class="alert-btn-skip" data-alert-id="' + alert.id + '">SKIP</button></div>';
+          alertCard.insertAdjacentHTML('beforeend', failHtml);
+          alertCard.querySelector('.alert-btn-skip').onclick = function() { handleSkip(alert.id); };
+        } else {
+          // Warnings — show summary with options
+          var warnMsgs = result.checks.filter(function(c) { return !c.passed || c.severity === 'warning' || c.severity === 'critical'; }).map(function(c) { return c.message; }).join(' · ');
+          var warnHtml = '<div class="alert-compliance-summary warn">' + warnMsgs + '</div>';
+          warnHtml += '<div class="alert-actions">';
+          warnHtml += '<button class="alert-btn-in" data-alert-id="' + alert.id + '">Proceed Anyway</button>';
+          if (recContracts > 0 && recContracts < 1) {
+            // Already at 1 contract, can't reduce further
+          } else if (rec.action === 'reduce' && recContracts > 0) {
+            warnHtml += '<button class="alert-btn-reduce" data-alert-id="' + alert.id + '">Reduce to ' + recContracts + '</button>';
+          }
+          warnHtml += '<button class="alert-btn-skip" data-alert-id="' + alert.id + '">SKIP</button>';
+          warnHtml += '</div>';
+          alertCard.insertAdjacentHTML('beforeend', warnHtml);
+
+          alertCard.querySelector('.alert-btn-in').onclick = function() { logTradeFromAlert(alert, 1); };
+          var reduceBtn = alertCard.querySelector('.alert-btn-reduce');
+          if (reduceBtn) {
+            reduceBtn.onclick = function() { logTradeFromAlert(alert, recContracts); };
+          }
+          alertCard.querySelector('.alert-btn-skip').onclick = function() { handleSkip(alert.id); };
+        }
+      })
+      .catch(function(err) {
+        console.error('Compliance check failed', err);
+        logTradeFromAlert(alert, 1);
+      });
     }
 
     function handleSkip(alertId) {
       fetch('/api/alerts/' + alertId + '/dismiss', { method: 'PUT' })
-        .then(function() { pollAlerts(); })
+        .then(function() {
+          window.__showToast('Setup skipped', 'warning');
+          pollAlerts();
+        })
         .catch(function(err) { console.error('Failed to dismiss alert', err); });
     }
 
@@ -2848,30 +3494,6 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
         .catch(function(err) { console.error('Failed to create demo alert', err); });
     };
 
-    // Test Discord button
-    document.getElementById('test-discord-btn').onclick = function() {
-      var statusEl = document.getElementById('discord-status');
-      statusEl.style.opacity = '1';
-      statusEl.textContent = '...';
-      statusEl.style.color = 'var(--muted)';
-      fetch('/api/notifications/test', { method: 'POST', credentials: 'same-origin' })
-        .then(function(r) { return r.json(); })
-        .then(function(data) {
-          if (data.success) {
-            statusEl.textContent = '\u2713 Sent';
-            statusEl.style.color = '#34d058';
-          } else {
-            statusEl.textContent = '\u2717 Failed';
-            statusEl.style.color = 'var(--red)';
-          }
-          setTimeout(function() { statusEl.style.opacity = '0'; }, 3000);
-        })
-        .catch(function() {
-          statusEl.textContent = '\u2717 Failed';
-          statusEl.style.color = 'var(--red)';
-          setTimeout(function() { statusEl.style.opacity = '0'; }, 3000);
-        });
-    };
   })();
   </script>
 
@@ -2980,7 +3602,7 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
             var diff = Math.floor((Date.now() - new Date(lastRun + 'Z').getTime()) / 1000);
             if (diff < 60) timeAgo = diff + 's ago';
             else if (diff < 3600) timeAgo = Math.floor(diff / 60) + 'm ago';
-            else timeAgo = Math.floor(diff / 3600) + 'h ago';
+            else timeAgo = window.__formatET(lastRun + 'Z');
           }
           var activeFvgs = data.fvg_counts ? data.fvg_counts.active : 0;
           var setups = data.active_setups || 0;
@@ -2992,6 +3614,320 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
     fetchStatus();
     setInterval(fetchStatus, 30000);
   })();
+  </script>
+
+  <script>
+  /* ── Notification Settings ── */
+  (function() {
+    var container = document.getElementById('notifications-settings');
+    var settings = null;
+
+    function toggleHtml(id, checked) {
+      return '<label class="toggle-switch"><input type="checkbox" id="' + id + '"' + (checked ? ' checked' : '') + '><span class="toggle-track"></span></label>';
+    }
+
+    function render() {
+      if (!settings) {
+        container.innerHTML = '';
+        return;
+      }
+      var s = settings;
+      var webhookVal = s.discord_webhook_url || '';
+      var html = '<div class="card" style="animation:slideUp 0.3s ease">';
+      html += '<div class="card-title">\\u25C8 NOTIFICATIONS</div>';
+
+      html += '<div style="font-family:\\'Outfit\\',sans-serif;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin-bottom:6px">DISCORD WEBHOOK</div>';
+      html += '<div class="notif-webhook-row">';
+      html += '<input class="modal-input" id="notif-webhook-input" type="text" value="' + webhookVal.replace(/"/g, '&quot;') + '" placeholder="https://discord.com/api/webhooks/...">';
+      html += '<button class="notif-btn" id="notif-save-btn">Save</button>';
+      html += '<button class="notif-btn" id="notif-test-btn">Test</button>';
+      html += '<span class="notif-test-status" id="notif-test-status" style="opacity:0"></span>';
+      html += '</div>';
+      html += '<div class="notif-help">Channel Settings \\u2192 Integrations \\u2192 Webhooks \\u2192 New Webhook \\u2192 Copy URL</div>';
+
+      html += '<div class="notif-master-row">';
+      html += '<span class="notif-master-label">Notifications enabled</span>';
+      html += toggleHtml('notif-master', s.discord_enabled);
+      html += '</div>';
+
+      var toggles = [
+        { id: 'notify_sweep', label: 'Sweep detected', sub: 'Top Note' },
+        { id: 'notify_ready', label: 'Setup confirmed', sub: 'Base Note' },
+        { id: 'notify_execute', label: 'Entry signal', sub: 'Accord' },
+        { id: 'notify_drawdown', label: 'Drawdown warning', sub: 'Redline' },
+        { id: 'notify_consistency', label: 'Consistency warning', sub: 'Rev Limit' },
+        { id: 'notify_setup_result', label: 'Setup results', sub: 'Win/Loss' },
+      ];
+
+      html += '<div class="notif-toggles-grid">';
+      for (var i = 0; i < toggles.length; i++) {
+        var t = toggles[i];
+        var isOn = s[t.id];
+        html += '<div class="notif-toggle-row">';
+        html += '<div><div class="notif-toggle-label">' + t.label + '</div><div class="notif-toggle-sub">' + t.sub + '</div></div>';
+        html += toggleHtml('notif-' + t.id, isOn);
+        html += '</div>';
+      }
+      html += '</div>';
+      html += '</div>';
+
+      container.innerHTML = html;
+      bindEvents();
+    }
+
+    function saveField(data) {
+      fetch('/api/settings', {
+        method: 'PUT',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      }).then(function(r) { return r.json(); })
+        .then(function(updated) {
+          settings = updated;
+          window.__showToast('\\u2713 Settings saved', 'success');
+        })
+        .catch(function(err) {
+          console.error('Settings save error:', err);
+          window.__showToast('\\u2717 Something went wrong \\u2014 try again', 'error');
+        });
+    }
+
+    function bindEvents() {
+      var saveBtn = document.getElementById('notif-save-btn');
+      if (saveBtn) saveBtn.onclick = function() {
+        var val = document.getElementById('notif-webhook-input').value.trim();
+        saveField({ discord_webhook_url: val });
+        settings.discord_webhook_url = val;
+      };
+
+      var testBtn = document.getElementById('notif-test-btn');
+      if (testBtn) testBtn.onclick = function() {
+        fetch('/api/settings/test-discord', { method: 'POST', credentials: 'same-origin' })
+          .then(function(r) { return r.json(); })
+          .then(function(data) {
+            if (data.success) {
+              window.__showToast('\\u2713 Discord notification sent', 'success');
+            } else {
+              window.__showToast('\\u2717 Discord webhook failed', 'error');
+            }
+          })
+          .catch(function() {
+            window.__showToast('\\u2717 Discord webhook failed', 'error');
+          });
+      };
+
+      var master = document.getElementById('notif-master');
+      if (master) master.onchange = function() {
+        settings.discord_enabled = this.checked ? 1 : 0;
+        saveField({ discord_enabled: settings.discord_enabled });
+      };
+
+      var toggleKeys = ['notify_sweep', 'notify_ready', 'notify_execute', 'notify_drawdown', 'notify_consistency', 'notify_setup_result'];
+      for (var i = 0; i < toggleKeys.length; i++) {
+        (function(key) {
+          var el = document.getElementById('notif-' + key);
+          if (el) el.onchange = function() {
+            settings[key] = this.checked ? 1 : 0;
+            var update = {};
+            update[key] = settings[key];
+            saveField(update);
+          };
+        })(toggleKeys[i]);
+      }
+    }
+
+    fetch('/api/settings', { credentials: 'same-origin' })
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        settings = data;
+        render();
+      })
+      .catch(function(err) { console.error('Failed to load notification settings:', err); });
+  })();
+  </script>
+
+  <script>
+  /* ── Toast System ── */
+  (function() {
+    var container = document.getElementById('toast-container');
+    window.__showToast = function(message, type) {
+      type = type || 'success';
+      var toast = document.createElement('div');
+      toast.className = 'toast ' + type;
+      toast.textContent = message;
+      container.appendChild(toast);
+      setTimeout(function() {
+        toast.classList.add('dismissing');
+        setTimeout(function() { toast.remove(); }, 300);
+      }, 3000);
+    };
+  })();
+  </script>
+
+  <script>
+  /* ── Format Eastern Time helper ── */
+  window.__formatET = function(isoString) {
+    if (!isoString) return '--';
+    try {
+      var d = new Date(isoString);
+      if (isNaN(d.getTime())) return isoString;
+      return d.toLocaleString('en-US', {
+        timeZone: 'America/New_York',
+        month: 'short', day: 'numeric',
+        hour: 'numeric', minute: '2-digit',
+        hour12: true
+      }) + ' ET';
+    } catch(e) { return isoString; }
+  };
+
+  /* ── Format dollar amounts ── */
+  window.__fmtDollar = function(n) {
+    if (n == null || isNaN(n)) return '--';
+    var prefix = n >= 0 ? '$' : '-$';
+    return prefix + Math.abs(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  };
+
+  /* ── Format price for instrument ── */
+  window.__fmtPrice = function(n) {
+    if (n == null || isNaN(n)) return '--';
+    return Number(n).toFixed(2);
+  };
+
+  /* ── Format percentage ── */
+  window.__fmtPct = function(n) {
+    if (n == null || isNaN(n)) return '--';
+    return Number(n).toFixed(1) + '%';
+  };
+  </script>
+
+  <script>
+  /* ── Logout Confirmation ── */
+  (function() {
+    var dropdown = document.getElementById('logout-dropdown');
+    window.__showLogoutConfirm = function() {
+      if (dropdown.style.display === 'block') {
+        dropdown.style.display = 'none';
+        return;
+      }
+      dropdown.className = 'logout-dropdown';
+      dropdown.style.display = 'block';
+      dropdown.innerHTML =
+        '<span style="font-family:JetBrains Mono,monospace;font-size:10px;color:var(--label);white-space:nowrap">Log out?</span>' +
+        '<button class="logout-yes" id="logout-yes">Yes</button>' +
+        '<button class="logout-no" id="logout-no">No</button>';
+      document.getElementById('logout-yes').onclick = function() { window.location.href = '/auth/logout'; };
+      document.getElementById('logout-no').onclick = function() { dropdown.style.display = 'none'; };
+    };
+    document.addEventListener('click', function(e) {
+      if (!e.target.closest('.header-user')) dropdown.style.display = 'none';
+    });
+  })();
+  </script>
+
+  <script>
+  /* ── Pull to Refresh (mobile) ── */
+  (function() {
+    var container = document.getElementById('main-container');
+    var indicator = document.getElementById('ptr-indicator');
+    var startY = 0;
+    var pulling = false;
+    var threshold = 60;
+
+    container.addEventListener('touchstart', function(e) {
+      if (container.scrollTop === 0 || window.scrollY === 0) {
+        startY = e.touches[0].clientY;
+        pulling = true;
+      }
+    }, { passive: true });
+
+    container.addEventListener('touchmove', function(e) {
+      if (!pulling) return;
+      var dy = e.touches[0].clientY - startY;
+      if (dy > 10 && (container.scrollTop === 0 || window.scrollY === 0)) {
+        if (dy > threshold) {
+          indicator.classList.add('visible');
+        }
+      } else {
+        pulling = false;
+        indicator.classList.remove('visible');
+      }
+    }, { passive: true });
+
+    container.addEventListener('touchend', function() {
+      if (indicator.classList.contains('visible')) {
+        // Refresh all data
+        document.dispatchEvent(new Event('account-changed'));
+        document.dispatchEvent(new CustomEvent('instrument-changed', { detail: { instrument: window.selectedInstrument } }));
+        setTimeout(function() { indicator.classList.remove('visible'); }, 800);
+      }
+      pulling = false;
+    }, { passive: true });
+  })();
+  </script>
+
+  <script>
+  /* ── Performance Stats Card ── */
+  (function() {
+    var perfEl = document.getElementById('performance-card');
+
+    function renderPerformance(data) {
+      if (!data || data.total_setups === 0) {
+        perfEl.innerHTML = '<div class="card" style="animation:slideUp 0.3s ease;animation-delay:450ms;animation-fill-mode:backwards">' +
+          '<div class="card-title">\\u25C8 SETUP PERFORMANCE</div>' +
+          '<div style="text-align:center;padding:20px;color:var(--muted);font-size:13px">No completed setups yet</div></div>';
+        return;
+      }
+
+      var d = data;
+      var streakStr = d.streak > 0 ? '+' + d.streak + 'W' : d.streak < 0 ? d.streak + 'L' : '0';
+      var streakColor = d.streak > 0 ? 'var(--green)' : d.streak < 0 ? 'var(--danger)' : 'var(--muted)';
+      var wrColor = d.setup_win_rate >= 50 ? 'var(--red)' : 'var(--muted)';
+      var confLabel = d.avg_confidence >= 75 ? 'Prestige' : d.avg_confidence >= 50 ? 'Armani' : 'YSL';
+
+      var html = '<div class="card" style="animation:slideUp 0.3s ease;animation-delay:450ms;animation-fill-mode:backwards">';
+      html += '<div class="card-title">\\u25C8 SETUP PERFORMANCE</div>';
+
+      // Row 1
+      html += '<div class="dash-stat-grid">';
+      html += '<div class="dash-stat-cell"><div class="dash-stat-label">Win Rate</div><div class="dash-stat-value" style="color:' + wrColor + '">' + d.setup_win_rate + '%</div></div>';
+      html += '<div class="dash-stat-cell"><div class="dash-stat-label">Setups</div><div class="dash-stat-value" style="color:var(--bright)">' + d.total_setups + '</div></div>';
+      html += '<div class="dash-stat-cell"><div class="dash-stat-label">Streak</div><div class="dash-stat-value" style="color:' + streakColor + '">' + streakStr + '</div></div>';
+      html += '</div>';
+
+      // Row 2
+      html += '<div class="dash-stat-grid">';
+      html += '<div class="dash-stat-cell"><div class="dash-stat-label">Avg R:R Target</div><div class="dash-stat-value" style="color:var(--bright)">' + (d.avg_rr_target || '\\u2014') + '</div></div>';
+      html += '<div class="dash-stat-cell"><div class="dash-stat-label">Avg R:R Achieved</div><div class="dash-stat-value" style="color:var(--bright)">' + (d.avg_rr_achieved || '\\u2014') + '</div></div>';
+      html += '<div class="dash-stat-cell"><div class="dash-stat-label">Best Instrument</div><div class="dash-stat-value" style="color:var(--red)">' + d.best_instrument.symbol + ' ' + d.best_instrument.win_rate + '%</div></div>';
+      html += '</div>';
+
+      // Row 3
+      html += '<div class="dash-stat-grid" style="grid-template-columns:1fr 1fr">';
+      html += '<div class="dash-stat-cell"><div class="dash-stat-label">Avg Confidence</div><div class="dash-stat-value" style="color:var(--bright)">' + d.avg_confidence + '%<span style="font-size:8px;color:var(--label);margin-left:4px">' + confLabel + '</span></div></div>';
+      html += '<div class="dash-stat-cell"><div class="dash-stat-label">Best Session</div><div class="dash-stat-value" style="color:var(--bright)">' + d.best_session.session + ' ' + d.best_session.win_rate + '%</div></div>';
+      html += '</div>';
+
+      html += '</div>';
+      perfEl.innerHTML = html;
+    }
+
+    function fetchPerformance() {
+      fetch('/api/stats/setups', { credentials: 'same-origin' })
+        .then(function(r) { return r.json(); })
+        .then(function(data) { renderPerformance(data); })
+        .catch(function() {});
+    }
+
+    fetchPerformance();
+    setInterval(fetchPerformance, 60000);
+  })();
+  </script>
+
+  <script>
+  /* ── Service Worker Registration ── */
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('/sw.js');
+  }
   </script>
 </body>
 </html>`;

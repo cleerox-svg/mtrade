@@ -1,5 +1,6 @@
 import { Env, JwtPayload } from './types';
-import { sendTestNotification } from './notifications';
+import { sendTestNotification, getUserSettings } from './notifications';
+import { checkTradeCompliance, quickTradeCheck, TradeInput, QuickCheckInput } from './compliance';
 
 type Json = (data: unknown, status?: number) => Response;
 
@@ -708,6 +709,121 @@ Respond in this exact JSON format:
     return json(results);
   }
 
+  // GET /api/stats/setups
+  if (path === '/api/stats/setups' && method === 'GET') {
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 86400000).toISOString().substring(0, 10);
+    const { results: setups } = await env.DB.prepare(
+      `SELECT s.*, i.symbol FROM setups s
+       JOIN instruments i ON s.instrument_id = i.id
+       WHERE s.status IN ('won', 'lost', 'expired', 'skipped') AND s.date >= ?
+       ORDER BY s.date DESC`
+    ).bind(thirtyDaysAgo).all<Record<string, unknown>>();
+
+    const won = setups.filter(s => s.status === 'won').length;
+    const lost = setups.filter(s => s.status === 'lost').length;
+    const expired = setups.filter(s => s.status === 'expired').length;
+    const skipped = setups.filter(s => s.status === 'skipped').length;
+    const totalSetups = setups.length;
+    const setupWinRate = (won + lost) > 0 ? Math.round((won / (won + lost)) * 100) : 0;
+
+    // Avg R:R target for setups that reached phase 4
+    const phase4Setups = setups.filter(s => (s.phase as number) >= 4 && s.risk_reward != null);
+    const avgRrTarget = phase4Setups.length > 0
+      ? Math.round((phase4Setups.reduce((sum, s) => sum + (s.risk_reward as number), 0) / phase4Setups.length) * 10) / 10
+      : 0;
+
+    // Avg R:R achieved for won setups from trade_log
+    let avgRrAchieved = 0;
+    const wonSetups = setups.filter(s => s.status === 'won');
+    if (wonSetups.length > 0) {
+      const wonIds = wonSetups.map(s => s.id);
+      let totalAchievedRr = 0;
+      let countAchieved = 0;
+      for (const sid of wonIds) {
+        const trade = await env.DB.prepare(
+          'SELECT entry_price, exit_price, direction FROM trade_log WHERE setup_id = ? LIMIT 1'
+        ).bind(sid).first<Record<string, unknown>>();
+        if (trade && trade.entry_price && trade.exit_price) {
+          const setup = wonSetups.find(s => s.id === sid);
+          if (setup && setup.stop_price) {
+            const risk = Math.abs((trade.entry_price as number) - (setup.stop_price as number));
+            const reward = Math.abs((trade.exit_price as number) - (trade.entry_price as number));
+            if (risk > 0) {
+              totalAchievedRr += reward / risk;
+              countAchieved++;
+            }
+          }
+        }
+      }
+      avgRrAchieved = countAchieved > 0 ? Math.round((totalAchievedRr / countAchieved) * 10) / 10 : 0;
+    }
+
+    // Best instrument
+    const esTrades = setups.filter(s => s.symbol === 'ES' && (s.status === 'won' || s.status === 'lost'));
+    const nqTrades = setups.filter(s => s.symbol === 'NQ' && (s.status === 'won' || s.status === 'lost'));
+    const esWinRate = esTrades.length > 0 ? Math.round((esTrades.filter(s => s.status === 'won').length / esTrades.length) * 100) : 0;
+    const nqWinRate = nqTrades.length > 0 ? Math.round((nqTrades.filter(s => s.status === 'won').length / nqTrades.length) * 100) : 0;
+    const bestInstrument = esWinRate > nqWinRate
+      ? { symbol: 'ES', win_rate: esWinRate }
+      : { symbol: 'NQ', win_rate: nqWinRate };
+
+    // Best session based on sweep times
+    const londonSetups = setups.filter(s => {
+      const ts = s.sweep_time || s.created_at;
+      if (!ts) return false;
+      const h = new Date(ts as string).getUTCHours();
+      return h >= 7 && h < 14; // London approx
+    });
+    const nySetups = setups.filter(s => {
+      const ts = s.sweep_time || s.created_at;
+      if (!ts) return false;
+      const h = new Date(ts as string).getUTCHours();
+      return h >= 14 && h < 21; // NY approx
+    });
+    const londonWins = londonSetups.filter(s => s.status === 'won').length;
+    const nyWins = nySetups.filter(s => s.status === 'won').length;
+    const londonWinPct = londonSetups.length > 0 ? Math.round((londonWins / londonSetups.length) * 100) : 0;
+    const nyWinPct = nySetups.length > 0 ? Math.round((nyWins / nySetups.length) * 100) : 0;
+    const bestSession = londonWinPct >= nyWinPct
+      ? { session: 'London', win_rate: londonWinPct }
+      : { session: 'NY', win_rate: nyWinPct };
+
+    // Avg confidence
+    const enteredSetups = setups.filter(s => s.confidence != null && (s.status === 'won' || s.status === 'lost'));
+    const avgConfidence = enteredSetups.length > 0
+      ? Math.round(enteredSetups.reduce((sum, s) => sum + (s.confidence as number), 0) / enteredSetups.length)
+      : 0;
+
+    // Current streak
+    const ordered = setups.filter(s => s.status === 'won' || s.status === 'lost').sort((a, b) => {
+      return (b.date as string).localeCompare(a.date as string);
+    });
+    let streak = 0;
+    if (ordered.length > 0) {
+      const firstStatus = ordered[0].status;
+      for (const s of ordered) {
+        if (s.status === firstStatus) streak++;
+        else break;
+      }
+      if (firstStatus === 'lost') streak = -streak;
+    }
+
+    return json({
+      total_setups: totalSetups,
+      won,
+      lost,
+      expired,
+      skipped,
+      setup_win_rate: setupWinRate,
+      avg_rr_target: avgRrTarget,
+      avg_rr_achieved: avgRrAchieved,
+      best_instrument: bestInstrument,
+      best_session: bestSession,
+      avg_confidence: avgConfidence,
+      streak,
+    });
+  }
+
   // GET /api/engine/status
   if (path === '/api/engine/status' && method === 'GET') {
     const todayET = new Date().toLocaleString('en-US', { timeZone: 'America/New_York' });
@@ -761,16 +877,108 @@ Respond in this exact JSON format:
     });
   }
 
-  // POST /api/notifications/test
-  if (path === '/api/notifications/test' && method === 'POST') {
-    if (!env.DISCORD_WEBHOOK_URL) {
-      return json({ success: false, error: 'DISCORD_WEBHOOK_URL not configured' }, 400);
+  // GET /api/settings
+  if (path === '/api/settings' && method === 'GET') {
+    const settings = await getUserSettings(env, user.sub);
+    return json(settings);
+  }
+
+  // PUT /api/settings
+  if (path === '/api/settings' && method === 'PUT') {
+    const body = await request.json<Record<string, unknown>>();
+    const fields = [
+      'discord_webhook_url', 'discord_enabled',
+      'notify_sweep', 'notify_ready', 'notify_execute',
+      'notify_drawdown', 'notify_consistency', 'notify_setup_result',
+    ];
+
+    // Build upsert
+    const existing = await env.DB.prepare(
+      'SELECT id FROM user_settings WHERE user_id = ?'
+    ).bind(user.sub).first();
+
+    if (existing) {
+      const sets: string[] = ['updated_at = datetime(\'now\')'];
+      const vals: unknown[] = [];
+      for (const f of fields) {
+        if (body[f] !== undefined) {
+          sets.push(`${f} = ?`);
+          vals.push(body[f]);
+        }
+      }
+      if (vals.length > 0) {
+        await env.DB.prepare(
+          `UPDATE user_settings SET ${sets.join(', ')} WHERE user_id = ?`
+        ).bind(...vals, user.sub).run();
+      }
+    } else {
+      const cols = ['user_id'];
+      const placeholders = ['?'];
+      const vals: unknown[] = [user.sub];
+      for (const f of fields) {
+        if (body[f] !== undefined) {
+          cols.push(f);
+          placeholders.push('?');
+          vals.push(body[f]);
+        }
+      }
+      await env.DB.prepare(
+        `INSERT INTO user_settings (${cols.join(', ')}) VALUES (${placeholders.join(', ')})`
+      ).bind(...vals).run();
+    }
+
+    const updated = await getUserSettings(env, user.sub);
+    return json(updated);
+  }
+
+  // POST /api/settings/test-discord
+  if (path === '/api/settings/test-discord' && method === 'POST') {
+    const settings = await getUserSettings(env, user.sub);
+    if (!settings.discord_webhook_url) {
+      return json({ success: false, error: 'No webhook URL configured. Save a webhook URL first.' }, 400);
     }
     try {
-      const sent = await sendTestNotification(env);
-      return json({ success: sent });
+      const sent = await sendTestNotification(settings.discord_webhook_url);
+      return json({ success: sent, error: sent ? null : 'Webhook returned an error' });
     } catch (err) {
       return json({ success: false, error: String(err) }, 500);
+    }
+  }
+
+  // POST /api/apex/:id/compliance-check
+  const complianceMatch = path.match(/^\/api\/apex\/(\d+)\/compliance-check$/);
+  if (complianceMatch && method === 'POST') {
+    const accountId = parseInt(complianceMatch[1], 10);
+    // Verify account belongs to user
+    const acct = await env.DB.prepare(
+      'SELECT id FROM apex_accounts WHERE id = ? AND user_id = ?'
+    ).bind(accountId, user.sub).first();
+    if (!acct) return json({ error: 'Account not found' }, 404);
+
+    try {
+      const body = await request.json<TradeInput>();
+      const result = await checkTradeCompliance(env, user.sub, accountId, body);
+      return json(result);
+    } catch (err) {
+      return json({ error: String(err) }, 400);
+    }
+  }
+
+  // POST /api/apex/:id/quick-check
+  const quickCheckMatch = path.match(/^\/api\/apex\/(\d+)\/quick-check$/);
+  if (quickCheckMatch && method === 'POST') {
+    const accountId = parseInt(quickCheckMatch[1], 10);
+    const acct = await env.DB.prepare(
+      'SELECT id FROM apex_accounts WHERE id = ? AND user_id = ?'
+    ).bind(accountId, user.sub).first();
+    if (!acct) return json({ error: 'Account not found' }, 404);
+
+    try {
+      const body = await request.json<QuickCheckInput>();
+      const result = await quickTradeCheck(env, user.sub, accountId, body);
+      return json(result);
+    } catch (err) {
+      return json({ error: String(err) }, 400);
     }
   }
 

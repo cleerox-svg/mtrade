@@ -5,7 +5,8 @@ import { loginPage, appPage } from './pages';
 import { handleApiRoutes } from './api';
 import { fetchAndStoreCandles, computeSessionLevels } from './market-data';
 import { runStrategyEngine } from './strategy-engine';
-import { sendDrawdownWarning, sendConsistencyWarning, hasNotificationToday, logNotification } from './notifications';
+import { sendDrawdownWarning, sendConsistencyWarning, hasNotificationToday, logNotification, getUserSettings } from './notifications';
+import { getManifestJson, getServiceWorkerJs, getIconSvg, getFaviconSvg } from './pwa';
 
 function getCookie(request: Request, name: string): string | null {
   const header = request.headers.get('Cookie');
@@ -52,8 +53,6 @@ async function handleBuiltinApi(
 }
 
 async function checkApexRiskAlerts(env: Env): Promise<void> {
-  if (!env.DISCORD_WEBHOOK_URL) return;
-
   try {
     const { results: accounts } = await env.DB.prepare(
       'SELECT * FROM apex_accounts WHERE is_active = 1'
@@ -64,6 +63,10 @@ async function checkApexRiskAlerts(env: Env): Promise<void> {
       const label = account.label as string;
       const drawdownLimit = account.drawdown_limit as number;
       const accountSize = account.account_size as number;
+
+      // Load user's notification settings
+      const settings = await getUserSettings(env, userId);
+      if (!settings.discord_enabled || !settings.discord_webhook_url) continue;
 
       const { results: rows } = await env.DB.prepare(
         'SELECT * FROM apex_daily_pnl WHERE apex_account_id = ? ORDER BY date ASC'
@@ -92,19 +95,19 @@ async function checkApexRiskAlerts(env: Env): Promise<void> {
       const balance = accountSize + totalPnl;
 
       // Drawdown warning at 70% and critical at 85%
-      if (drawdownPct >= 85) {
+      if (settings.notify_drawdown && drawdownPct >= 85) {
         const alreadySent = await hasNotificationToday(env, userId, 'drawdown_critical');
         if (!alreadySent) {
-          await sendDrawdownWarning(env, { label }, {
+          await sendDrawdownWarning(settings.discord_webhook_url, { label }, {
             drawdown_pct: drawdownPct, drawdown_used: drawdownUsed,
             drawdown_limit: drawdownLimit, balance,
           });
           await logNotification(env, userId, 'drawdown_critical');
         }
-      } else if (drawdownPct >= 70) {
+      } else if (settings.notify_drawdown && drawdownPct >= 70) {
         const alreadySent = await hasNotificationToday(env, userId, 'drawdown_warning');
         if (!alreadySent) {
-          await sendDrawdownWarning(env, { label }, {
+          await sendDrawdownWarning(settings.discord_webhook_url, { label }, {
             drawdown_pct: drawdownPct, drawdown_used: drawdownUsed,
             drawdown_limit: drawdownLimit, balance,
           });
@@ -113,23 +116,25 @@ async function checkApexRiskAlerts(env: Env): Promise<void> {
       }
 
       // Consistency warning — check if within 5% of limit
-      const profitDays = rows.filter(r => (r.pnl as number) > 0);
-      const totalProfit = profitDays.reduce((s, r) => s + (r.pnl as number), 0);
-      const consistencyLimit = 30;
-      if (totalProfit > 0 && profitDays.length > 0) {
-        const bestDay = Math.max(...profitDays.map(r => r.pnl as number));
-        const bestDayPct = (bestDay / totalProfit) * 100;
-        const consistencyPct = Math.round(100 - Math.max(0, bestDayPct - consistencyLimit));
-        const headroom = consistencyLimit - (100 - consistencyPct);
+      if (settings.notify_consistency) {
+        const profitDays = rows.filter(r => (r.pnl as number) > 0);
+        const totalProfit = profitDays.reduce((s, r) => s + (r.pnl as number), 0);
+        const consistencyLimit = 30;
+        if (totalProfit > 0 && profitDays.length > 0) {
+          const bestDay = Math.max(...profitDays.map(r => r.pnl as number));
+          const bestDayPct = (bestDay / totalProfit) * 100;
+          const consistencyPct = Math.round(100 - Math.max(0, bestDayPct - consistencyLimit));
+          const headroom = consistencyLimit - (100 - consistencyPct);
 
-        if (headroom <= 5 && headroom > 0) {
-          const alreadySent = await hasNotificationToday(env, userId, 'consistency_warning');
-          if (!alreadySent) {
-            await sendConsistencyWarning(env, { label }, {
-              consistency_pct: consistencyPct, consistency_limit: consistencyLimit,
-              best_day: bestDay, total_pnl: totalPnl,
-            });
-            await logNotification(env, userId, 'consistency_warning');
+          if (headroom <= 5 && headroom > 0) {
+            const alreadySent = await hasNotificationToday(env, userId, 'consistency_warning');
+            if (!alreadySent) {
+              await sendConsistencyWarning(settings.discord_webhook_url, { label }, {
+                consistency_pct: consistencyPct, consistency_limit: consistencyLimit,
+                best_day: bestDay, total_pnl: totalPnl,
+              });
+              await logNotification(env, userId, 'consistency_warning');
+            }
           }
         }
       }
@@ -143,6 +148,29 @@ export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
     const path = url.pathname;
+
+    // PWA assets — publicly accessible, no auth
+    if (path === '/manifest.json') {
+      return new Response(getManifestJson(), {
+        headers: { 'Content-Type': 'application/json', 'Cache-Control': 'public, max-age=86400' },
+      });
+    }
+    if (path === '/icon-192.png' || path === '/icon-512.png') {
+      const size = path === '/icon-192.png' ? 192 : 512;
+      return new Response(getIconSvg(size), {
+        headers: { 'Content-Type': 'image/svg+xml', 'Cache-Control': 'public, max-age=604800' },
+      });
+    }
+    if (path === '/favicon.svg' || path === '/favicon.ico') {
+      return new Response(getFaviconSvg(), {
+        headers: { 'Content-Type': 'image/svg+xml', 'Cache-Control': 'public, max-age=604800' },
+      });
+    }
+    if (path === '/sw.js') {
+      return new Response(getServiceWorkerJs(), {
+        headers: { 'Content-Type': 'application/javascript', 'Cache-Control': 'no-cache', 'Service-Worker-Allowed': '/' },
+      });
+    }
 
     // Auth routes
     if (path === '/auth/google') return handleGoogleRedirect(request, env);
