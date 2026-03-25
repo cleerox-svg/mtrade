@@ -9,6 +9,97 @@ function json(data: unknown, status = 200): Response {
   });
 }
 
+async function callHaiku(env: Env, systemPrompt: string, userPrompt: string): Promise<unknown> {
+  const resp = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'x-api-key': env.ANTHROPIC_API_KEY,
+      'content-type': 'application/json',
+      'anthropic-version': '2023-06-01',
+    },
+    body: JSON.stringify({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 1000,
+      system: systemPrompt,
+      messages: [{ role: 'user', content: userPrompt }],
+    }),
+  });
+  const data = await resp.json<{ content: { text: string }[] }>();
+  let text = data.content[0].text;
+  // Strip markdown code fences and backticks
+  text = text.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
+  try {
+    return JSON.parse(text);
+  } catch {
+    throw new Error(text);
+  }
+}
+
+async function computeDashboardMetrics(
+  env: Env,
+  userId: string
+): Promise<{
+  total_pnl: number;
+  best_day: number;
+  consistency_pct: number;
+  consistency_limit: number;
+  drawdown_used: number;
+  drawdown_limit: number;
+  drawdown_pct: number;
+  safety_net_reached: boolean;
+} | null> {
+  const account = await env.DB.prepare(
+    'SELECT * FROM apex_accounts WHERE user_id = ? AND is_active = 1 LIMIT 1'
+  ).bind(userId).first<Record<string, unknown>>();
+  if (!account) return null;
+
+  const { results: rows } = await env.DB.prepare(
+    'SELECT * FROM apex_daily_pnl WHERE apex_account_id = ? ORDER BY date ASC'
+  ).bind(account.id).all<Record<string, unknown>>();
+
+  const totalPnl = rows.reduce((s, r) => s + (r.pnl as number), 0);
+  const bestDay = rows.length ? Math.max(...rows.map(r => r.pnl as number)) : 0;
+
+  // Consistency
+  const profitDays = rows.filter(r => (r.pnl as number) > 0);
+  const totalProfit = profitDays.reduce((s, r) => s + (r.pnl as number), 0);
+  let consistencyPct = 100;
+  if (totalProfit > 0 && profitDays.length > 0) {
+    const maxDayPct = Math.max(...profitDays.map(r => ((r.pnl as number) / totalProfit) * 100));
+    consistencyPct = Math.round(100 - Math.max(0, maxDayPct - 30));
+  }
+
+  // Drawdown
+  const drawdownLimit = account.drawdown_limit as number;
+  let drawdownUsed = 0;
+  if (account.drawdown_type === 'trailing') {
+    let peak = account.account_size as number;
+    let running = peak;
+    for (const r of rows) {
+      running += r.pnl as number;
+      if (running > peak) peak = running;
+    }
+    drawdownUsed = peak - running;
+  } else {
+    const losses = rows.filter(r => (r.pnl as number) < 0);
+    drawdownUsed = Math.abs(losses.reduce((s, r) => s + (r.pnl as number), 0));
+  }
+
+  const drawdownPct = drawdownLimit > 0 ? (drawdownUsed / drawdownLimit) * 100 : 0;
+  const safetyNetReached = (drawdownLimit - drawdownUsed) <= 0;
+
+  return {
+    total_pnl: Math.round(totalPnl * 100) / 100,
+    best_day: Math.round(bestDay * 100) / 100,
+    consistency_pct: consistencyPct,
+    consistency_limit: 30,
+    drawdown_used: Math.round(drawdownUsed * 100) / 100,
+    drawdown_limit: drawdownLimit,
+    drawdown_pct: drawdownPct,
+    safety_net_reached: safetyNetReached,
+  };
+}
+
 export async function handleApiRoutes(
   request: Request,
   env: Env,
@@ -272,6 +363,401 @@ export async function handleApiRoutes(
        'high', 21850.00, 21835.00, 21820.00, 21830.00, 21870.00, 21810.00, 3.0)`
     ).run();
     return json({ id: result.meta.last_row_id, message: 'Demo NQ alert created' }, 201);
+  }
+
+  // POST /api/analyze/alert/:alertId
+  const analyzeAlertMatch = path.match(/^\/api\/analyze\/alert\/(\d+)$/);
+  if (analyzeAlertMatch && method === 'POST') {
+    const alertId = analyzeAlertMatch[1];
+    const alert = await env.DB.prepare(
+      `SELECT sa.*, i.symbol, i.name, i.tick_size, i.tick_value
+       FROM setup_alerts sa LEFT JOIN instruments i ON sa.instrument_id = i.id
+       WHERE sa.id = ?`
+    ).bind(alertId).first<Record<string, unknown>>();
+    if (!alert) return json({ error: 'Alert not found' }, 404);
+
+    const metrics = await computeDashboardMetrics(env, user.sub);
+
+    const systemPrompt = 'You are an ICT (Inner Circle Trader) strategy analyst. You analyze futures trading setups using ICT methodology — fair value gaps, inverse fair value gaps, liquidity sweeps, and London/NY session levels. Respond ONLY with valid JSON, no markdown, no backticks, no explanation outside the JSON.';
+    const userPrompt = `Analyze this trading setup:
+Instrument: ${alert.symbol} (${alert.name})
+Tick Size: ${alert.tick_size}, Tick Value: $${alert.tick_value}
+Session Levels:
+London High: ${alert.sweep_direction === 'low' ? alert.target_price : alert.sweep_level}
+London Low: ${alert.sweep_direction === 'high' ? alert.target_price : alert.sweep_level}
+Setup:
+Sweep: Price broke London ${alert.sweep_direction} at ${alert.sweep_level}
+Fair Value Gap: ${alert.fvg_low} - ${alert.fvg_high}
+Inverse FVG: ${alert.ifvg_low && alert.ifvg_high ? alert.ifvg_low + ' - ' + alert.ifvg_high : 'none'}
+Proposed Entry: ${alert.entry_price}
+Target: ${alert.target_price}
+Stop: ${alert.stop_price}
+Risk/Reward: ${alert.risk_reward}
+${metrics ? `Trader's Apex Account Status:
+Total P&L: $${metrics.total_pnl}
+Best Single Day: $${metrics.best_day} (${metrics.consistency_pct}% of total — limit is ${metrics.consistency_limit}%)
+Drawdown Used: $${metrics.drawdown_used} of $${metrics.drawdown_limit} (${metrics.drawdown_pct.toFixed(1)}%)
+Safety Net: ${metrics.safety_net_reached ? 'reached' : 'not reached'}` : 'Trader has no active Apex account'}
+Respond in this exact JSON format:
+{
+"confidence": 0-100,
+"signal": "ACCORD" or "BASE NOTE" or "HEART NOTE" or "TOP NOTE" or "NO TRADE",
+"fragrance": "Prestige Silver" for confidence>=75, "Armani Stronger With You" for 50-74, "YSL Y" for <50,
+"summary": "2-3 sentence analysis of setup quality and market context",
+"entry_price": number,
+"target_price": number,
+"stop_price": number,
+"risk_reward": number,
+"warnings": ["array of 2-4 things to watch or risks"],
+"consistency_check": "one sentence about how this trade impacts Apex consistency rule",
+"contracts_suggestion": "recommended position size given drawdown remaining"
+}`;
+
+    try {
+      const analysis = await callHaiku(env, systemPrompt, userPrompt);
+      return json(analysis);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      return json({ error: 'Analysis failed', raw: message }, 500);
+    }
+  }
+
+  // POST /api/analyze/demo
+  if (path === '/api/analyze/demo' && method === 'POST') {
+    const result = await env.DB.prepare(
+      `INSERT INTO setup_alerts (instrument_id, alert_type, phase, message, sweep_direction, sweep_level,
+       fvg_high, fvg_low, entry_price, target_price, stop_price, risk_reward)
+       VALUES (2, 'ready', 3, 'NQ Setup: London high swept, FVG formed on 5m, waiting for entry',
+       'high', 21850.00, 21835.00, 21820.00, 21830.00, 21870.00, 21810.00, 3.0)`
+    ).run();
+    const newId = result.meta.last_row_id;
+
+    const alert = await env.DB.prepare(
+      `SELECT sa.*, i.symbol, i.name, i.tick_size, i.tick_value
+       FROM setup_alerts sa LEFT JOIN instruments i ON sa.instrument_id = i.id
+       WHERE sa.id = ?`
+    ).bind(newId).first<Record<string, unknown>>();
+
+    const metrics = await computeDashboardMetrics(env, user.sub);
+
+    const systemPrompt = 'You are an ICT (Inner Circle Trader) strategy analyst. You analyze futures trading setups using ICT methodology — fair value gaps, inverse fair value gaps, liquidity sweeps, and London/NY session levels. Respond ONLY with valid JSON, no markdown, no backticks, no explanation outside the JSON.';
+    const userPrompt = `Analyze this trading setup:
+Instrument: ${alert!.symbol} (${alert!.name})
+Tick Size: ${alert!.tick_size}, Tick Value: $${alert!.tick_value}
+Session Levels:
+London High: ${alert!.sweep_direction === 'low' ? alert!.target_price : alert!.sweep_level}
+London Low: ${alert!.sweep_direction === 'high' ? alert!.target_price : alert!.sweep_level}
+Setup:
+Sweep: Price broke London ${alert!.sweep_direction} at ${alert!.sweep_level}
+Fair Value Gap: ${alert!.fvg_low} - ${alert!.fvg_high}
+Inverse FVG: ${alert!.ifvg_low && alert!.ifvg_high ? alert!.ifvg_low + ' - ' + alert!.ifvg_high : 'none'}
+Proposed Entry: ${alert!.entry_price}
+Target: ${alert!.target_price}
+Stop: ${alert!.stop_price}
+Risk/Reward: ${alert!.risk_reward}
+${metrics ? `Trader's Apex Account Status:
+Total P&L: $${metrics.total_pnl}
+Best Single Day: $${metrics.best_day} (${metrics.consistency_pct}% of total — limit is ${metrics.consistency_limit}%)
+Drawdown Used: $${metrics.drawdown_used} of $${metrics.drawdown_limit} (${metrics.drawdown_pct.toFixed(1)}%)
+Safety Net: ${metrics.safety_net_reached ? 'reached' : 'not reached'}` : 'Trader has no active Apex account'}
+Respond in this exact JSON format:
+{
+"confidence": 0-100,
+"signal": "ACCORD" or "BASE NOTE" or "HEART NOTE" or "TOP NOTE" or "NO TRADE",
+"fragrance": "Prestige Silver" for confidence>=75, "Armani Stronger With You" for 50-74, "YSL Y" for <50,
+"summary": "2-3 sentence analysis of setup quality and market context",
+"entry_price": number,
+"target_price": number,
+"stop_price": number,
+"risk_reward": number,
+"warnings": ["array of 2-4 things to watch or risks"],
+"consistency_check": "one sentence about how this trade impacts Apex consistency rule",
+"contracts_suggestion": "recommended position size given drawdown remaining"
+}`;
+
+    try {
+      const analysis = await callHaiku(env, systemPrompt, userPrompt);
+      return json({ alert, analysis });
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      return json({ alert, analysis_error: message });
+    }
+  }
+
+  // POST /api/analyze/:setupId
+  const analyzeSetupMatch = path.match(/^\/api\/analyze\/(\d+)$/);
+  if (analyzeSetupMatch && method === 'POST') {
+    const setupId = analyzeSetupMatch[1];
+    const alert = await env.DB.prepare(
+      `SELECT sa.*, i.symbol, i.name, i.tick_size, i.tick_value
+       FROM setup_alerts sa LEFT JOIN instruments i ON sa.instrument_id = i.id
+       WHERE sa.setup_id = ? ORDER BY sa.created_at DESC LIMIT 1`
+    ).bind(setupId).first<Record<string, unknown>>();
+    if (!alert) return json({ error: 'No alert found for this setup' }, 404);
+
+    const metrics = await computeDashboardMetrics(env, user.sub);
+
+    const systemPrompt = 'You are an ICT (Inner Circle Trader) strategy analyst. You analyze futures trading setups using ICT methodology — fair value gaps, inverse fair value gaps, liquidity sweeps, and London/NY session levels. Respond ONLY with valid JSON, no markdown, no backticks, no explanation outside the JSON.';
+    const userPrompt = `Analyze this trading setup:
+Instrument: ${alert.symbol} (${alert.name})
+Tick Size: ${alert.tick_size}, Tick Value: $${alert.tick_value}
+Session Levels:
+London High: ${alert.sweep_direction === 'low' ? alert.target_price : alert.sweep_level}
+London Low: ${alert.sweep_direction === 'high' ? alert.target_price : alert.sweep_level}
+Setup:
+Sweep: Price broke London ${alert.sweep_direction} at ${alert.sweep_level}
+Fair Value Gap: ${alert.fvg_low} - ${alert.fvg_high}
+Inverse FVG: ${alert.ifvg_low && alert.ifvg_high ? alert.ifvg_low + ' - ' + alert.ifvg_high : 'none'}
+Proposed Entry: ${alert.entry_price}
+Target: ${alert.target_price}
+Stop: ${alert.stop_price}
+Risk/Reward: ${alert.risk_reward}
+${metrics ? `Trader's Apex Account Status:
+Total P&L: $${metrics.total_pnl}
+Best Single Day: $${metrics.best_day} (${metrics.consistency_pct}% of total — limit is ${metrics.consistency_limit}%)
+Drawdown Used: $${metrics.drawdown_used} of $${metrics.drawdown_limit} (${metrics.drawdown_pct.toFixed(1)}%)
+Safety Net: ${metrics.safety_net_reached ? 'reached' : 'not reached'}` : 'Trader has no active Apex account'}
+Respond in this exact JSON format:
+{
+"confidence": 0-100,
+"signal": "ACCORD" or "BASE NOTE" or "HEART NOTE" or "TOP NOTE" or "NO TRADE",
+"fragrance": "Prestige Silver" for confidence>=75, "Armani Stronger With You" for 50-74, "YSL Y" for <50,
+"summary": "2-3 sentence analysis of setup quality and market context",
+"entry_price": number,
+"target_price": number,
+"stop_price": number,
+"risk_reward": number,
+"warnings": ["array of 2-4 things to watch or risks"],
+"consistency_check": "one sentence about how this trade impacts Apex consistency rule",
+"contracts_suggestion": "recommended position size given drawdown remaining"
+}`;
+
+    try {
+      const analysis = await callHaiku(env, systemPrompt, userPrompt);
+      return json(analysis);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      return json({ error: 'Analysis failed', raw: message }, 500);
+    }
+  }
+
+  // GET /api/candles/:symbol/:timeframe
+  const candlesMatch = path.match(/^\/api\/candles\/([A-Z]+)\/(\w+)$/);
+  if (candlesMatch && method === 'GET') {
+    const symbol = candlesMatch[1];
+    const timeframe = candlesMatch[2];
+    const instrumentId = symbol === 'ES' ? 1 : symbol === 'NQ' ? 2 : null;
+    if (!instrumentId) return json({ error: 'Unknown symbol' }, 400);
+    const limit = parseInt(url.searchParams.get('limit') || '200', 10);
+    const before = url.searchParams.get('before');
+    let query = 'SELECT timestamp, open, high, low, close, volume FROM candles WHERE instrument_id = ? AND timeframe = ?';
+    const binds: unknown[] = [instrumentId, timeframe];
+    if (before) {
+      query += ' AND timestamp < ?';
+      binds.push(before);
+    }
+    query += ' ORDER BY timestamp DESC LIMIT ?';
+    binds.push(limit);
+    const stmt = env.DB.prepare(query);
+    const { results } = await stmt.bind(...binds).all();
+    return json({ symbol, timeframe, candles: results });
+  }
+
+  // GET /api/market/status
+  if (path === '/api/market/status' && method === 'GET') {
+    const { results: lastCandles } = await env.DB.prepare(
+      `SELECT i.symbol, c.timeframe, MAX(c.timestamp) as last_timestamp
+       FROM candles c JOIN instruments i ON c.instrument_id = i.id
+       GROUP BY i.symbol, c.timeframe`
+    ).all();
+    const countResult = await env.DB.prepare('SELECT COUNT(*) as total FROM candles').first<{ total: number }>();
+    const { results: sessions } = await env.DB.prepare(
+      `SELECT s.*, i.symbol FROM sessions s JOIN instruments i ON s.instrument_id = i.id
+       WHERE s.date = date('now') ORDER BY i.symbol`
+    ).all();
+    return json({
+      last_candles: lastCandles,
+      total_candles: countResult?.total ?? 0,
+      sessions,
+      status: 'ok',
+    });
+  }
+
+  // GET /api/market/price
+  if (path === '/api/market/price' && method === 'GET') {
+    const prices: Record<string, { price: number; timestamp: string; change_pct: number }> = {};
+    for (const [symbol, id] of [['ES', 1], ['NQ', 2]] as const) {
+      const latest = await env.DB.prepare(
+        `SELECT timestamp, close FROM candles WHERE instrument_id = ? AND timeframe = '1m' ORDER BY timestamp DESC LIMIT 1`
+      ).bind(id).first<{ timestamp: string; close: number }>();
+      if (!latest) continue;
+      // Get today's first candle for change %
+      const todayDate = latest.timestamp.substring(0, 10);
+      const first = await env.DB.prepare(
+        `SELECT open FROM candles WHERE instrument_id = ? AND timeframe = '1m' AND timestamp >= ? ORDER BY timestamp ASC LIMIT 1`
+      ).bind(id, todayDate + 'T00:00:00').first<{ open: number }>();
+      const changePct = first && first.open > 0 ? ((latest.close - first.open) / first.open) * 100 : 0;
+      prices[symbol] = {
+        price: latest.close,
+        timestamp: latest.timestamp,
+        change_pct: Math.round(changePct * 100) / 100,
+      };
+    }
+    return json(prices);
+  }
+
+  // GET /api/sessions/today
+  if (path === '/api/sessions/today' && method === 'GET') {
+    const { results } = await env.DB.prepare(
+      `SELECT s.*, i.symbol FROM sessions s JOIN instruments i ON s.instrument_id = i.id
+       WHERE s.date = date('now') ORDER BY i.symbol`
+    ).all();
+    return json(results);
+  }
+
+  // GET /api/sessions/:date
+  const sessionsDateMatch = path.match(/^\/api\/sessions\/(\d{4}-\d{2}-\d{2})$/);
+  if (sessionsDateMatch && method === 'GET') {
+    const date = sessionsDateMatch[1];
+    const { results } = await env.DB.prepare(
+      `SELECT s.*, i.symbol FROM sessions s JOIN instruments i ON s.instrument_id = i.id
+       WHERE s.date = ? ORDER BY i.symbol`
+    ).bind(date).all();
+    return json(results);
+  }
+
+  // GET /api/fvg/:symbol
+  const fvgMatch = path.match(/^\/api\/fvg\/([A-Z]+)$/);
+  if (fvgMatch && method === 'GET') {
+    const symbol = fvgMatch[1];
+    const instrumentId = symbol === 'ES' ? 1 : symbol === 'NQ' ? 2 : null;
+    if (!instrumentId) return json({ error: 'Unknown symbol' }, 400);
+
+    const status = url.searchParams.get('status') || 'active';
+    const timeframe = url.searchParams.get('timeframe');
+    const days = parseInt(url.searchParams.get('days') || '5', 10);
+    const since = new Date(Date.now() - days * 86400000).toISOString();
+
+    let query = 'SELECT * FROM fair_value_gaps WHERE instrument_id = ? AND created_at >= ?';
+    const binds: unknown[] = [instrumentId, since];
+
+    if (status !== 'all') {
+      query += ' AND status = ?';
+      binds.push(status);
+    }
+    if (timeframe) {
+      query += ' AND timeframe = ?';
+      binds.push(timeframe);
+    }
+    query += ' ORDER BY timestamp DESC';
+
+    const { results } = await env.DB.prepare(query).bind(...binds).all();
+    return json(results);
+  }
+
+  // GET /api/setups/active
+  if (path === '/api/setups/active' && method === 'GET') {
+    const todayET = new Date().toLocaleString('en-US', { timeZone: 'America/New_York' });
+    const etDate = new Date(todayET);
+    const todayStr = `${etDate.getFullYear()}-${String(etDate.getMonth() + 1).padStart(2, '0')}-${String(etDate.getDate()).padStart(2, '0')}`;
+
+    const { results: setups } = await env.DB.prepare(
+      `SELECT s.*, i.symbol FROM setups s
+       JOIN instruments i ON s.instrument_id = i.id
+       WHERE s.date = ? AND s.status IN ('forming', 'ready')
+       ORDER BY s.created_at DESC`
+    ).bind(todayStr).all();
+
+    // Enrich with FVG, IFVG, alerts, and session data
+    const enriched = [];
+    for (const setup of setups) {
+      const fvg = (setup as Record<string, unknown>).fvg_id
+        ? await env.DB.prepare('SELECT * FROM fair_value_gaps WHERE id = ?')
+            .bind((setup as Record<string, unknown>).fvg_id).first()
+        : null;
+      const ifvg = (setup as Record<string, unknown>).ifvg_id
+        ? await env.DB.prepare('SELECT * FROM fair_value_gaps WHERE id = ?')
+            .bind((setup as Record<string, unknown>).ifvg_id).first()
+        : null;
+      const { results: alerts } = await env.DB.prepare(
+        'SELECT * FROM setup_alerts WHERE setup_id = ? ORDER BY created_at DESC'
+      ).bind((setup as Record<string, unknown>).id).all();
+
+      enriched.push({ ...setup, fvg_data: fvg, ifvg_data: ifvg, alerts });
+    }
+
+    // Get today's session levels
+    const { results: sessions } = await env.DB.prepare(
+      `SELECT s.*, i.symbol FROM sessions s JOIN instruments i ON s.instrument_id = i.id
+       WHERE s.date = ? ORDER BY i.symbol`
+    ).bind(todayStr).all();
+
+    return json({ setups: enriched, sessions });
+  }
+
+  // GET /api/setups/history
+  if (path === '/api/setups/history' && method === 'GET') {
+    const days = parseInt(url.searchParams.get('days') || '14', 10);
+    const since = new Date(Date.now() - days * 86400000).toISOString().substring(0, 10);
+    const { results } = await env.DB.prepare(
+      `SELECT s.*, i.symbol FROM setups s
+       JOIN instruments i ON s.instrument_id = i.id
+       WHERE s.date >= ? ORDER BY s.date DESC, s.created_at DESC`
+    ).bind(since).all();
+    return json(results);
+  }
+
+  // GET /api/engine/status
+  if (path === '/api/engine/status' && method === 'GET') {
+    const todayET = new Date().toLocaleString('en-US', { timeZone: 'America/New_York' });
+    const etDate = new Date(todayET);
+    const todayStr = `${etDate.getFullYear()}-${String(etDate.getMonth() + 1).padStart(2, '0')}-${String(etDate.getDate()).padStart(2, '0')}`;
+
+    let lastRun: string | null = null;
+    try {
+      const meta = await env.DB.prepare("SELECT value FROM engine_meta WHERE key = 'last_run'").first<{ value: string }>();
+      lastRun = meta?.value ?? null;
+    } catch { /* table may not exist */ }
+
+    const fiveDaysAgo = new Date(Date.now() - 5 * 86400000).toISOString();
+
+    const activeFvgs = await env.DB.prepare(
+      "SELECT COUNT(*) as count FROM fair_value_gaps WHERE status = 'active' AND created_at >= ?"
+    ).bind(fiveDaysAgo).first<{ count: number }>();
+
+    const respectedFvgs = await env.DB.prepare(
+      "SELECT COUNT(*) as count FROM fair_value_gaps WHERE status = 'respected' AND created_at >= ?"
+    ).bind(fiveDaysAgo).first<{ count: number }>();
+
+    const invertedFvgs = await env.DB.prepare(
+      "SELECT COUNT(*) as count FROM fair_value_gaps WHERE status = 'inverted' AND created_at >= ?"
+    ).bind(fiveDaysAgo).first<{ count: number }>();
+
+    const activeSetups = await env.DB.prepare(
+      "SELECT COUNT(*) as count FROM setups WHERE date = ? AND status IN ('forming', 'ready')"
+    ).bind(todayStr).first<{ count: number }>();
+
+    const activeAlerts = await env.DB.prepare(
+      'SELECT COUNT(*) as count FROM setup_alerts WHERE is_active = 1'
+    ).first<{ count: number }>();
+
+    const { results: sessions } = await env.DB.prepare(
+      `SELECT s.*, i.symbol FROM sessions s JOIN instruments i ON s.instrument_id = i.id
+       WHERE s.date = ? ORDER BY i.symbol`
+    ).bind(todayStr).all();
+
+    return json({
+      last_run: lastRun,
+      fvg_counts: {
+        active: activeFvgs?.count ?? 0,
+        respected: respectedFvgs?.count ?? 0,
+        inverted: invertedFvgs?.count ?? 0,
+      },
+      active_setups: activeSetups?.count ?? 0,
+      active_alerts: activeAlerts?.count ?? 0,
+      sessions,
+      today: todayStr,
+    });
   }
 
   return json({ error: 'Not found' }, 404);

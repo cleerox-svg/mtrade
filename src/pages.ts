@@ -111,15 +111,15 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
     .outfit { font-family: 'Outfit', sans-serif; }
     .container {
       width: 100%;
-      max-width: 960px;
-      padding: 14px;
+      max-width: 100%;
+      padding: 12px;
       margin: 0 auto;
     }
     .card {
       background: var(--card);
       border: 1px solid var(--border);
       border-radius: 14px;
-      padding: 16px;
+      padding: 14px;
       margin-bottom: 12px;
       position: relative;
     }
@@ -701,18 +701,624 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
     }
     .modal-submit:disabled { opacity: 0.4; cursor: default; }
 
+    /* Live Price */
+    .live-price-row {
+      display: flex;
+      align-items: baseline;
+      gap: 10px;
+      margin-bottom: 4px;
+    }
+    .live-price-value {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 34px;
+      font-weight: 700;
+      color: var(--white);
+      line-height: 1;
+    }
+    .live-price-change {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+      padding: 2px 6px;
+      border-radius: 4px;
+    }
+    .live-price-change.up { background: rgba(52,211,153,0.15); color: var(--green); }
+    .live-price-change.down { background: rgba(239,68,68,0.15); color: var(--danger); }
+    .live-price-change.flat { background: rgba(148,163,184,0.15); color: var(--label); }
+    .live-price-indicator {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 8px;
+      color: var(--label);
+      letter-spacing: 1px;
+    }
+    .live-price-indicator .dot {
+      display: inline-block;
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+      margin-right: 4px;
+      vertical-align: middle;
+    }
+    .live-price-indicator .dot.live { background: var(--green); animation: breathe 2s ease-in-out infinite; }
+    .live-price-indicator .dot.delayed { background: var(--amber); }
+    .live-session-levels {
+      display: flex;
+      gap: 16px;
+      margin-top: 8px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px;
+    }
+    .live-session-levels .level-label { color: var(--muted); margin-right: 4px; }
+    .live-session-levels .level-value { color: var(--label); }
+
+    /* TradingView Chart */
+    #tv-chart-wrap {
+      width: 100%;
+      height: 250px;
+      border-radius: 10px;
+      overflow: hidden;
+      background: #0a0a10;
+      margin-bottom: 8px;
+    }
+    #tv-chart-wrap iframe { border: none !important; }
+
+    /* Candlestick Chart */
+    .chart-svg { width: 100%; height: 240px; display: block; background: #0a0a10; border-radius: 10px; }
+    .chart-wrap { position: relative; }
+    .chart-legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      padding: 8px 4px 0;
+    }
+    .chart-legend-item {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 9px;
+      color: var(--muted);
+    }
+    .chart-legend-swatch {
+      width: 10px;
+      height: 10px;
+      border-radius: 2px;
+      flex-shrink: 0;
+    }
+    /* Timeframe selector */
+    .tf-row {
+      display: flex;
+      gap: 6px;
+      margin-bottom: 8px;
+    }
+    .tf-btn {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px;
+      letter-spacing: 1px;
+      background: transparent;
+      border: 1px solid rgba(255,255,255,0.1);
+      color: var(--label);
+      border-radius: 6px;
+      padding: 4px 10px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .tf-btn.active {
+      background: rgba(251,44,90,0.1);
+      border-color: rgba(251,44,90,0.35);
+      color: var(--red);
+    }
+    /* Chart crosshair tooltip */
+    .chart-crosshair-label {
+      position: absolute;
+      pointer-events: none;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 8px;
+      background: var(--white);
+      color: #0a0a10;
+      padding: 1px 4px;
+      border-radius: 2px;
+      white-space: nowrap;
+      z-index: 5;
+    }
+    /* LIVE / DELAYED tag */
+    .chart-live-tag {
+      position: absolute;
+      top: 8px;
+      left: 8px;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 8px;
+      letter-spacing: 0.5px;
+      z-index: 5;
+      pointer-events: none;
+    }
+    .chart-live-tag .tag-dot {
+      width: 5px; height: 5px; border-radius: 50%; display: inline-block;
+    }
+
+    /* Entry pulse animation */
+    @keyframes entryPulse {
+      0%, 100% { filter: drop-shadow(0 0 2px var(--red)); }
+      50% { filter: drop-shadow(0 0 8px var(--red)) drop-shadow(0 0 14px rgba(251,44,90,0.4)); }
+    }
+    .entry-line-glow { animation: entryPulse 2s ease-in-out infinite; }
+
+    /* Signal Progression */
+    .signal-card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+    .signal-tag {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 8px;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      padding: 3px 8px;
+      border-radius: 4px;
+      border: 1px solid;
+    }
+    .phase-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 0;
+      border-bottom: 1px solid rgba(255,255,255,0.03);
+    }
+    .phase-row:last-child { border-bottom: none; }
+    .phase-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+    .phase-dot.completed {
+      background: var(--red);
+      box-shadow: 0 0 6px rgba(251,44,90,0.4);
+    }
+    .phase-dot.current {
+      background: var(--amber);
+      animation: breathe 2s ease-in-out infinite;
+      box-shadow: 0 0 8px rgba(251,191,36,0.5);
+    }
+    .phase-dot.pending {
+      background: rgba(255,255,255,0.08);
+    }
+    .phase-label {
+      font-family: 'Outfit', sans-serif;
+      font-size: 12px;
+      font-weight: 600;
+      min-width: 110px;
+    }
+    .phase-desc {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px;
+      color: var(--label);
+      flex: 1;
+    }
+    .phase-check {
+      font-size: 10px;
+      margin-left: auto;
+      flex-shrink: 0;
+    }
+    .phase-row.pending-row { opacity: 0.3; }
+    .phase-row.pending-row .phase-label { color: var(--subtle); }
+    .phase-row.pending-row .phase-desc { color: var(--subtle); }
+
+    .signal-status-box {
+      background: rgba(255,255,255,0.02);
+      border-radius: 8px;
+      padding: 12px;
+      margin-top: 12px;
+    }
+    .signal-status-label {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 9px;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      margin-bottom: 6px;
+    }
+    .signal-status-msg {
+      font-size: 12px;
+      color: var(--bright);
+      line-height: 1.5;
+    }
+
+    /* Alert border flash */
+    body {
+      border: 2px solid transparent;
+      transition: border-color 1s ease;
+    }
+    body.alert-flash {
+      border-color: var(--red) !important;
+      transition: border-color 0s;
+    }
+
+    /* Alert pulsing dot */
+    @keyframes alertPulse {
+      0%, 100% { opacity: 0.4; transform: scale(0.8); }
+      50% { opacity: 1; transform: scale(1.2); }
+    }
+    .alert-dot {
+      display: none;
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--red);
+      margin-left: 6px;
+      animation: alertPulse 1.5s ease-in-out infinite;
+    }
+    .alert-dot.visible { display: inline-block; }
+
+    /* Alert overlay card */
+    @keyframes alertBorderPulse {
+      0%, 100% { border-color: rgba(251,44,90,0.2); }
+      50% { border-color: rgba(251,44,90,0.6); }
+    }
+    @keyframes alertBreathe {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.003); }
+    }
+    .alert-overlay {
+      background: linear-gradient(135deg, rgba(251,44,90,0.06), rgba(251,44,90,0.01));
+      border: 2px solid rgba(251,44,90,0.2);
+      border-radius: 14px;
+      padding: 16px;
+      margin-bottom: 12px;
+      animation: alertBorderPulse 3s ease-in-out infinite, alertBreathe 3s ease-in-out infinite, slideUp 0.3s ease;
+    }
+    .alert-signal-name {
+      font-family: 'Outfit', sans-serif;
+      font-weight: 800;
+      font-size: 22px;
+      color: var(--red);
+      margin-bottom: 4px;
+    }
+    .alert-instrument-dir {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 18px;
+      color: var(--white);
+      margin-bottom: 12px;
+    }
+    .alert-levels-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 8px;
+      text-align: center;
+      margin-bottom: 10px;
+    }
+    .alert-level-label {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 8px;
+      color: var(--label);
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      margin-bottom: 2px;
+    }
+    .alert-level-value {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 20px;
+      font-weight: 700;
+    }
+    .alert-rr {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 14px;
+      color: var(--amber);
+      text-align: center;
+      margin-bottom: 8px;
+    }
+    .alert-message {
+      font-size: 13px;
+      color: var(--bright);
+      line-height: 1.6;
+      margin-top: 12px;
+    }
+    .alert-actions {
+      display: flex;
+      gap: 10px;
+      margin-top: 14px;
+    }
+    .alert-btn-in {
+      flex: 1;
+      background: var(--red);
+      color: white;
+      font-family: 'Outfit', sans-serif;
+      font-size: 14px;
+      font-weight: 700;
+      border: none;
+      border-radius: 10px;
+      padding: 14px;
+      cursor: pointer;
+      min-height: 44px;
+    }
+    .alert-btn-skip {
+      flex: 1;
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--muted);
+      font-family: 'Outfit', sans-serif;
+      font-size: 14px;
+      font-weight: 700;
+      border-radius: 10px;
+      padding: 14px;
+      cursor: pointer;
+      min-height: 44px;
+    }
+    .demo-alert-link {
+      display: block;
+      text-align: center;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px;
+      color: var(--subtle);
+      cursor: pointer;
+      background: none;
+      border: none;
+      padding: 8px;
+      margin: 0 auto;
+    }
+    .demo-alert-link:hover { color: var(--muted); }
+
+    /* AI Analysis */
+    .ai-analysis-card { margin-bottom: 12px; }
+    .ai-analysis-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 12px;
+    }
+    .ai-analysis-title {
+      font-family: 'Outfit', sans-serif;
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 2.5px;
+      color: var(--red-soft);
+    }
+    .ai-analysis-tag {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 8px;
+      color: var(--label);
+      letter-spacing: 1px;
+    }
+    .ai-run-btn {
+      width: 100%;
+      padding: 12px;
+      border-radius: 10px;
+      border: 1px solid rgba(251,44,90,0.2);
+      background: linear-gradient(135deg, rgba(251,44,90,0.06), transparent);
+      color: var(--red);
+      font-family: 'Outfit', sans-serif;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+    }
+    .ai-run-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .ai-run-btn .ai-spinner {
+      width: 14px;
+      height: 14px;
+      border: 2px solid transparent;
+      border-top-color: var(--red);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      display: inline-block;
+    }
+    .ai-signal-row {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      margin-top: 14px;
+    }
+    .ai-signal-tag {
+      display: inline-block;
+      padding: 4px 10px;
+      border-radius: 6px;
+      font-family: 'Outfit', sans-serif;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 1px;
+    }
+    .ai-signal-tag.high { background: rgba(251,44,90,0.15); color: var(--red); }
+    .ai-signal-tag.mid { background: rgba(251,191,36,0.15); color: var(--amber); }
+    .ai-signal-tag.low { background: rgba(100,116,139,0.15); color: var(--label); }
+    .ai-fragrance {
+      font-size: 10px;
+      font-style: italic;
+      color: var(--label);
+      margin-top: 4px;
+    }
+    .ai-confidence-box { text-align: right; }
+    .ai-confidence-num {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 28px;
+      font-weight: 700;
+      line-height: 1;
+    }
+    .ai-confidence-label {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 8px;
+      color: var(--label);
+      letter-spacing: 1px;
+      margin-top: 2px;
+    }
+    .ai-summary {
+      font-size: 13px;
+      color: var(--bright);
+      line-height: 1.7;
+      margin: 14px 0;
+    }
+    .ai-levels-box {
+      background: #0a0a10;
+      border-radius: 10px;
+      padding: 12px;
+      border: 1px solid var(--border);
+      margin-bottom: 12px;
+    }
+    .ai-level-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 8px 0;
+    }
+    .ai-level-row + .ai-level-row { border-top: 1px solid var(--border); }
+    .ai-level-label {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px;
+      color: var(--label);
+      letter-spacing: 1px;
+    }
+    .ai-level-value {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      font-weight: 600;
+    }
+    .ai-warnings { margin-bottom: 12px; }
+    .ai-warning-item {
+      font-size: 12px;
+      color: var(--text);
+      line-height: 1.5;
+      padding: 2px 0;
+    }
+    .ai-warning-bullet { color: var(--red-soft); margin-right: 6px; }
+    .ai-redline-box {
+      background: rgba(251,44,90,0.04);
+      border: 1px solid rgba(251,44,90,0.08);
+      border-radius: 8px;
+      padding: 10px;
+    }
+    .ai-redline-label {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 9px;
+      color: var(--red-soft);
+      letter-spacing: 2px;
+      margin-bottom: 6px;
+    }
+    .ai-redline-text {
+      font-size: 12px;
+      color: var(--text);
+      line-height: 1.5;
+    }
+    .ai-contracts-text {
+      font-size: 11px;
+      color: var(--muted);
+      font-style: italic;
+      margin-top: 4px;
+    }
+
+    /* Dashboard grid layout */
+    .dashboard-grid {
+      display: block;
+    }
+    .grid-left, .grid-right {
+      width: 100%;
+    }
+    .selectors-row {
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+    }
+    .selectors-row > div { width: 100%; }
+
+    /* Mobile form inputs: 16px min to prevent iOS zoom */
+    .modal-input { font-size: 16px; }
+    .form-input, .form-select { font-size: 16px; }
+
+    /* ─── Tablet (768px – 1024px) ─── */
     @media (min-width: 768px) {
-      .container { padding: 24px; }
-      .card { padding: 20px; }
+      .container { padding: 20px; max-width: 768px; }
+      .card { padding: 18px; }
+      .header-brand h1 { font-size: 28px; }
+      .header-clock .time { font-size: 18px; }
       .toggle-row { flex-wrap: nowrap; }
+      .toggle-btn { min-height: 40px; }
+      .selectors-row { flex-direction: row; gap: 12px; }
+      .selectors-row > div { flex: 1; }
+      .selectors-row .card { margin-bottom: 12px; }
       .form-grid { grid-template-columns: 1fr 1fr; }
-      .dash-stat-grid { grid-template-columns: repeat(6, 1fr); }
-      .dash-gauge { padding: 0 8px; }
+      .chart-svg { height: 340px; }
+      #tv-chart-wrap { height: 350px; }
+      .alert-overlay { padding: 20px; }
+      .alert-signal-name { font-size: 28px; }
+      .alert-levels-grid { gap: 16px; }
+      .alert-level-value { font-size: 24px; }
+      .alert-btn-in, .alert-btn-skip { padding: 16px; font-size: 15px; }
+      .phase-label { font-size: 13px; }
+      .phase-desc { font-size: 11px; }
+      .ai-signal-row { align-items: center; }
+      .ai-confidence-num { font-size: 32px; }
+      .ai-levels-box { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 0; }
+      .ai-level-row { flex-direction: column; text-align: center; padding: 8px 4px; }
+      .ai-level-row + .ai-level-row { border-top: none; border-left: 1px solid var(--border); }
+      .dash-balance-value { font-size: 26px; }
+      .dash-pnl-value { font-size: 26px; }
       .modal-overlay { align-items: center; }
       .modal-sheet {
         max-width: 480px;
         border-radius: 14px;
       }
+      .modal-input { font-size: 14px; }
+      .form-input, .form-select { font-size: 14px; }
+      .pnl-list { max-height: 340px; }
+      .dashboard-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 12px;
+      }
+      .tf-btn { padding: 4px 12px; }
+      .dash-payout-row { gap: 16px; }
+      .footer { padding: 36px 0 28px; }
+    }
+
+    /* ─── Desktop (> 1024px) ─── */
+    @media (min-width: 1025px) {
+      .container { padding: 24px; max-width: 1200px; }
+      .card { padding: 22px; }
+      .header-brand h1 { font-size: 28px; }
+      .header-clock .time { font-size: 18px; }
+      .header-user img { width: 36px; height: 36px; }
+      .toggle-btn { min-height: 36px; padding: 8px 18px; font-size: 12px; }
+      .chart-svg { height: 420px; }
+      #tv-chart-wrap { height: 450px; }
+      .alert-overlay { padding: 24px; }
+      .alert-signal-name { font-size: 28px; }
+      .alert-level-value { font-size: 28px; }
+      .alert-btn-in, .alert-btn-skip { padding: 18px; font-size: 15px; }
+      .phase-label { font-size: 14px; }
+      .phase-desc { font-size: 10px; }
+      .signal-status-box { padding: 14px; }
+      .ai-confidence-num { font-size: 34px; }
+      .ai-warnings { columns: 2; column-gap: 16px; }
+      .ai-warning-item { break-inside: avoid; }
+      .dash-balance-value { font-size: 28px; }
+      .dash-pnl-value { font-size: 28px; }
+      .dash-sparkline svg { height: 48px; }
+      .dash-stat-grid { grid-template-columns: repeat(6, 1fr); }
+      .dash-payout-row { gap: 20px; }
+      .live-price-value { font-size: 38px; }
+      .pnl-list { max-height: 400px; }
+      .pnl-date { min-width: 100px; }
+      .pnl-amount { font-size: 15px; }
+      .fab-add { width: 56px; height: 56px; font-size: 26px; }
+      .modal-sheet { max-width: 520px; }
+      .tf-btn { padding: 5px 14px; }
+      .chart-crosshair-label { font-size: 10px; }
+      .dashboard-grid {
+        display: grid;
+        grid-template-columns: 3fr 2fr;
+        gap: 16px;
+      }
+      .footer { padding: 40px 0 32px; }
+    }
+
+    /* ─── Large Desktop (> 1440px) ─── */
+    @media (min-width: 1441px) {
+      .container { max-width: 1400px; }
     }
   </style>
 </head>
@@ -720,7 +1326,7 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
   <div class="container">
     <div class="header">
       <div class="header-brand">
-        <h1>MTRADE</h1>
+        <h1 style="display:inline-flex;align-items:center">MTRADE<span class="alert-dot" id="alert-dot"></span></h1>
         <div class="tagline">MATTHEW'S ICT MONITOR</div>
       </div>
       <div class="header-right">
@@ -738,13 +1344,31 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
       </div>
     </div>
 
-    <div id="instrument-selector"></div>
-    <div id="apex-selector"></div>
-    <div id="dashboard-panel"></div>
+    <div class="selectors-row">
+      <div id="instrument-selector"></div>
+      <div id="apex-selector"></div>
+    </div>
+    <div id="live-price-card"></div>
+    <div id="alert-overlay"></div>
+    <div class="dashboard-grid">
+      <div class="grid-left">
+        <div id="tv-chart-container"></div>
+        <div id="price-chart"></div>
+      </div>
+      <div class="grid-right">
+        <div id="ai-analysis"></div>
+        <div id="signal-tracker"></div>
+        <div id="dashboard-panel"></div>
+      </div>
+    </div>
     <div id="pnl-log"></div>
     <div id="trade-modal-root"></div>
 
     <button class="fab-add" id="fab-add" aria-label="Log trade">+</button>
+
+    <button class="demo-alert-link" id="demo-alert-btn">Create Demo Alert</button>
+
+    <div id="engine-status" style="text-align:center;padding:8px 0;font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--muted);letter-spacing:0.5px"></div>
 
     <div class="footer">
       <div class="footer-brand">MTRADE</div>
@@ -1145,6 +1769,698 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
   </script>
 
   <script>
+  /* ── Live Price Display ── */
+  (function() {
+    var priceCard = document.getElementById('live-price-card');
+    var priceData = {};
+    var sessionData = {};
+
+    function renderPriceCard() {
+      var sym = window.selectedInstrument || 'NQ';
+      var p = priceData[sym];
+      var html = '<div class="card" style="animation:slideUp 0.3s ease">';
+      html += '<div class="card-title">\\u25C8 LIVE PRICE</div>';
+      html += '<div class="live-price-row">';
+      if (p) {
+        html += '<span class="live-price-value">' + p.price.toFixed(2) + '</span>';
+        var cls = p.change_pct > 0 ? 'up' : p.change_pct < 0 ? 'down' : 'flat';
+        var sign = p.change_pct > 0 ? '+' : '';
+        html += '<span class="live-price-change ' + cls + '">' + sign + p.change_pct.toFixed(2) + '%</span>';
+      } else {
+        html += '<span class="live-price-value" style="color:var(--muted)">--</span>';
+      }
+      html += '</div>';
+
+      // Status indicator
+      html += '<div class="live-price-indicator">';
+      if (p) {
+        var age = (Date.now() - new Date(p.timestamp).getTime()) / 60000;
+        if (age < 5) {
+          html += '<span class="dot live"></span>LIVE';
+        } else {
+          html += '<span class="dot delayed"></span>DELAYED ' + Math.round(age) + 'M';
+        }
+      } else {
+        html += '<span class="dot delayed"></span>LOADING';
+      }
+      html += '</div>';
+
+      // Session levels
+      var sess = sessionData[sym];
+      html += '<div class="live-session-levels">';
+      html += '<span><span class="level-label">LDN H</span><span class="level-value">' + (sess && sess.london_high != null ? sess.london_high.toFixed(2) : '\\u2014') + '</span></span>';
+      html += '<span><span class="level-label">LDN L</span><span class="level-value">' + (sess && sess.london_low != null ? sess.london_low.toFixed(2) : '\\u2014') + '</span></span>';
+      html += '<span><span class="level-label">NY H</span><span class="level-value">' + (sess && sess.ny_high != null ? sess.ny_high.toFixed(2) : '\\u2014') + '</span></span>';
+      html += '<span><span class="level-label">NY L</span><span class="level-value">' + (sess && sess.ny_low != null ? sess.ny_low.toFixed(2) : '\\u2014') + '</span></span>';
+      html += '</div>';
+
+      html += '</div>';
+      priceCard.innerHTML = html;
+    }
+
+    function fetchPrices() {
+      fetch('/api/market/price').then(function(r) { return r.json(); }).then(function(data) {
+        priceData = data;
+        renderPriceCard();
+      }).catch(function() {});
+    }
+
+    function fetchSessions() {
+      fetch('/api/sessions/today').then(function(r) { return r.json(); }).then(function(data) {
+        if (Array.isArray(data)) {
+          data.forEach(function(s) { sessionData[s.symbol] = s; });
+        }
+        renderPriceCard();
+      }).catch(function() {});
+    }
+
+    renderPriceCard();
+    fetchPrices();
+    fetchSessions();
+    setInterval(fetchPrices, 15000);
+    setInterval(fetchSessions, 60000);
+    document.addEventListener('instrument-changed', function() { renderPriceCard(); });
+  })();
+  </script>
+
+  <script>
+  /* ── TradingView Chart Widget ── */
+  (function() {
+    var tvContainer = document.getElementById('tv-chart-container');
+    var scriptLoaded = false;
+    var widgetInstance = null;
+
+    var symbolMap = {
+      NQ: 'OANDA:NAS100USD',
+      ES: 'OANDA:SPX500USD'
+    };
+
+    function renderWidget() {
+      var sym = window.selectedInstrument || 'NQ';
+      var tvSymbol = symbolMap[sym] || symbolMap.NQ;
+
+      tvContainer.innerHTML = '<div class="card" style="animation:slideUp 0.3s ease"><div class="card-title">\\u25C8 TRADINGVIEW</div><div id="tv-chart-wrap"></div></div>';
+
+      if (!scriptLoaded) {
+        var s = document.createElement('script');
+        s.src = 'https://s3.tradingview.com/tv.js';
+        s.onload = function() {
+          scriptLoaded = true;
+          createWidget(tvSymbol);
+        };
+        document.head.appendChild(s);
+      } else {
+        createWidget(tvSymbol);
+      }
+    }
+
+    function createWidget(tvSymbol) {
+      if (typeof TradingView === 'undefined') return;
+      widgetInstance = new TradingView.widget({
+        container_id: 'tv-chart-wrap',
+        symbol: tvSymbol,
+        interval: '15',
+        timezone: 'America/New_York',
+        theme: 'dark',
+        style: '1',
+        width: '100%',
+        height: document.getElementById('tv-chart-wrap').offsetHeight || 250,
+        hide_top_toolbar: false,
+        hide_side_toolbar: true,
+        allow_symbol_change: false,
+        save_image: false,
+        backgroundColor: '#0a0a10',
+        gridColor: 'rgba(255,255,255,0.03)',
+        locale: 'en',
+      });
+    }
+
+    renderWidget();
+    document.addEventListener('instrument-changed', function() { renderWidget(); });
+  })();
+  </script>
+
+  <script>
+  /* ── Strategy Chart (SVG with real data + annotations) ── */
+  (function() {
+    var chartEl = document.getElementById('price-chart');
+    var selectedTimeframe = '15m';
+    var CANDLE_LIMIT = 80;
+    var lastFetchTime = 0;
+
+    var fallbackData = {
+      NQ: { londonHigh: 21487.50, londonLow: 21422.75, fvg: { high: 21440, low: 21428 }, ifvg: { high: 21462, low: 21455 } },
+      ES: { londonHigh: 5902.25, londonLow: 5878.50, fvg: { high: 5886, low: 5880 }, ifvg: { high: 5894, low: 5890 } }
+    };
+
+    var cachedCandles = {};
+    var cachedSessions = {};
+    var cachedFvgs = {};
+    var cachedIfvgs = {};
+    var alertLevels = null;
+
+    function fetchCandleData(sym) {
+      return fetch('/api/candles/' + sym + '/' + selectedTimeframe + '?limit=' + CANDLE_LIMIT)
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+          if (data.candles && data.candles.length > 0) {
+            cachedCandles[sym] = data.candles.reverse();
+            lastFetchTime = Date.now();
+          }
+        }).catch(function() {});
+    }
+
+    function fetchSessionData() {
+      return fetch('/api/sessions/today')
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+          if (Array.isArray(data)) {
+            data.forEach(function(s) { cachedSessions[s.symbol] = s; });
+          }
+        }).catch(function() {});
+    }
+
+    function fetchFvgData(sym) {
+      return Promise.all([
+        fetch('/api/fvg/' + sym + '?status=active&days=2').then(function(r) { return r.json(); }).then(function(data) {
+          if (Array.isArray(data) && data.length > 0) cachedFvgs[sym] = data;
+        }).catch(function() {}),
+        fetch('/api/fvg/' + sym + '?status=inverted&days=2').then(function(r) { return r.json(); }).then(function(data) {
+          if (Array.isArray(data) && data.length > 0) cachedIfvgs[sym] = data;
+        }).catch(function() {})
+      ]);
+    }
+
+    function generateFallbackCandles(start, count) {
+      var candles = [];
+      var price = start;
+      for (var i = 0; i < count; i++) {
+        var change = (Math.random() - 0.48) * (start * 0.003);
+        var o = price, c = price + change;
+        var h = Math.max(o, c) + Math.abs(change) * (0.3 + Math.random() * 0.7);
+        var l = Math.min(o, c) - Math.abs(change) * (0.3 + Math.random() * 0.7);
+        candles.push({ open: +o.toFixed(2), high: +h.toFixed(2), low: +l.toFixed(2), close: +c.toFixed(2), time: Date.now() - (count - i) * 60000 });
+        price = c;
+      }
+      return candles;
+    }
+
+    function drawSvgChart(candles, d, entry, target, stop) {
+      var allPrices = [];
+      candles.forEach(function(c) { allPrices.push(c.high, c.low); });
+      if (d.londonHigh != null) allPrices.push(d.londonHigh);
+      if (d.londonLow != null) allPrices.push(d.londonLow);
+      if (d.fvg) { allPrices.push(d.fvg.high, d.fvg.low); }
+      if (d.ifvg) { allPrices.push(d.ifvg.high, d.ifvg.low); }
+      if (entry != null) allPrices.push(entry);
+      if (target != null) allPrices.push(target);
+      if (stop != null) allPrices.push(stop);
+
+      var filtered = allPrices.filter(function(p) { return p != null && isFinite(p); });
+      if (filtered.length === 0) return '<div style="color:var(--muted);text-align:center;padding:40px">No candle data yet</div>';
+
+      var minP = Math.min.apply(null, filtered);
+      var maxP = Math.max.apply(null, filtered);
+      var range = maxP - minP || 1;
+      minP -= range * 0.05;
+      maxP += range * 0.05;
+      range = maxP - minP;
+
+      var vw = window.innerWidth;
+      var isTablet = vw >= 768;
+      var isDesktop = vw >= 1025;
+      var svgW = 800, svgH = isDesktop ? 420 : isTablet ? 340 : 240, padR = 65, padL = 4, padT = 8, padB = 20;
+      var chartW = svgW - padL - padR, chartH = svgH - padT - padB;
+      function priceY(p) { return padT + chartH - ((p - minP) / range) * chartH; }
+
+      var candleW = chartW / candles.length;
+      var bodyW = isDesktop ? Math.max(candleW * 0.7, 2) : Math.max(candleW - 1, 1);
+
+      var svg = '<svg class="chart-svg" viewBox="0 0 ' + svgW + ' ' + svgH + '" preserveAspectRatio="none">';
+
+      // Gradient definition for area fill
+      svg += '<defs><linearGradient id="areaGrad" x1="0" y1="0" x2="0" y2="1">';
+      svg += '<stop offset="0%" stop-color="rgba(251,44,90,0.06)"/>';
+      svg += '<stop offset="100%" stop-color="rgba(251,44,90,0)"/>';
+      svg += '</linearGradient></defs>';
+
+      // Grid lines
+      for (var g = 1; g <= 3; g++) {
+        var gy = padT + (chartH * g / 4);
+        svg += '<line x1="' + padL + '" y1="' + gy + '" x2="' + (svgW - padR) + '" y2="' + gy + '" stroke="rgba(255,255,255,0.04)" stroke-width="1"/>';
+      }
+
+      // Y-axis price labels (4 on mobile, 6 on desktop)
+      var yLabelCount = isDesktop ? 6 : 4;
+      for (var yi = 0; yi <= yLabelCount; yi++) {
+        var yPrice = minP + (range * yi / yLabelCount);
+        var yPos = priceY(yPrice);
+        var yFontSize = isDesktop ? '9' : '8';
+        svg += '<text x="' + (svgW - padR + 6) + '" y="' + (yPos + 3) + '" fill="var(--muted)" font-family="JetBrains Mono,monospace" font-size="' + yFontSize + '">' + yPrice.toFixed(2) + '</text>';
+      }
+
+      // Area fill below close prices
+      var areaPoints = '' + padL + ',' + (padT + chartH);
+      candles.forEach(function(c, i) {
+        var x = padL + i * candleW + candleW / 2;
+        areaPoints += ' ' + x + ',' + priceY(c.close);
+      });
+      areaPoints += ' ' + (padL + (candles.length - 1) * candleW + candleW / 2) + ',' + (padT + chartH);
+      svg += '<polygon points="' + areaPoints + '" fill="url(#areaGrad)"/>';
+
+      // Entry/target/stop zones
+      if (entry != null && target != null) {
+        var targetY = priceY(target), entryY = priceY(entry);
+        svg += '<rect x="' + padL + '" y="' + Math.min(targetY, entryY) + '" width="' + chartW + '" height="' + Math.abs(entryY - targetY) + '" fill="rgba(52,211,153,0.03)"/>';
+        if (stop != null) {
+          var stopY = priceY(stop);
+          svg += '<rect x="' + padL + '" y="' + Math.min(entryY, stopY) + '" width="' + chartW + '" height="' + Math.abs(stopY - entryY) + '" fill="rgba(239,68,68,0.03)"/>';
+        }
+      }
+
+      // FVG zone with dashed borders
+      if (d.fvg && d.fvg.high != null) {
+        var fvgTopY = priceY(d.fvg.high), fvgBotY = priceY(d.fvg.low);
+        svg += '<rect x="' + padL + '" y="' + fvgTopY + '" width="' + chartW + '" height="' + (fvgBotY - fvgTopY) + '" fill="rgba(251,44,90,0.1)" stroke="var(--red)" stroke-width="0.5" stroke-dasharray="4,3" opacity="0.7"/>';
+      }
+
+      // IFVG zone with dashed borders
+      if (d.ifvg && d.ifvg.high != null) {
+        var ifvgTopY = priceY(d.ifvg.high), ifvgBotY = priceY(d.ifvg.low);
+        svg += '<rect x="' + padL + '" y="' + ifvgTopY + '" width="' + chartW + '" height="' + (ifvgBotY - ifvgTopY) + '" fill="rgba(251,191,36,0.1)" stroke="var(--amber)" stroke-width="0.5" stroke-dasharray="4,3" opacity="0.7"/>';
+      }
+
+      // London H/L lines
+      if (d.londonHigh != null) {
+        var ldnHY = priceY(d.londonHigh);
+        svg += '<line x1="' + padL + '" y1="' + ldnHY + '" x2="' + (padL + chartW) + '" y2="' + ldnHY + '" stroke="var(--red)" stroke-width="0.8" stroke-dasharray="6,4" opacity="0.7"/>';
+        svg += '<text x="' + (svgW - padR - 2) + '" y="' + (ldnHY - 3) + '" fill="var(--red-soft)" font-family="JetBrains Mono,monospace" font-size="9" text-anchor="end">LDN H</text>';
+      }
+      if (d.londonLow != null) {
+        var ldnLY = priceY(d.londonLow);
+        svg += '<line x1="' + padL + '" y1="' + ldnLY + '" x2="' + (padL + chartW) + '" y2="' + ldnLY + '" stroke="var(--muted)" stroke-width="0.8" stroke-dasharray="6,4" opacity="0.6"/>';
+        svg += '<text x="' + (svgW - padR - 2) + '" y="' + (ldnLY - 3) + '" fill="var(--muted)" font-family="JetBrains Mono,monospace" font-size="9" text-anchor="end">LDN L</text>';
+      }
+
+      // Target/stop/entry lines
+      if (target != null) {
+        var tY = priceY(target);
+        svg += '<line x1="' + padL + '" y1="' + tY + '" x2="' + (padL + chartW) + '" y2="' + tY + '" stroke="var(--green)" stroke-width="1"/>';
+        svg += '<text x="' + (padL + 4) + '" y="' + (tY - 3) + '" fill="var(--green)" font-family="JetBrains Mono,monospace" font-size="9">TARGET</text>';
+      }
+      if (stop != null) {
+        var sY = priceY(stop);
+        svg += '<line x1="' + padL + '" y1="' + sY + '" x2="' + (padL + chartW) + '" y2="' + sY + '" stroke="var(--danger)" stroke-width="1"/>';
+        svg += '<text x="' + (padL + 4) + '" y="' + (sY - 3) + '" fill="var(--danger)" font-family="JetBrains Mono,monospace" font-size="9">STOP</text>';
+      }
+      if (entry != null) {
+        var eY = priceY(entry);
+        svg += '<g class="entry-line-glow">';
+        svg += '<line x1="' + padL + '" y1="' + eY + '" x2="' + (padL + chartW) + '" y2="' + eY + '" stroke="var(--red)" stroke-width="1"/>';
+        svg += '<text x="' + (padL + 4) + '" y="' + (eY - 3) + '" fill="var(--red)" font-family="JetBrains Mono,monospace" font-size="9">ENTRY &#9656;</text>';
+        svg += '</g>';
+      }
+
+      // Current price line (latest close)
+      var lastClose = candles[candles.length - 1].close;
+      var lastCloseY = priceY(lastClose);
+      svg += '<line x1="' + padL + '" y1="' + lastCloseY + '" x2="' + (padL + chartW) + '" y2="' + lastCloseY + '" stroke="var(--white)" stroke-width="1" opacity="0.5"/>';
+      svg += '<rect x="' + (svgW - padR + 2) + '" y="' + (lastCloseY - 7) + '" width="58" height="14" rx="2" fill="var(--white)"/>';
+      svg += '<text x="' + (svgW - padR + 5) + '" y="' + (lastCloseY + 3) + '" fill="#0a0a10" font-family="JetBrains Mono,monospace" font-size="8" font-weight="bold">' + lastClose.toFixed(2) + '</text>';
+
+      // Candles
+      candles.forEach(function(c, i) {
+        var x = padL + i * candleW + (candleW - bodyW) / 2;
+        var cx = padL + i * candleW + candleW / 2;
+        var bullish = c.close >= c.open;
+        var bodyColor = bullish ? 'var(--red)' : '#475569';
+        var wickColor = bullish ? 'var(--red-soft)' : '#64748b';
+        var bodyTop = priceY(Math.max(c.open, c.close));
+        var bodyBot = priceY(Math.min(c.open, c.close));
+        var bodyH = Math.max(bodyBot - bodyTop, 1);
+        svg += '<line x1="' + cx + '" y1="' + priceY(c.high) + '" x2="' + cx + '" y2="' + priceY(c.low) + '" stroke="' + wickColor + '" stroke-width="1"/>';
+        svg += '<rect x="' + x + '" y="' + bodyTop + '" width="' + bodyW + '" height="' + bodyH + '" fill="' + bodyColor + '" rx="0.5"/>';
+      });
+
+      // Crosshair overlay (invisible rect to capture pointer events)
+      svg += '<rect class="chart-hit-area" x="' + padL + '" y="' + padT + '" width="' + chartW + '" height="' + chartH + '" fill="transparent" style="pointer-events:all"/>';
+      svg += '<line class="ch-v" x1="0" y1="' + padT + '" x2="0" y2="' + (padT + chartH) + '" stroke="rgba(255,255,255,0.2)" stroke-width="0.5" stroke-dasharray="3,3" style="display:none;pointer-events:none"/>';
+      svg += '<line class="ch-h" x1="' + padL + '" y1="0" x2="' + (padL + chartW) + '" y2="0" stroke="rgba(255,255,255,0.2)" stroke-width="0.5" stroke-dasharray="3,3" style="display:none;pointer-events:none"/>';
+
+      svg += '</svg>';
+
+      // Store chart geometry for crosshair calculations
+      svg += '<script type="application/json" class="chart-geo">' + JSON.stringify({
+        padL: padL, padT: padT, padR: padR, padB: padB,
+        chartW: chartW, chartH: chartH, svgW: svgW, svgH: svgH,
+        minP: minP, maxP: maxP, range: range, candleCount: candles.length, candleW: candleW
+      }) + '</' + 'script>';
+
+      return svg;
+    }
+
+    function setupCrosshair(container) {
+      var svgEl = container.querySelector('.chart-svg');
+      var hitArea = container.querySelector('.chart-hit-area');
+      if (!svgEl || !hitArea) return;
+      var geoScript = container.querySelector('.chart-geo');
+      if (!geoScript) return;
+      var geo = JSON.parse(geoScript.textContent);
+
+      var chV = svgEl.querySelector('.ch-v');
+      var chH = svgEl.querySelector('.ch-h');
+      var priceLabel = document.createElement('div');
+      priceLabel.className = 'chart-crosshair-label';
+      priceLabel.style.display = 'none';
+      container.appendChild(priceLabel);
+      var timeLabel = document.createElement('div');
+      timeLabel.className = 'chart-crosshair-label';
+      timeLabel.style.display = 'none';
+      container.appendChild(timeLabel);
+
+      var isMobile = 'ontouchstart' in window;
+      var holdTimer = null;
+      var crosshairActive = false;
+
+      function showCrosshair(clientX, clientY) {
+        var rect = svgEl.getBoundingClientRect();
+        var scaleX = geo.svgW / rect.width;
+        var scaleY = geo.svgH / rect.height;
+        var svgX = (clientX - rect.left) * scaleX;
+        var svgY = (clientY - rect.top) * scaleY;
+
+        if (svgX < geo.padL || svgX > geo.padL + geo.chartW || svgY < geo.padT || svgY > geo.padT + geo.chartH) {
+          hideCrosshair(); return;
+        }
+
+        chV.setAttribute('x1', svgX); chV.setAttribute('x2', svgX); chV.style.display = '';
+        chH.setAttribute('y1', svgY); chH.setAttribute('y2', svgY); chH.style.display = '';
+
+        var price = geo.maxP - ((svgY - geo.padT) / geo.chartH) * geo.range;
+        priceLabel.textContent = price.toFixed(2);
+        priceLabel.style.display = '';
+        priceLabel.style.right = '2px';
+        priceLabel.style.top = ((svgY / geo.svgH) * 100) + '%';
+        priceLabel.style.left = '';
+
+        var candleIdx = Math.floor((svgX - geo.padL) / geo.candleW);
+        var now = new Date();
+        var tfMins = selectedTimeframe === '5m' ? 5 : selectedTimeframe === '1H' ? 60 : selectedTimeframe === '4H' ? 240 : 15;
+        var candleTime = new Date(now.getTime() - (geo.candleCount - 1 - candleIdx) * tfMins * 60000);
+        var hh = String(candleTime.getHours()).padStart(2, '0');
+        var mm = String(candleTime.getMinutes()).padStart(2, '0');
+        timeLabel.textContent = hh + ':' + mm;
+        timeLabel.style.display = '';
+        timeLabel.style.bottom = '2px';
+        timeLabel.style.left = ((svgX / geo.svgW) * 100) + '%';
+        timeLabel.style.top = '';
+        timeLabel.style.right = '';
+      }
+
+      function hideCrosshair() {
+        chV.style.display = 'none'; chH.style.display = 'none';
+        priceLabel.style.display = 'none'; timeLabel.style.display = 'none';
+        crosshairActive = false;
+      }
+
+      if (isMobile) {
+        hitArea.addEventListener('touchstart', function(e) {
+          holdTimer = setTimeout(function() {
+            crosshairActive = true;
+            var t = e.touches[0];
+            showCrosshair(t.clientX, t.clientY);
+          }, 300);
+        }, { passive: true });
+        hitArea.addEventListener('touchmove', function(e) {
+          if (crosshairActive) {
+            e.preventDefault();
+            var t = e.touches[0];
+            showCrosshair(t.clientX, t.clientY);
+          } else {
+            clearTimeout(holdTimer);
+          }
+        }, { passive: false });
+        hitArea.addEventListener('touchend', function() {
+          clearTimeout(holdTimer);
+          hideCrosshair();
+        }, { passive: true });
+      } else {
+        svgEl.addEventListener('mousemove', function(e) { showCrosshair(e.clientX, e.clientY); });
+        svgEl.addEventListener('mouseleave', hideCrosshair);
+      }
+    }
+
+    function renderChartWithData() {
+      var sym = window.selectedInstrument || 'NQ';
+      var candles = cachedCandles[sym];
+      var sess = cachedSessions[sym] || {};
+      var fb = fallbackData[sym];
+
+      // Build annotation data from session levels or alert or real FVG data
+      var d = {};
+      var entry = null, target = null, stop = null;
+
+      // Use real FVG data from API if available
+      var realFvgs = cachedFvgs[sym] || [];
+      var realIfvgs = cachedIfvgs[sym] || [];
+      var bestFvg = realFvgs.length > 0 ? { high: realFvgs[0].high, low: realFvgs[0].low } : null;
+      var bestIfvg = realIfvgs.length > 0 ? { high: realIfvgs[0].high, low: realIfvgs[0].low } : null;
+
+      if (alertLevels && (alertLevels.symbol === sym || !alertLevels.symbol)) {
+        d.londonHigh = alertLevels.sweep_level || sess.london_high || fb.londonHigh;
+        d.londonLow = alertLevels.sweep_direction === 'low' ? (alertLevels.sweep_level || sess.london_low || fb.londonLow) : (sess.london_low || fb.londonLow);
+        if (alertLevels.sweep_direction === 'high') d.londonHigh = alertLevels.sweep_level || sess.london_high || fb.londonHigh;
+        d.fvg = { high: alertLevels.fvg_high || (bestFvg ? bestFvg.high : fb.fvg.high), low: alertLevels.fvg_low || (bestFvg ? bestFvg.low : fb.fvg.low) };
+        d.ifvg = { high: alertLevels.ifvg_high || (bestIfvg ? bestIfvg.high : fb.ifvg.high), low: alertLevels.ifvg_low || (bestIfvg ? bestIfvg.low : fb.ifvg.low) };
+        entry = alertLevels.entry_price;
+        target = alertLevels.target_price;
+        stop = alertLevels.stop_price;
+      } else {
+        d.londonHigh = sess.london_high != null ? sess.london_high : fb.londonHigh;
+        d.londonLow = sess.london_low != null ? sess.london_low : fb.londonLow;
+        d.fvg = bestFvg || fb.fvg;
+        d.ifvg = bestIfvg || fb.ifvg;
+      }
+
+      // Use real candles if available, else generate fallback
+      if (!candles || candles.length === 0) {
+        var startPrice = fb === fallbackData.NQ ? 21450 : 5890;
+        candles = generateFallbackCandles(startPrice, CANDLE_LIMIT);
+        if (!entry) { entry = d.ifvg.high; target = d.londonHigh; stop = d.ifvg.low - 2; }
+      }
+
+      var svgHtml = drawSvgChart(candles, d, entry, target, stop);
+
+      // LIVE / DELAYED tag
+      var ageMs = Date.now() - lastFetchTime;
+      var isLive = lastFetchTime > 0 && ageMs < 120000;
+      var liveTag = '';
+      if (lastFetchTime > 0) {
+        if (isLive) {
+          liveTag = '<div class="chart-live-tag"><span class="tag-dot" style="background:var(--green);animation:breathe 2s ease-in-out infinite"></span><span style="color:var(--green)">LIVE</span></div>';
+        } else {
+          liveTag = '<div class="chart-live-tag"><span class="tag-dot" style="background:var(--amber)"></span><span style="color:var(--amber)">DELAYED</span></div>';
+        }
+      }
+
+      // Timeframe selector
+      var tfHtml = '<div class="tf-row">';
+      ['5m', '15m', '1H', '4H'].forEach(function(tf) {
+        tfHtml += '<button class="tf-btn' + (selectedTimeframe === tf ? ' active' : '') + '" data-tf="' + tf + '">' + tf + '</button>';
+      });
+      tfHtml += '</div>';
+
+      var legend = '<div class="chart-legend">' +
+        '<div class="chart-legend-item"><span class="chart-legend-swatch" style="background:rgba(251,44,90,0.3);border:1px dashed var(--red)"></span>FVG</div>' +
+        '<div class="chart-legend-item"><span class="chart-legend-swatch" style="background:rgba(251,191,36,0.25);border:1px dashed var(--amber)"></span>IFVG</div>' +
+        '<div class="chart-legend-item"><span class="chart-legend-swatch" style="background:var(--red);width:14px;height:2px;border-radius:0"></span>LDN H</div>' +
+        '<div class="chart-legend-item"><span class="chart-legend-swatch" style="background:var(--muted);width:14px;height:2px;border-radius:0"></span>LDN L</div>' +
+        '</div>';
+
+      chartEl.innerHTML = '<div class="card" style="animation:slideUp 0.3s ease"><div class="card-title">\\u25C8 STRATEGY CHART</div>' + tfHtml + '<div class="chart-wrap">' + liveTag + svgHtml + '</div>' + legend + '</div>';
+
+      // Bind timeframe selector
+      chartEl.querySelectorAll('.tf-btn').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+          selectedTimeframe = btn.dataset.tf;
+          loadAndRender();
+        });
+      });
+
+      // Setup crosshair and resize observer
+      var wrap = chartEl.querySelector('.chart-wrap');
+      if (wrap) {
+        setupCrosshair(wrap);
+        if (typeof observeChartContainer === 'function') observeChartContainer();
+      }
+    }
+
+    function loadAndRender() {
+      var sym = window.selectedInstrument || 'NQ';
+      Promise.all([fetchCandleData(sym), fetchSessionData(), fetchFvgData(sym)]).then(function() {
+        renderChartWithData();
+      });
+    }
+
+    /* Debounced resize handler for SVG chart */
+    var resizeTimer = null;
+    function onChartResize() {
+      clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(function() {
+        renderChartWithData();
+      }, 250);
+    }
+    var chartObserver = new ResizeObserver(function() { onChartResize(); });
+    function observeChartContainer() {
+      var wrap = chartEl.querySelector('.chart-wrap');
+      if (wrap) chartObserver.observe(wrap);
+    }
+
+    loadAndRender();
+    setInterval(loadAndRender, 60000);
+    document.addEventListener('instrument-changed', function() { loadAndRender(); });
+    document.addEventListener('alert-levels', function(e) {
+      alertLevels = e.detail;
+      renderChartWithData();
+    });
+  })();
+  </script>
+
+  <script>
+  /* ── Signal Progression Tracker ── */
+  (function() {
+    var trackerEl = document.getElementById('signal-tracker');
+    var currentPhase = 0;
+    var activeSetup = null;
+
+    var phases = [
+      { name: 'London Range', desc: 'Session high & low forming' },
+      { name: 'Liquidity Sweep', desc: 'Price breaks London H/L' },
+      { name: 'FVG Retracement', desc: 'Retrace into 1H/4H FVG' },
+      { name: 'Continuation', desc: 'FVG or IFVG confirms direction' },
+      { name: 'Entry', desc: 'Execute on gap, target opposite level' }
+    ];
+
+    var fallbackData = {
+      NQ: { londonHigh: 21487.50, londonLow: 21422.75, fvg: { high: 21440, low: 21428 }, ifvg: { high: 21462, low: 21455 } },
+      ES: { londonHigh: 5902.25, londonLow: 5878.50, fvg: { high: 5886, low: 5880 }, ifvg: { high: 5894, low: 5890 } }
+    };
+
+    function fetchActiveSetups() {
+      fetch('/api/setups/active', { credentials: 'same-origin' })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+          var sym = window.selectedInstrument || 'NQ';
+          if (data.setups && data.setups.length > 0) {
+            var match = null;
+            data.setups.forEach(function(s) { if (s.symbol === sym && !match) match = s; });
+            if (match) {
+              activeSetup = match;
+              currentPhase = match.phase || 0;
+            } else {
+              activeSetup = null;
+              currentPhase = 0;
+            }
+          } else {
+            activeSetup = null;
+            currentPhase = 0;
+          }
+          renderTracker();
+        }).catch(function() {});
+    }
+
+    fetchActiveSetups();
+    setInterval(fetchActiveSetups, 15000);
+
+    function renderTracker() {
+      var sym = window.selectedInstrument || 'NQ';
+      var fb = fallbackData[sym];
+      var d = {};
+      if (activeSetup) {
+        var sess = activeSetup;
+        d.londonHigh = sess.target_price || fb.londonHigh;
+        d.londonLow = sess.sweep_level || fb.londonLow;
+        d.fvg = sess.fvg_data ? { high: sess.fvg_data.high, low: sess.fvg_data.low } : fb.fvg;
+        d.ifvg = sess.ifvg_data ? { high: sess.ifvg_data.high, low: sess.ifvg_data.low } : fb.ifvg;
+      } else {
+        d = { londonHigh: fb.londonHigh, londonLow: fb.londonLow, fvg: fb.fvg, ifvg: fb.ifvg };
+      }
+      var entry = d.ifvg ? d.ifvg.high : fb.ifvg.high;
+      var target = d.londonHigh || fb.londonHigh;
+
+      // Tag
+      var tagText, tagColor;
+      if (currentPhase >= 4) { tagText = 'ACCORD'; tagColor = 'var(--red)'; }
+      else if (currentPhase >= 3) { tagText = 'BASE NOTE'; tagColor = 'var(--amber)'; }
+      else if (currentPhase >= 2) { tagText = 'HEART NOTE'; tagColor = 'var(--amber)'; }
+      else { tagText = 'TOP NOTE'; tagColor = 'var(--muted)'; }
+
+      var html = '<div class="card" style="animation:slideUp 0.3s ease">';
+      html += '<div class="signal-card-header">';
+      html += '<div class="card-title" style="margin-bottom:0">\u25C7 SIGNAL PROGRESSION</div>';
+      html += '<span class="signal-tag" style="color:' + tagColor + ';border-color:' + tagColor + '">' + tagText + '</span>';
+      html += '</div>';
+
+      // Phase rows
+      phases.forEach(function(p, i) {
+        var dotClass, labelColor, rowClass = '', checkHtml = '';
+        if (i < currentPhase) {
+          dotClass = 'completed';
+          labelColor = 'var(--red)';
+          checkHtml = '<span class="phase-check" style="color:var(--red)">\u2713</span>';
+        } else if (i === currentPhase) {
+          dotClass = 'current';
+          labelColor = 'var(--amber)';
+        } else {
+          dotClass = 'pending';
+          labelColor = 'var(--subtle)';
+          rowClass = ' pending-row';
+        }
+
+        html += '<div class="phase-row' + rowClass + '">';
+        html += '<span class="phase-dot ' + dotClass + '"></span>';
+        html += '<span class="phase-label" style="color:' + labelColor + '">Phase ' + i + ' \u2014 ' + p.name + '</span>';
+        html += '<span class="phase-desc">' + p.desc + '</span>';
+        html += checkHtml;
+        html += '</div>';
+      });
+
+      // Status box
+      var borderColor = currentPhase >= 3 ? 'var(--red)' : 'var(--amber)';
+      var statusLabelColor = currentPhase >= 3 ? 'var(--red)' : 'var(--amber)';
+      var statusLabel = 'PHASE ' + currentPhase + ' \u2014 ' + phases[currentPhase].name.toUpperCase();
+
+      var messages = [
+        activeSetup ? 'London session forming. Like a top note \u2014 the opening impression.' : 'Waiting for London session to complete...',
+        'Sweep confirmed \u2014 London Low at ' + (d.londonLow || 0).toFixed(2) + ' broken. Sillage trail detected.',
+        'Heart note developing. Retracing into 4H FVG (' + (d.fvg ? d.fvg.low.toFixed(2) : '?') + ' \u2013 ' + (d.fvg ? d.fvg.high.toFixed(2) : '?') + ')',
+        'Base note locked. IFVG at ' + (d.ifvg ? d.ifvg.low.toFixed(2) : '?') + ' \u2013 ' + (d.ifvg ? d.ifvg.high.toFixed(2) : '?') + ' confirms direction.',
+        'ACCORD \u2014 all notes aligned. Buy ' + entry.toFixed(2) + ' \u2192 Target ' + target.toFixed(2)
+      ];
+
+      html += '<div class="signal-status-box" style="border-left:2px solid ' + borderColor + '">';
+      html += '<div class="signal-status-label" style="color:' + statusLabelColor + '">' + statusLabel + '</div>';
+      html += '<div class="signal-status-msg">' + messages[currentPhase] + '</div>';
+      html += '</div>';
+
+      html += '</div>';
+      trackerEl.innerHTML = html;
+    }
+
+    renderTracker();
+    document.addEventListener('instrument-changed', function() { renderTracker(); });
+    document.addEventListener('alert-phase', function(e) {
+      if (e.detail && e.detail.phase != null) {
+        currentPhase = e.detail.phase;
+      } else {
+        currentPhase = 3;
+      }
+      renderTracker();
+    });
+  })();
+  </script>
+
+  <script>
   (function() {
     var pnlLog = document.getElementById('pnl-log');
     var modalRoot = document.getElementById('trade-modal-root');
@@ -1370,6 +2686,286 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
     setTimeout(function() {
       if (getSelectedAccountId()) fetchPnlLog();
     }, 150);
+  })();
+  </script>
+
+  <script>
+  /* ── Alert System ── */
+  (function() {
+    var overlayEl = document.getElementById('alert-overlay');
+    var alertDot = document.getElementById('alert-dot');
+    var seenIds = {};
+    var firstPoll = true;
+
+    function flashBorder() {
+      document.body.classList.add('alert-flash');
+      setTimeout(function() { document.body.classList.remove('alert-flash'); }, 50);
+    }
+
+    function getSignalName(phase) {
+      if (phase >= 4) return 'ACCORD';
+      if (phase >= 3) return 'BASE NOTE';
+      if (phase >= 2) return 'HEART NOTE';
+      return 'TOP NOTE';
+    }
+
+    function getDirection(alert) {
+      return alert.sweep_direction === 'low' ? 'LONG' : 'SHORT';
+    }
+
+    function fmtPrice(n) {
+      if (n == null) return '--';
+      return Number(n).toFixed(2);
+    }
+
+    function renderOverlay(alert) {
+      var dir = getDirection(alert);
+      var signalName = getSignalName(alert.phase || 0);
+      var rr = alert.risk_reward ? (Number(alert.risk_reward).toFixed(1) + ' : 1') : '--';
+
+      var html = '<div class="alert-overlay">';
+      html += '<div class="alert-signal-name">' + signalName + '</div>';
+      html += '<div class="alert-instrument-dir">' + (alert.symbol || 'NQ') + ' \\u2014 ' + dir + '</div>';
+      html += '<div class="alert-levels-grid">';
+      html += '<div><div class="alert-level-label">ENTRY</div><div class="alert-level-value" style="color:var(--red)">' + fmtPrice(alert.entry_price) + '</div></div>';
+      html += '<div><div class="alert-level-label">TARGET</div><div class="alert-level-value" style="color:var(--green)">' + fmtPrice(alert.target_price) + '</div></div>';
+      html += '<div><div class="alert-level-label">STOP</div><div class="alert-level-value" style="color:var(--danger)">' + fmtPrice(alert.stop_price) + '</div></div>';
+      html += '</div>';
+      html += '<div class="alert-rr">R:R ' + rr + '</div>';
+      if (alert.message) {
+        html += '<div class="alert-message">' + alert.message + '</div>';
+      }
+      html += '<div class="alert-actions">';
+      html += '<button class="alert-btn-in" data-alert-id="' + alert.id + '">I\\u2019M IN</button>';
+      html += '<button class="alert-btn-skip" data-alert-id="' + alert.id + '">SKIP</button>';
+      html += '</div>';
+      html += '</div>';
+      return html;
+    }
+
+    function handleImIn(alert) {
+      var dir = getDirection(alert);
+      var instId = alert.instrument_id || 2;
+      var today = new Date().toISOString().slice(0, 10);
+
+      var payload = {
+        instrument_id: instId,
+        date: today,
+        direction: dir,
+        contracts: 1,
+        entry_price: alert.entry_price,
+        exit_price: alert.target_price,
+        pnl: 0,
+        notes: 'From alert: ' + (alert.message || '')
+      };
+
+      fetch('/api/trade-log', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      })
+      .then(function() {
+        return fetch('/api/alerts/' + alert.id + '/dismiss', { method: 'PUT' });
+      })
+      .then(function() {
+        document.dispatchEvent(new Event('account-changed'));
+        pollAlerts();
+      })
+      .catch(function(err) { console.error('Failed to log trade from alert', err); });
+    }
+
+    function handleSkip(alertId) {
+      fetch('/api/alerts/' + alertId + '/dismiss', { method: 'PUT' })
+        .then(function() { pollAlerts(); })
+        .catch(function(err) { console.error('Failed to dismiss alert', err); });
+    }
+
+    function processAlerts(alerts) {
+      var hasNew = false;
+      alerts.forEach(function(a) {
+        if (!seenIds[a.id]) {
+          hasNew = true;
+          seenIds[a.id] = true;
+        }
+      });
+
+      if (hasNew && !firstPoll) {
+        flashBorder();
+      }
+      firstPoll = false;
+
+      // Update pulsing dot
+      if (alerts.length > 0) {
+        alertDot.classList.add('visible');
+      } else {
+        alertDot.classList.remove('visible');
+      }
+
+      // Find ready/execute alerts for overlay
+      var overlayAlert = null;
+      alerts.forEach(function(a) {
+        if ((a.alert_type === 'ready' || a.alert_type === 'execute') && !overlayAlert) {
+          overlayAlert = a;
+        }
+      });
+
+      if (overlayAlert) {
+        overlayEl.innerHTML = renderOverlay(overlayAlert);
+
+        var inBtn = overlayEl.querySelector('.alert-btn-in');
+        var skipBtn = overlayEl.querySelector('.alert-btn-skip');
+        if (inBtn) {
+          inBtn.onclick = function() { handleImIn(overlayAlert); };
+        }
+        if (skipBtn) {
+          skipBtn.onclick = function() { handleSkip(overlayAlert.id); };
+        }
+
+        // Update chart and tracker with alert data
+        document.dispatchEvent(new CustomEvent('alert-levels', { detail: overlayAlert }));
+        document.dispatchEvent(new CustomEvent('alert-phase', { detail: { phase: overlayAlert.phase || 0 } }));
+      } else {
+        overlayEl.innerHTML = '';
+        document.dispatchEvent(new CustomEvent('alert-levels', { detail: null }));
+        document.dispatchEvent(new CustomEvent('alert-phase', { detail: null }));
+      }
+    }
+
+    function pollAlerts() {
+      fetch('/api/alerts/active', { credentials: 'same-origin' })
+        .then(function(r) { return r.json(); })
+        .then(function(alerts) { processAlerts(alerts || []); })
+        .catch(function() {});
+    }
+
+    pollAlerts();
+    setInterval(pollAlerts, 10000);
+
+    // Demo button
+    document.getElementById('demo-alert-btn').onclick = function() {
+      fetch('/api/alerts/demo', { method: 'POST', credentials: 'same-origin' })
+        .then(function() { pollAlerts(); })
+        .catch(function(err) { console.error('Failed to create demo alert', err); });
+    };
+  })();
+  </script>
+
+  <script>
+  /* ── AI Analysis ── */
+  (function() {
+    var aiEl = document.getElementById('ai-analysis');
+    var currentAnalysis = null;
+    var hasRun = false;
+
+    function getActiveAlertId() {
+      var inBtn = document.querySelector('.alert-btn-in');
+      return inBtn ? inBtn.dataset.alertId : null;
+    }
+
+    function renderCard() {
+      var btnLabel = hasRun ? '\u21BB Re-analyze' : '\u25C7 Run Analysis';
+      var html = '<div class="card ai-analysis-card" style="animation:slideUp 0.3s ease">';
+      html += '<div class="ai-analysis-header">';
+      html += '<span class="ai-analysis-title">\u25C8 AI ANALYSIS</span>';
+      html += '<span class="ai-analysis-tag">HAIKU</span>';
+      html += '</div>';
+      html += '<button class="ai-run-btn" id="ai-run-btn">' + btnLabel + '</button>';
+
+      if (currentAnalysis) {
+        var a = currentAnalysis;
+        var confColor = a.confidence >= 70 ? 'var(--red)' : 'var(--amber)';
+        var sigClass = a.confidence >= 70 ? 'high' : a.confidence >= 50 ? 'mid' : 'low';
+
+        html += '<div class="ai-signal-row">';
+        html += '<div><span class="ai-signal-tag ' + sigClass + '">' + (a.signal || 'N/A') + '</span>';
+        html += '<div class="ai-fragrance">Projection: ' + (a.fragrance || '') + '</div></div>';
+        html += '<div class="ai-confidence-box">';
+        html += '<div class="ai-confidence-num" style="color:' + confColor + '">' + (a.confidence || 0) + '</div>';
+        html += '<div class="ai-confidence-label">CONFIDENCE</div>';
+        html += '</div></div>';
+
+        html += '<div class="ai-summary">' + (a.summary || '') + '</div>';
+
+        html += '<div class="ai-levels-box">';
+        html += '<div class="ai-level-row"><span class="ai-level-label">ENTRY</span><span class="ai-level-value" style="color:var(--red)">' + (a.entry_price != null ? a.entry_price.toFixed(2) : '--') + '</span></div>';
+        html += '<div class="ai-level-row"><span class="ai-level-label">TARGET</span><span class="ai-level-value" style="color:var(--green)">' + (a.target_price != null ? a.target_price.toFixed(2) : '--') + '</span></div>';
+        html += '<div class="ai-level-row"><span class="ai-level-label">STOP</span><span class="ai-level-value" style="color:var(--danger)">' + (a.stop_price != null ? a.stop_price.toFixed(2) : '--') + '</span></div>';
+        html += '<div class="ai-level-row"><span class="ai-level-label">R:R</span><span class="ai-level-value" style="color:var(--amber)">' + (a.risk_reward != null ? a.risk_reward.toFixed(1) + ' : 1' : '--') + '</span></div>';
+        html += '</div>';
+
+        if (a.warnings && a.warnings.length) {
+          html += '<div class="ai-warnings">';
+          a.warnings.forEach(function(w) {
+            html += '<div class="ai-warning-item"><span class="ai-warning-bullet">\u25B8</span>' + w + '</div>';
+          });
+          html += '</div>';
+        }
+
+        html += '<div class="ai-redline-box">';
+        html += '<div class="ai-redline-label">REDLINE CHECK</div>';
+        html += '<div class="ai-redline-text">' + (a.consistency_check || '') + '</div>';
+        html += '<div class="ai-contracts-text">' + (a.contracts_suggestion || '') + '</div>';
+        html += '</div>';
+      }
+
+      html += '</div>';
+      aiEl.innerHTML = html;
+
+      document.getElementById('ai-run-btn').onclick = runAnalysis;
+    }
+
+    function runAnalysis() {
+      var btn = document.getElementById('ai-run-btn');
+      btn.disabled = true;
+      btn.innerHTML = '<span class="ai-spinner"></span> Analyzing\u2026';
+
+      var alertId = getActiveAlertId();
+      var url = alertId ? '/api/analyze/alert/' + alertId : '/api/analyze/demo';
+
+      fetch(url, { method: 'POST', credentials: 'same-origin' })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+          var analysis = data.analysis || data;
+          currentAnalysis = analysis;
+          hasRun = true;
+          renderCard();
+        })
+        .catch(function(err) {
+          console.error('AI analysis failed', err);
+          btn.disabled = false;
+          btn.innerHTML = hasRun ? '\u21BB Re-analyze' : '\u25C7 Run Analysis';
+        });
+    }
+
+    renderCard();
+  })();
+  </script>
+
+  <script>
+  /* ── Engine Status Indicator ── */
+  (function() {
+    var el = document.getElementById('engine-status');
+    function fetchStatus() {
+      fetch('/api/engine/status', { credentials: 'same-origin' })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+          var lastRun = data.last_run;
+          var timeAgo = 'never';
+          if (lastRun) {
+            var diff = Math.floor((Date.now() - new Date(lastRun + 'Z').getTime()) / 1000);
+            if (diff < 60) timeAgo = diff + 's ago';
+            else if (diff < 3600) timeAgo = Math.floor(diff / 60) + 'm ago';
+            else timeAgo = Math.floor(diff / 3600) + 'h ago';
+          }
+          var activeFvgs = data.fvg_counts ? data.fvg_counts.active : 0;
+          var setups = data.active_setups || 0;
+          el.textContent = 'Engine: last run ' + timeAgo + ' \\u00B7 ' + activeFvgs + ' active FVGs \\u00B7 ' + setups + ' setups today';
+        }).catch(function() {
+          el.textContent = 'Engine: offline';
+        });
+    }
+    fetchStatus();
+    setInterval(fetchStatus, 30000);
   })();
   </script>
 </body>

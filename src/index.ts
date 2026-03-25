@@ -3,6 +3,8 @@ import { verifyJwt } from './jwt';
 import { handleGoogleRedirect, handleCallback, handleLogout } from './auth';
 import { loginPage, appPage } from './pages';
 import { handleApiRoutes } from './api';
+import { fetchAndStoreCandles, computeSessionLevels } from './market-data';
+import { runStrategyEngine } from './strategy-engine';
 
 function getCookie(request: Request, name: string): string | null {
   const header = request.headers.get('Cookie');
@@ -96,5 +98,14 @@ export default {
     }
 
     return new Response('Not found', { status: 404 });
+  },
+  async scheduled(_event: ScheduledEvent, env: Env, _ctx: ExecutionContext): Promise<void> {
+    try {
+      await fetchAndStoreCandles(env);
+      await computeSessionLevels(env);
+      await runStrategyEngine(env);
+    } catch (err) {
+      console.error('Cron error:', err);
+    }
   },
 } satisfies ExportedHandler<Env>;
