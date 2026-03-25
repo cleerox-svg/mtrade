@@ -990,6 +990,17 @@ Respond in this exact JSON format:
     return json(results);
   }
 
+  // GET /api/kb/articles/:slug
+  const kbSlugMatch = path.match(/^\/api\/kb\/articles\/([a-z0-9_-]+)$/);
+  if (kbSlugMatch && method === 'GET') {
+    const slug = kbSlugMatch[1];
+    const row = await env.DB.prepare(
+      'SELECT id, category, slug, title, content FROM kb_articles WHERE slug = ?'
+    ).bind(slug).first();
+    if (!row) return json({ error: 'Article not found' }, 404);
+    return json(row);
+  }
+
   // GET /api/kb/search?q=...
   if (path === '/api/kb/search' && method === 'GET') {
     const q = url.searchParams.get('q') || '';

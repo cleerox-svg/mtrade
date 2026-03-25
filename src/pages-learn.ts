@@ -278,9 +278,11 @@ export function getLearnPage(user: { name: string; email: string; avatar_url: st
                   resultsBox.innerHTML = '';
                   var target = document.getElementById('article-' + item.slug);
                   if (target) {
-                    target.scrollIntoView({ behavior: 'smooth', block: 'center' });
                     var card = target.closest('.kb-article-card');
-                    if (card) card.click();
+                    if (card) {
+                      card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                      if (!card.classList.contains('expanded')) card.click();
+                    }
                   }
                 });
                 resultsBox.appendChild(row);
@@ -322,11 +324,96 @@ export function getLearnPage(user: { name: string; email: string; avatar_url: st
 
               var expandDiv = document.createElement('div');
               expandDiv.id = 'article-' + article.slug;
-              expandDiv.style.cssText = 'display:none;width:100%;';
+              expandDiv.className = 'kb-expand-area';
+              expandDiv.style.cssText = 'width:100%;max-height:0;overflow:hidden;transition:max-height 0.3s ease;';
               card.appendChild(expandDiv);
 
               card.addEventListener('click', function() {
-                console.log(article.slug);
+                var currentlyExpanded = contentContainer.querySelector('.kb-article-card.expanded');
+                if (currentlyExpanded && currentlyExpanded !== card) {
+                  var prevExpand = currentlyExpanded.querySelector('.kb-expand-area');
+                  var prevChevron = currentlyExpanded.querySelectorAll('span')[1];
+                  if (prevExpand) { prevExpand.style.maxHeight = '0px'; }
+                  if (prevChevron) prevChevron.textContent = '\u25B8';
+                  currentlyExpanded.classList.remove('expanded');
+                }
+
+                if (card.classList.contains('expanded')) {
+                  expandDiv.style.maxHeight = '0px';
+                  chevron.textContent = '\u25B8';
+                  card.classList.remove('expanded');
+                  return;
+                }
+
+                card.classList.add('expanded');
+                chevron.textContent = '\u25BE';
+                expandDiv.innerHTML = '<div style="height:100px;border-radius:8px;background:linear-gradient(90deg,rgba(255,255,255,0.02) 25%,rgba(255,255,255,0.06) 50%,rgba(255,255,255,0.02) 75%);background-size:200% 100%;animation:shimmer 1.5s infinite;"></div>';
+                expandDiv.style.maxHeight = expandDiv.scrollHeight + 'px';
+
+                fetch('/api/kb/articles/' + article.slug, { credentials: 'same-origin' })
+                  .then(function(r) { return r.json(); })
+                  .then(function(data) {
+                    if (!data.content) { expandDiv.innerHTML = '<div style="font-size:12px;color:var(--muted);">No content available.</div>'; expandDiv.style.maxHeight = expandDiv.scrollHeight + 'px'; return; }
+                    expandDiv.innerHTML = '';
+                    var contentArea = document.createElement('div');
+                    contentArea.style.cssText = 'padding:12px 0 4px 0;border-top:1px solid var(--border);margin-top:10px;';
+
+                    function parseLine(text) {
+                      var out = '';
+                      var i = 0;
+                      while (i < text.length) {
+                        if (text[i] === '*' && text[i+1] === '*') {
+                          var end = text.indexOf('**', i + 2);
+                          if (end !== -1) { out += '<span style="font-weight:600;color:var(--bright);">' + text.substring(i+2, end) + '</span>'; i = end + 2; continue; }
+                        }
+                        if (text[i] === '\x60') {
+                          var end2 = text.indexOf('\x60', i + 1);
+                          if (end2 !== -1) { out += '<span style="font-family:JetBrains Mono,monospace;background:rgba(255,255,255,0.04);padding:1px 5px;border-radius:3px;font-size:11px;">' + text.substring(i+1, end2) + '</span>'; i = end2 + 1; continue; }
+                        }
+                        out += text[i]; i++;
+                      }
+                      return out;
+                    }
+
+                    var lines = data.content.split('\\n');
+                    lines.forEach(function(line) {
+                      if (line.indexOf('## ') === 0) {
+                        var h = document.createElement('h3');
+                        h.innerHTML = parseLine(line.substring(3));
+                        h.style.cssText = 'font-family:Outfit,sans-serif;font-size:13px;font-weight:700;color:var(--red-soft);margin-top:16px;margin-bottom:6px;';
+                        contentArea.appendChild(h);
+                      } else if (line.indexOf('- ') === 0) {
+                        var bullet = document.createElement('div');
+                        bullet.style.cssText = 'display:flex;flex-direction:row;margin-bottom:4px;';
+                        var arrow = document.createElement('span');
+                        arrow.textContent = '\u25B8';
+                        arrow.style.cssText = 'color:var(--red-soft);font-size:8px;flex-shrink:0;margin-top:3px;';
+                        var btext = document.createElement('span');
+                        btext.innerHTML = parseLine(line.substring(2));
+                        btext.style.cssText = 'font-size:12px;color:var(--text);padding-left:4px;';
+                        bullet.appendChild(arrow);
+                        bullet.appendChild(btext);
+                        contentArea.appendChild(bullet);
+                      } else if (line.indexOf('> ') === 0) {
+                        var callout = document.createElement('div');
+                        callout.innerHTML = parseLine(line.substring(2));
+                        callout.style.cssText = 'background:rgba(251,44,90,0.03);border-left:2px solid var(--red);padding:10px 14px;border-radius:0 8px 8px 0;font-size:11px;color:var(--label);margin-top:8px;';
+                        contentArea.appendChild(callout);
+                      } else if (line.trim() === '') {
+                        var spacer = document.createElement('div');
+                        spacer.style.cssText = 'margin-bottom:10px;';
+                        contentArea.appendChild(spacer);
+                      } else {
+                        var p = document.createElement('p');
+                        p.innerHTML = parseLine(line);
+                        p.style.cssText = 'font-size:13px;color:var(--text);line-height:1.7;';
+                        contentArea.appendChild(p);
+                      }
+                    });
+
+                    expandDiv.appendChild(contentArea);
+                    expandDiv.style.maxHeight = expandDiv.scrollHeight + 'px';
+                  });
               });
               contentContainer.appendChild(card);
             });
