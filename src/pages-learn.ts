@@ -168,6 +168,124 @@ export function getLearnPage(user: { name: string; email: string; avatar_url: st
     }
 
     /* Footer */
+    /* Desktop sidebar layout */
+    @media (min-width: 1025px) {
+      .kb-layout {
+        display: grid;
+        grid-template-columns: 200px 1fr;
+        gap: 24px;
+      }
+      .kb-sidebar {
+        position: sticky;
+        top: 12px;
+        align-self: start;
+        max-height: calc(100vh - 24px);
+        overflow-y: auto;
+      }
+      .kb-sidebar a {
+        display: block;
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 9px;
+        letter-spacing: 1px;
+        text-transform: uppercase;
+        color: var(--muted);
+        text-decoration: none;
+        padding: 8px 12px;
+        border-radius: 6px;
+        margin-bottom: 2px;
+        transition: color 0.15s, background 0.15s;
+      }
+      .kb-sidebar a:hover { color: var(--label); background: rgba(255,255,255,0.02); }
+      .kb-sidebar a.active { color: var(--red); background: rgba(251,44,90,0.06); }
+    }
+    @media (max-width: 1024px) {
+      .kb-sidebar { display: none; }
+      .kb-layout { display: block; }
+    }
+
+    /* Ask AI */
+    .ask-ai-toggle {
+      font-family: 'Outfit', sans-serif;
+      font-size: 11px;
+      color: var(--red);
+      cursor: pointer;
+      margin-top: 12px;
+      display: inline-block;
+    }
+    .ask-ai-toggle:hover { text-decoration: underline; }
+    .ask-ai-form {
+      overflow: hidden;
+      max-height: 0;
+      transition: max-height 0.3s ease;
+      margin-top: 8px;
+    }
+    .ask-ai-form.open { max-height: 2000px; }
+    .ask-ai-input {
+      width: 100%;
+      background: #0a0a10;
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 10px 14px;
+      font-size: 13px;
+      font-family: 'JetBrains Mono', monospace;
+      outline: none;
+    }
+    .ask-ai-input:focus { border-color: var(--red); }
+    .ask-ai-btn-row {
+      display: flex;
+      justify-content: flex-end;
+      align-items: center;
+      gap: 8px;
+      margin-top: 8px;
+    }
+    .ask-ai-btn {
+      background: var(--red);
+      color: #fff;
+      font-family: 'Outfit', sans-serif;
+      font-size: 11px;
+      font-weight: 600;
+      padding: 6px 16px;
+      border-radius: 6px;
+      border: none;
+      cursor: pointer;
+      min-height: 36px;
+    }
+    .ask-ai-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .ask-ai-spinner {
+      width: 14px; height: 14px;
+      border: 2px solid var(--border);
+      border-top-color: var(--red);
+      border-radius: 50%;
+      animation: spin 0.6s linear infinite;
+      display: none;
+    }
+    .ask-ai-answer {
+      background: rgba(251,44,90,0.02);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px;
+      margin-top: 10px;
+    }
+    .ask-ai-answer-label {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 8px;
+      color: var(--red-soft);
+      letter-spacing: 1.5px;
+      margin-bottom: 6px;
+      text-transform: uppercase;
+    }
+    .ask-ai-answer-text {
+      font-size: 12px;
+      color: var(--text);
+      line-height: 1.6;
+    }
+    .ask-ai-error {
+      font-size: 11px;
+      color: var(--danger);
+      margin-top: 8px;
+    }
+
     .footer {
       text-align: center;
       padding: 32px 0 24px;
@@ -216,7 +334,10 @@ export function getLearnPage(user: { name: string; email: string; avatar_url: st
     </div>
 
     <div id="kb-search"></div>
-    <div id="kb-content"></div>
+    <div class="kb-layout">
+      <nav class="kb-sidebar" id="kb-sidebar"></nav>
+      <div id="kb-content"></div>
+    </div>
 
     <div class="footer">
       <div class="footer-brand">MTRADE</div>
@@ -303,9 +424,58 @@ export function getLearnPage(user: { name: string; email: string; avatar_url: st
             categories[a.category].push(a);
           });
 
-          Object.keys(categories).forEach(function(cat) {
+          // Build sidebar
+          var sidebar = document.getElementById('kb-sidebar');
+          var catNames = Object.keys(categories);
+          catNames.forEach(function(cat) {
+            var link = document.createElement('a');
+            link.href = '#cat-' + cat.replace(/\\s+/g, '-').toLowerCase();
+            link.textContent = cat;
+            link.dataset.cat = cat;
+            link.addEventListener('click', function(e) {
+              e.preventDefault();
+              var target = document.getElementById('cat-' + cat.replace(/\\s+/g, '-').toLowerCase());
+              if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            });
+            sidebar.appendChild(link);
+          });
+
+          // Highlight sidebar on scroll
+          function updateSidebarActive() {
+            var headers = contentContainer.querySelectorAll('[data-cat-header]');
+            var current = '';
+            headers.forEach(function(h) {
+              if (h.getBoundingClientRect().top <= 60) current = h.dataset.catHeader;
+            });
+            sidebar.querySelectorAll('a').forEach(function(a) {
+              a.classList.toggle('active', a.dataset.cat === current);
+            });
+          }
+          window.addEventListener('scroll', updateSidebarActive, { passive: true });
+
+          // parseLine shared helper
+          function parseLine(text) {
+            var out = '';
+            var i = 0;
+            while (i < text.length) {
+              if (text[i] === '*' && text[i+1] === '*') {
+                var end = text.indexOf('**', i + 2);
+                if (end !== -1) { out += '<span style="font-weight:600;color:var(--bright);">' + text.substring(i+2, end) + '</span>'; i = end + 2; continue; }
+              }
+              if (text[i] === '\x60') {
+                var end2 = text.indexOf('\x60', i + 1);
+                if (end2 !== -1) { out += '<span style="font-family:JetBrains Mono,monospace;background:rgba(255,255,255,0.04);padding:1px 5px;border-radius:3px;font-size:11px;">' + text.substring(i+1, end2) + '</span>'; i = end2 + 1; continue; }
+              }
+              out += text[i]; i++;
+            }
+            return out;
+          }
+
+          catNames.forEach(function(cat) {
             var header = document.createElement('div');
             header.textContent = cat;
+            header.id = 'cat-' + cat.replace(/\\s+/g, '-').toLowerCase();
+            header.dataset.catHeader = cat;
             header.style.cssText = 'font-family:Outfit,sans-serif;font-size:14px;font-weight:700;color:var(--red-soft);text-transform:uppercase;letter-spacing:2px;margin-top:24px;margin-bottom:8px;';
             contentContainer.appendChild(header);
 
@@ -358,23 +528,6 @@ export function getLearnPage(user: { name: string; email: string; avatar_url: st
                     var contentArea = document.createElement('div');
                     contentArea.style.cssText = 'padding:12px 0 4px 0;border-top:1px solid var(--border);margin-top:10px;';
 
-                    function parseLine(text) {
-                      var out = '';
-                      var i = 0;
-                      while (i < text.length) {
-                        if (text[i] === '*' && text[i+1] === '*') {
-                          var end = text.indexOf('**', i + 2);
-                          if (end !== -1) { out += '<span style="font-weight:600;color:var(--bright);">' + text.substring(i+2, end) + '</span>'; i = end + 2; continue; }
-                        }
-                        if (text[i] === '\x60') {
-                          var end2 = text.indexOf('\x60', i + 1);
-                          if (end2 !== -1) { out += '<span style="font-family:JetBrains Mono,monospace;background:rgba(255,255,255,0.04);padding:1px 5px;border-radius:3px;font-size:11px;">' + text.substring(i+1, end2) + '</span>'; i = end2 + 1; continue; }
-                        }
-                        out += text[i]; i++;
-                      }
-                      return out;
-                    }
-
                     var lines = data.content.split('\\n');
                     lines.forEach(function(line) {
                       if (line.indexOf('## ') === 0) {
@@ -411,6 +564,104 @@ export function getLearnPage(user: { name: string; email: string; avatar_url: st
                       }
                     });
 
+                    // --- Ask AI Feature ---
+                    var askSection = document.createElement('div');
+                    askSection.style.cssText = 'margin-top:4px;';
+                    askSection.addEventListener('click', function(e) { e.stopPropagation(); });
+
+                    var askToggle = document.createElement('div');
+                    askToggle.className = 'ask-ai-toggle';
+                    askToggle.textContent = 'Ask about this \u2192';
+                    askSection.appendChild(askToggle);
+
+                    var askForm = document.createElement('div');
+                    askForm.className = 'ask-ai-form';
+
+                    var askInput = document.createElement('input');
+                    askInput.type = 'text';
+                    askInput.className = 'ask-ai-input';
+                    askInput.placeholder = 'Ask a question about ' + article.title + '...';
+                    askForm.appendChild(askInput);
+
+                    var btnRow = document.createElement('div');
+                    btnRow.className = 'ask-ai-btn-row';
+                    var spinner = document.createElement('div');
+                    spinner.className = 'ask-ai-spinner';
+                    var askBtn = document.createElement('button');
+                    askBtn.className = 'ask-ai-btn';
+                    askBtn.textContent = 'Ask';
+                    btnRow.appendChild(spinner);
+                    btnRow.appendChild(askBtn);
+                    askForm.appendChild(btnRow);
+
+                    var answersContainer = document.createElement('div');
+                    askForm.appendChild(answersContainer);
+
+                    askSection.appendChild(askForm);
+                    contentArea.appendChild(askSection);
+
+                    askToggle.addEventListener('click', function() {
+                      askForm.classList.toggle('open');
+                      if (askForm.classList.contains('open')) {
+                        setTimeout(function() { askInput.focus(); }, 100);
+                      }
+                      expandDiv.style.maxHeight = expandDiv.scrollHeight + 2000 + 'px';
+                    });
+
+                    function submitQuestion() {
+                      var q = askInput.value.trim();
+                      if (!q) return;
+                      askInput.disabled = true;
+                      askBtn.disabled = true;
+                      spinner.style.display = 'block';
+                      // Remove previous error
+                      var prevErr = askForm.querySelector('.ask-ai-error');
+                      if (prevErr) prevErr.remove();
+
+                      fetch('/api/kb/ask', {
+                        method: 'POST',
+                        credentials: 'same-origin',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ slug: article.slug, question: q })
+                      })
+                      .then(function(r) {
+                        if (!r.ok) throw new Error('fail');
+                        return r.json();
+                      })
+                      .then(function(res) {
+                        var box = document.createElement('div');
+                        box.className = 'ask-ai-answer';
+                        var label = document.createElement('div');
+                        label.className = 'ask-ai-answer-label';
+                        label.textContent = 'AI ANSWER';
+                        var txt = document.createElement('div');
+                        txt.className = 'ask-ai-answer-text';
+                        txt.innerHTML = parseLine(res.answer || '');
+                        box.appendChild(label);
+                        box.appendChild(txt);
+                        answersContainer.appendChild(box);
+                        askInput.value = '';
+                        expandDiv.style.maxHeight = expandDiv.scrollHeight + 2000 + 'px';
+                      })
+                      .catch(function() {
+                        var err = document.createElement('div');
+                        err.className = 'ask-ai-error';
+                        err.textContent = "Couldn\\u2019t get an answer \\u2014 try again";
+                        askForm.appendChild(err);
+                      })
+                      .finally(function() {
+                        askInput.disabled = false;
+                        askBtn.disabled = false;
+                        spinner.style.display = 'none';
+                        askInput.focus();
+                      });
+                    }
+
+                    askBtn.addEventListener('click', submitQuestion);
+                    askInput.addEventListener('keydown', function(e) {
+                      if (e.key === 'Enter') submitQuestion();
+                    });
+
                     expandDiv.appendChild(contentArea);
                     expandDiv.style.maxHeight = expandDiv.scrollHeight + 'px';
                   });
@@ -418,6 +669,7 @@ export function getLearnPage(user: { name: string; email: string; avatar_url: st
               contentContainer.appendChild(card);
             });
           });
+          setTimeout(updateSidebarActive, 100);
         });
     })();
 
