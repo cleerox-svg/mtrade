@@ -2287,12 +2287,9 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
         });
       });
 
-      // Setup crosshair and resize observer
+      // Setup crosshair
       var wrap = chartEl.querySelector('.chart-wrap');
-      if (wrap) {
-        setupCrosshair(wrap);
-        if (typeof observeChartContainer === 'function') observeChartContainer();
-      }
+      if (wrap) setupCrosshair(wrap);
     }
 
     function loadAndRender() {
@@ -2302,19 +2299,20 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
       });
     }
 
-    /* Debounced resize handler for SVG chart */
+    /* Debounced resize handler for SVG chart — use window resize to avoid loop */
     var resizeTimer = null;
-    function onChartResize() {
+    var lastChartWidth = 0;
+    window.addEventListener('resize', function() {
       clearTimeout(resizeTimer);
       resizeTimer = setTimeout(function() {
-        renderChartWithData();
+        var wrap = chartEl.querySelector('.chart-wrap');
+        var newWidth = wrap ? wrap.offsetWidth : window.innerWidth;
+        if (newWidth !== lastChartWidth) {
+          lastChartWidth = newWidth;
+          renderChartWithData();
+        }
       }, 250);
-    }
-    var chartObserver = new ResizeObserver(function() { onChartResize(); });
-    function observeChartContainer() {
-      var wrap = chartEl.querySelector('.chart-wrap');
-      if (wrap) chartObserver.observe(wrap);
-    }
+    });
 
     loadAndRender();
     setInterval(loadAndRender, 60000);
