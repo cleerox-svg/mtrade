@@ -89,7 +89,8 @@ export default {
       if (!payload) {
         return Response.redirect(new URL('/', url.origin).toString(), 302);
       }
-      return new Response(appPage(payload.name), {
+      const userRow = await env.DB.prepare('SELECT avatar_url FROM users WHERE id = ?').bind(payload.sub).first<{ avatar_url: string }>();
+      return new Response(appPage({ name: payload.name, email: payload.email, avatar_url: userRow?.avatar_url ?? '' }), {
         headers: { 'Content-Type': 'text/html; charset=utf-8' },
       });
     }
