@@ -44,35 +44,39 @@ async function computeDashboardMetrics(
   total_pnl: number;
   best_day: number;
   consistency_pct: number;
-  consistency_limit: number;
+  consistency_limit: number | null;
   drawdown_used: number;
   drawdown_limit: number;
   drawdown_pct: number;
   safety_net_reached: boolean;
+  account_type: string;
 } | null> {
   const account = await env.DB.prepare(
-    'SELECT * FROM apex_accounts WHERE user_id = ? AND is_active = 1 LIMIT 1'
+    'SELECT * FROM alpha_accounts WHERE user_id = ? AND is_active = 1 LIMIT 1'
   ).bind(userId).first<Record<string, unknown>>();
   if (!account) return null;
 
   const { results: rows } = await env.DB.prepare(
-    'SELECT * FROM apex_daily_pnl WHERE apex_account_id = ? ORDER BY date ASC'
+    'SELECT * FROM alpha_daily_pnl WHERE alpha_account_id = ? ORDER BY date ASC'
   ).bind(account.id).all<Record<string, unknown>>();
 
   const totalPnl = rows.reduce((s, r) => s + (r.pnl as number), 0);
   const bestDay = rows.length ? Math.max(...rows.map(r => r.pnl as number)) : 0;
 
-  // Consistency
+  // Consistency (40% for Standard/Zero, none for Advanced)
+  const accountType = account.account_type as string;
+  const consistencyLimit = accountType === 'advanced' ? null : 40;
   const profitDays = rows.filter(r => (r.pnl as number) > 0);
   const totalProfit = profitDays.reduce((s, r) => s + (r.pnl as number), 0);
   let consistencyPct = 100;
-  if (totalProfit > 0 && profitDays.length > 0) {
+  if (consistencyLimit !== null && totalProfit > 0 && profitDays.length > 0) {
     const maxDayPct = Math.max(...profitDays.map(r => ((r.pnl as number) / totalProfit) * 100));
-    consistencyPct = Math.round(100 - Math.max(0, maxDayPct - 30));
+    consistencyPct = Math.round(100 - Math.max(0, maxDayPct - consistencyLimit));
   }
 
-  // Drawdown
-  const drawdownLimit = account.drawdown_limit as number;
+  // MLL: 4% for Standard/Zero, 3.5% for Advanced
+  const mllRate = accountType === 'advanced' ? 0.035 : 0.04;
+  const mll = (account.account_size as number) * mllRate;
   let drawdownUsed = 0;
   if (account.drawdown_type === 'trailing') {
     let peak = account.account_size as number;
@@ -87,18 +91,19 @@ async function computeDashboardMetrics(
     drawdownUsed = Math.abs(losses.reduce((s, r) => s + (r.pnl as number), 0));
   }
 
-  const drawdownPct = drawdownLimit > 0 ? (drawdownUsed / drawdownLimit) * 100 : 0;
-  const safetyNetReached = (drawdownLimit - drawdownUsed) <= 0;
+  const drawdownPct = mll > 0 ? (drawdownUsed / mll) * 100 : 0;
+  const safetyNetReached = totalPnl >= mll;
 
   return {
     total_pnl: Math.round(totalPnl * 100) / 100,
     best_day: Math.round(bestDay * 100) / 100,
     consistency_pct: consistencyPct,
-    consistency_limit: 30,
+    consistency_limit: consistencyLimit,
     drawdown_used: Math.round(drawdownUsed * 100) / 100,
-    drawdown_limit: drawdownLimit,
+    drawdown_limit: mll,
     drawdown_pct: drawdownPct,
     safety_net_reached: safetyNetReached,
+    account_type: accountType,
   };
 }
 
@@ -111,22 +116,29 @@ export async function handleApiRoutes(
 ): Promise<Response> {
   const method = request.method;
 
+  // ── Backwards-compatible redirects: /api/apex/* → /api/alpha/* ──
+  if (path.startsWith('/api/apex/')) {
+    const newUrl = new URL(url.toString());
+    newUrl.pathname = path.replace('/api/apex/', '/api/alpha/');
+    return Response.redirect(newUrl.toString(), 302);
+  }
+
   // GET /api/instruments
   if (path === '/api/instruments' && method === 'GET') {
     const { results } = await env.DB.prepare('SELECT * FROM instruments').all();
     return json(results);
   }
 
-  // GET /api/apex/accounts
-  if (path === '/api/apex/accounts' && method === 'GET') {
+  // GET /api/alpha/accounts
+  if (path === '/api/alpha/accounts' && method === 'GET') {
     const { results } = await env.DB.prepare(
-      'SELECT * FROM apex_accounts WHERE user_id = ? ORDER BY created_at DESC'
+      'SELECT * FROM alpha_accounts WHERE user_id = ? ORDER BY created_at DESC'
     ).bind(user.sub).all();
     return json(results);
   }
 
-  // POST /api/apex/accounts
-  if (path === '/api/apex/accounts' && method === 'POST') {
+  // POST /api/alpha/accounts
+  if (path === '/api/alpha/accounts' && method === 'POST') {
     const body = await request.json<Record<string, unknown>>();
 
     let accountSize = body.account_size as number;
@@ -138,7 +150,7 @@ export async function handleApiRoutes(
     // If template_id provided, load template and use its values as defaults
     if (body.template_id) {
       const tpl = await env.DB.prepare(
-        'SELECT * FROM apex_account_templates WHERE id = ?'
+        'SELECT * FROM alpha_account_templates WHERE id = ?'
       ).bind(body.template_id).first<Record<string, unknown>>();
       if (!tpl) return json({ error: 'Template not found' }, 404);
       accountSize = (body.account_size as number) || (tpl.account_size as number);
@@ -149,7 +161,7 @@ export async function handleApiRoutes(
     }
 
     const result = await env.DB.prepare(
-      `INSERT INTO apex_accounts (user_id, label, account_size, account_type, drawdown_type, drawdown_limit, profit_target, max_contracts, scaling_limit)
+      `INSERT INTO alpha_accounts (user_id, label, account_size, account_type, drawdown_type, drawdown_limit, profit_target, max_contracts, scaling_limit)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
     ).bind(
       user.sub, body.label, accountSize, body.account_type,
@@ -159,13 +171,13 @@ export async function handleApiRoutes(
     return json({ id: result.meta.last_row_id }, 201);
   }
 
-  // PUT /api/apex/accounts/:id
-  const apexAccountMatch = path.match(/^\/api\/apex\/accounts\/(\d+)$/);
-  if (apexAccountMatch && method === 'PUT') {
-    const id = apexAccountMatch[1];
+  // PUT /api/alpha/accounts/:id
+  const alphaAccountMatch = path.match(/^\/api\/alpha\/accounts\/(\d+)$/);
+  if (alphaAccountMatch && method === 'PUT') {
+    const id = alphaAccountMatch[1];
     const body = await request.json<Record<string, unknown>>();
     await env.DB.prepare(
-      `UPDATE apex_accounts SET label = ?, account_size = ?, account_type = ?, drawdown_type = ?,
+      `UPDATE alpha_accounts SET label = ?, account_size = ?, account_type = ?, drawdown_type = ?,
        drawdown_limit = ?, profit_target = ?, max_contracts = ?, scaling_limit = ?, is_active = ?
        WHERE id = ? AND user_id = ?`
     ).bind(
@@ -176,26 +188,26 @@ export async function handleApiRoutes(
     return json({ ok: true });
   }
 
-  // GET /api/apex/:id/daily-pnl
-  const dailyPnlMatch = path.match(/^\/api\/apex\/(\d+)\/daily-pnl$/);
+  // GET /api/alpha/:id/daily-pnl
+  const dailyPnlMatch = path.match(/^\/api\/alpha\/(\d+)\/daily-pnl$/);
   if (dailyPnlMatch && method === 'GET') {
     const accountId = dailyPnlMatch[1];
     const days = parseInt(url.searchParams.get('days') || '30', 10);
     const { results } = await env.DB.prepare(
-      `SELECT * FROM apex_daily_pnl WHERE apex_account_id = ?
+      `SELECT * FROM alpha_daily_pnl WHERE alpha_account_id = ?
        ORDER BY date DESC LIMIT ?`
     ).bind(accountId, days).all();
     return json(results);
   }
 
-  // POST /api/apex/:id/daily-pnl (upsert)
+  // POST /api/alpha/:id/daily-pnl (upsert)
   if (dailyPnlMatch && method === 'POST') {
     const accountId = dailyPnlMatch[1];
     const body = await request.json<Record<string, unknown>>();
     await env.DB.prepare(
-      `INSERT INTO apex_daily_pnl (apex_account_id, date, pnl, trades_count, best_trade, worst_trade, notes)
+      `INSERT INTO alpha_daily_pnl (alpha_account_id, date, pnl, trades_count, best_trade, worst_trade, notes)
        VALUES (?, ?, ?, ?, ?, ?, ?)
-       ON CONFLICT(apex_account_id, date) DO UPDATE SET
+       ON CONFLICT(alpha_account_id, date) DO UPDATE SET
        pnl = excluded.pnl, trades_count = excluded.trades_count,
        best_trade = excluded.best_trade, worst_trade = excluded.worst_trade, notes = excluded.notes`
     ).bind(
@@ -205,40 +217,46 @@ export async function handleApiRoutes(
     return json({ ok: true });
   }
 
-  // GET /api/apex/:id/dashboard
-  const dashMatch = path.match(/^\/api\/apex\/(\d+)\/dashboard$/);
+  // GET /api/alpha/:id/dashboard
+  const dashMatch = path.match(/^\/api\/alpha\/(\d+)\/dashboard$/);
   if (dashMatch && method === 'GET') {
     const accountId = dashMatch[1];
 
     // Get account info
     const account = await env.DB.prepare(
-      'SELECT * FROM apex_accounts WHERE id = ? AND user_id = ?'
+      'SELECT * FROM alpha_accounts WHERE id = ? AND user_id = ?'
     ).bind(accountId, user.sub).first<Record<string, unknown>>();
     if (!account) return json({ error: 'Account not found' }, 404);
 
+    const accountSize = account.account_size as number;
+    const accountType = account.account_type as string; // 'zero', 'standard', 'advanced'
+
     // Get all daily PnL rows
     const { results: rows } = await env.DB.prepare(
-      'SELECT * FROM apex_daily_pnl WHERE apex_account_id = ? ORDER BY date ASC'
+      'SELECT * FROM alpha_daily_pnl WHERE alpha_account_id = ? ORDER BY date ASC'
     ).bind(accountId).all<Record<string, unknown>>();
 
     const totalPnl = rows.reduce((s, r) => s + (r.pnl as number), 0);
-    const balance = (account.account_size as number) + totalPnl;
+    const balance = accountSize + totalPnl;
     const bestDay = rows.length ? Math.max(...rows.map(r => r.pnl as number)) : 0;
 
-    // Consistency: no single day > 30% of total profit
+    // Consistency: 40% rule for Standard/Zero, none for Advanced
+    const consistencyLimit = accountType === 'advanced' ? null : 40;
+    const consistencyApplies = accountType !== 'advanced';
     const profitDays = rows.filter(r => (r.pnl as number) > 0);
     const totalProfit = profitDays.reduce((s, r) => s + (r.pnl as number), 0);
     let consistencyPct = 100;
-    if (totalProfit > 0 && profitDays.length > 0) {
+    if (consistencyLimit !== null && totalProfit > 0 && profitDays.length > 0) {
       const maxDayPct = Math.max(...profitDays.map(r => ((r.pnl as number) / totalProfit) * 100));
-      consistencyPct = Math.round(100 - Math.max(0, maxDayPct - 30));
+      consistencyPct = Math.round(100 - Math.max(0, maxDayPct - consistencyLimit));
     }
 
-    // Drawdown used
-    const drawdownLimit = account.drawdown_limit as number;
+    // MLL (Maximum Loss Limit): 4% for Standard/Zero, 3.5% for Advanced — calculated on EOD balance
+    const mllRate = accountType === 'advanced' ? 0.035 : 0.04;
+    const mll = accountSize * mllRate;
     let drawdownUsed = 0;
     if (account.drawdown_type === 'trailing') {
-      let peak = account.account_size as number;
+      let peak = accountSize;
       let running = peak;
       for (const r of rows) {
         running += r.pnl as number;
@@ -251,12 +269,20 @@ export async function handleApiRoutes(
       drawdownUsed = Math.abs(losses.reduce((s, r) => s + (r.pnl as number), 0));
     }
 
-    const safetyNet = drawdownLimit - drawdownUsed;
+    const safetyNet = mll - drawdownUsed;
+
+    // Daily Loss Guard: 2% of account size
+    const dailyLossGuard = accountSize * 0.02;
+    const todayET = new Date().toLocaleString('en-US', { timeZone: 'America/New_York' });
+    const etDate = new Date(todayET);
+    const todayStr = `${etDate.getFullYear()}-${String(etDate.getMonth() + 1).padStart(2, '0')}-${String(etDate.getDate()).padStart(2, '0')}`;
+    const todayRow = rows.find(r => r.date === todayStr);
+    const todayPnl = todayRow ? (todayRow.pnl as number) : 0;
+    const dlgRemaining = dailyLossGuard - Math.abs(Math.min(todayPnl, 0));
+    const dlgHit = todayPnl < 0 && Math.abs(todayPnl) >= dailyLossGuard;
 
     // Win rate & profit factor
-    const totalTrades = rows.reduce((s, r) => s + ((r.trades_count as number) || 0), 0);
     const winDays = rows.filter(r => (r.pnl as number) > 0).length;
-    const lossDays = rows.filter(r => (r.pnl as number) < 0).length;
     const winRate = rows.length ? Math.round((winDays / rows.length) * 100) : 0;
     const totalLoss = Math.abs(rows.filter(r => (r.pnl as number) < 0).reduce((s, r) => s + (r.pnl as number), 0));
     const profitFactor = totalLoss > 0 ? Math.round((totalProfit / totalLoss) * 100) / 100 : totalProfit > 0 ? Infinity : 0;
@@ -264,20 +290,62 @@ export async function handleApiRoutes(
     // Worst day
     const worstDay = rows.length ? Math.min(...rows.map(r => r.pnl as number)) : 0;
 
-    // Payout eligibility
-    const profitTarget = account.profit_target as number;
+    // Profit target: 6% for Standard/Zero, 8% for Advanced
+    const profitTargetPct = accountType === 'advanced' ? 0.08 : 0.06;
+    const profitTarget = accountSize * profitTargetPct;
+
+    // Winning days count (days with pnl >= $200) — used for Zero/Advanced payout cadence
+    // Count since last payout (or all time if no payouts)
+    const winningDaysCount = rows.filter(r => (r.pnl as number) >= 200).length;
+
+    // Payout rules per account type
+    let profitSplitPct: number;
+    let maxPayout: number;
+    const payoutCount = 0; // TODO: track actual payout count from DB
+
+    if (accountType === 'standard') {
+      // Standard: tiered profit split 70% → 80% → 90%
+      if (payoutCount >= 4) profitSplitPct = 90;
+      else if (payoutCount >= 2) profitSplitPct = 80;
+      else profitSplitPct = 70;
+      maxPayout = 15000;
+    } else if (accountType === 'zero') {
+      // Zero: 90% from day 1
+      profitSplitPct = 90;
+      maxPayout = accountSize >= 100000 ? 2500 : 1500;
+    } else {
+      // Advanced: 90% split
+      profitSplitPct = 90;
+      maxPayout = 15000;
+    }
+
+    // Payout eligibility blockers
     const blockers: string[] = [];
-    if (totalPnl < profitTarget) blockers.push(`Need $${(profitTarget - totalPnl).toFixed(2)} more profit`);
-    if (rows.length < 10) blockers.push(`Need ${10 - rows.length} more trading days (min 10)`);
-    if (consistencyPct < 70) blockers.push('Consistency below 70%');
-    if (safetyNet < 0) blockers.push('Drawdown limit exceeded');
+    if (totalPnl < profitTarget) blockers.push(`Need $${(profitTarget - totalPnl).toFixed(2)} more profit (${(profitTargetPct * 100).toFixed(0)}% target)`);
+
+    if (accountType === 'standard') {
+      // Standard: bi-weekly (every 14 days from first trade)
+      if (rows.length < 14) blockers.push(`Need ${14 - rows.length} more trading days (bi-weekly payout)`);
+      if (consistencyApplies && consistencyPct < 60) blockers.push('Consistency below required threshold (40% rule)');
+      if (totalPnl < 200) blockers.push('Minimum payout is $200');
+    } else if (accountType === 'zero') {
+      // Zero: every 5 winning days ($200+ each)
+      if (winningDaysCount < 5) blockers.push(`Need ${5 - winningDaysCount} more winning days ($200+ each)`);
+      if (consistencyApplies && consistencyPct < 60) blockers.push('Consistency below required threshold (40% rule)');
+      if (totalPnl < 200) blockers.push('Minimum payout is $200');
+    } else {
+      // Advanced: every 5 winning days ($200+ each), NO consistency
+      if (winningDaysCount < 5) blockers.push(`Need ${5 - winningDaysCount} more winning days ($200+ each)`);
+      if (totalPnl < 1000) blockers.push('Minimum payout is $1,000');
+    }
+
+    if (safetyNet < 0) blockers.push('MLL (Maximum Loss Limit) exceeded');
     const payoutEligible = blockers.length === 0;
 
-    // Payout checks for status row
+    // Payout checks
     const gripReached = totalPnl >= profitTarget;
-    const minTradingDays = rows.length >= 10;
-    const consistencyPass = consistencyPct >= 70;
-    const minProfit = totalPnl >= 500;
+    const consistencyPass = !consistencyApplies || consistencyPct >= 60;
+    const minPayoutMet = accountType === 'advanced' ? totalPnl >= 1000 : totalPnl >= 200;
 
     return json({
       balance: Math.round(balance * 100) / 100,
@@ -285,11 +353,18 @@ export async function handleApiRoutes(
       best_day: Math.round(bestDay * 100) / 100,
       worst_day: Math.round(worstDay * 100) / 100,
       consistency_pct: consistencyPct,
-      consistency_limit: 30,
+      consistency_limit: consistencyLimit,
+      consistency_applies: consistencyApplies,
       drawdown_used: Math.round(drawdownUsed * 100) / 100,
-      drawdown_limit: drawdownLimit,
+      drawdown_limit: Math.round(mll * 100) / 100,
       safety_net: Math.round(safetyNet * 100) / 100,
-      profit_target: profitTarget,
+      profit_target: Math.round(profitTarget * 100) / 100,
+      daily_loss_guard: Math.round(dailyLossGuard * 100) / 100,
+      daily_loss_guard_remaining: Math.round(dlgRemaining * 100) / 100,
+      daily_loss_guard_hit: dlgHit,
+      profit_split_pct: profitSplitPct,
+      winning_days_count: winningDaysCount,
+      max_payout: maxPayout,
       win_rate: winRate,
       profit_factor: profitFactor,
       trading_days: rows.length,
@@ -298,9 +373,8 @@ export async function handleApiRoutes(
       blockers,
       payout_checks: {
         consistency: consistencyPass,
-        trading_days: minTradingDays,
         grip: gripReached,
-        min_500: minProfit,
+        min_payout: minPayoutMet,
       },
     });
   }
@@ -415,11 +489,11 @@ Proposed Entry: ${alert.entry_price}
 Target: ${alert.target_price}
 Stop: ${alert.stop_price}
 Risk/Reward: ${alert.risk_reward}
-${metrics ? `Trader's Apex Account Status:
+${metrics ? `Trader's Alpha Futures Account Status:
 Total P&L: $${metrics.total_pnl}
 Best Single Day: $${metrics.best_day} (${metrics.consistency_pct}% of total — limit is ${metrics.consistency_limit}%)
 Drawdown Used: $${metrics.drawdown_used} of $${metrics.drawdown_limit} (${metrics.drawdown_pct.toFixed(1)}%)
-Safety Net: ${metrics.safety_net_reached ? 'reached' : 'not reached'}` : 'Trader has no active Apex account'}
+Safety Net: ${metrics.safety_net_reached ? 'reached' : 'not reached'}` : 'Trader has no active Alpha Futures account'}
 Respond in this exact JSON format:
 {
 "confidence": 0-100,
@@ -431,7 +505,7 @@ Respond in this exact JSON format:
 "stop_price": number,
 "risk_reward": number,
 "warnings": ["array of 2-4 things to watch or risks"],
-"consistency_check": "one sentence about how this trade impacts Apex consistency rule",
+"consistency_check": "one sentence about how this trade impacts Alpha Futures consistency rule",
 "contracts_suggestion": "recommended position size given drawdown remaining"
 }`;
 
@@ -477,11 +551,11 @@ Proposed Entry: ${alert!.entry_price}
 Target: ${alert!.target_price}
 Stop: ${alert!.stop_price}
 Risk/Reward: ${alert!.risk_reward}
-${metrics ? `Trader's Apex Account Status:
+${metrics ? `Trader's Alpha Futures Account Status:
 Total P&L: $${metrics.total_pnl}
 Best Single Day: $${metrics.best_day} (${metrics.consistency_pct}% of total — limit is ${metrics.consistency_limit}%)
 Drawdown Used: $${metrics.drawdown_used} of $${metrics.drawdown_limit} (${metrics.drawdown_pct.toFixed(1)}%)
-Safety Net: ${metrics.safety_net_reached ? 'reached' : 'not reached'}` : 'Trader has no active Apex account'}
+Safety Net: ${metrics.safety_net_reached ? 'reached' : 'not reached'}` : 'Trader has no active Alpha Futures account'}
 Respond in this exact JSON format:
 {
 "confidence": 0-100,
@@ -493,7 +567,7 @@ Respond in this exact JSON format:
 "stop_price": number,
 "risk_reward": number,
 "warnings": ["array of 2-4 things to watch or risks"],
-"consistency_check": "one sentence about how this trade impacts Apex consistency rule",
+"consistency_check": "one sentence about how this trade impacts Alpha Futures consistency rule",
 "contracts_suggestion": "recommended position size given drawdown remaining"
 }`;
 
@@ -534,11 +608,11 @@ Proposed Entry: ${alert.entry_price}
 Target: ${alert.target_price}
 Stop: ${alert.stop_price}
 Risk/Reward: ${alert.risk_reward}
-${metrics ? `Trader's Apex Account Status:
+${metrics ? `Trader's Alpha Futures Account Status:
 Total P&L: $${metrics.total_pnl}
 Best Single Day: $${metrics.best_day} (${metrics.consistency_pct}% of total — limit is ${metrics.consistency_limit}%)
 Drawdown Used: $${metrics.drawdown_used} of $${metrics.drawdown_limit} (${metrics.drawdown_pct.toFixed(1)}%)
-Safety Net: ${metrics.safety_net_reached ? 'reached' : 'not reached'}` : 'Trader has no active Apex account'}
+Safety Net: ${metrics.safety_net_reached ? 'reached' : 'not reached'}` : 'Trader has no active Alpha Futures account'}
 Respond in this exact JSON format:
 {
 "confidence": 0-100,
@@ -550,7 +624,7 @@ Respond in this exact JSON format:
 "stop_price": number,
 "risk_reward": number,
 "warnings": ["array of 2-4 things to watch or risks"],
-"consistency_check": "one sentence about how this trade impacts Apex consistency rule",
+"consistency_check": "one sentence about how this trade impacts Alpha Futures consistency rule",
 "contracts_suggestion": "recommended position size given drawdown remaining"
 }`;
 
@@ -965,13 +1039,13 @@ Respond in this exact JSON format:
     }
   }
 
-  // POST /api/apex/:id/compliance-check
-  const complianceMatch = path.match(/^\/api\/apex\/(\d+)\/compliance-check$/);
+  // POST /api/alpha/:id/compliance-check
+  const complianceMatch = path.match(/^\/api\/alpha\/(\d+)\/compliance-check$/);
   if (complianceMatch && method === 'POST') {
     const accountId = parseInt(complianceMatch[1], 10);
     // Verify account belongs to user
     const acct = await env.DB.prepare(
-      'SELECT id FROM apex_accounts WHERE id = ? AND user_id = ?'
+      'SELECT id FROM alpha_accounts WHERE id = ? AND user_id = ?'
     ).bind(accountId, user.sub).first();
     if (!acct) return json({ error: 'Account not found' }, 404);
 
@@ -984,12 +1058,12 @@ Respond in this exact JSON format:
     }
   }
 
-  // POST /api/apex/:id/quick-check
-  const quickCheckMatch = path.match(/^\/api\/apex\/(\d+)\/quick-check$/);
+  // POST /api/alpha/:id/quick-check
+  const quickCheckMatch = path.match(/^\/api\/alpha\/(\d+)\/quick-check$/);
   if (quickCheckMatch && method === 'POST') {
     const accountId = parseInt(quickCheckMatch[1], 10);
     const acct = await env.DB.prepare(
-      'SELECT id FROM apex_accounts WHERE id = ? AND user_id = ?'
+      'SELECT id FROM alpha_accounts WHERE id = ? AND user_id = ?'
     ).bind(accountId, user.sub).first();
     if (!acct) return json({ error: 'Account not found' }, 404);
 
@@ -1190,10 +1264,10 @@ Respond in this exact JSON format:
     return json(updated);
   }
 
-  // GET /api/apex/templates
-  if (path === '/api/apex/templates' && method === 'GET') {
+  // GET /api/alpha/templates
+  if (path === '/api/alpha/templates' && method === 'GET') {
     const { results } = await env.DB.prepare(
-      'SELECT * FROM apex_account_templates ORDER BY account_size ASC'
+      'SELECT * FROM alpha_account_templates ORDER BY account_size ASC'
     ).all();
     return json(results);
   }

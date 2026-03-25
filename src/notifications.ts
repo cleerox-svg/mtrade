@@ -140,7 +140,7 @@ function buildAlertEmbed(
         { name: 'Entry', value: fmt(alert.entry_price), inline: true },
         { name: 'Target', value: fmt(alert.target_price), inline: true },
         { name: 'Stop', value: fmt(alert.stop_price), inline: true },
-        { name: 'R:R', value: `${fmt(alert.risk_reward)}:1`, inline: true },
+        { name: 'R:R', value: `1:${fmt(alert.risk_reward)}`, inline: true },
         { name: 'FVG', value: `${fmt(alert.fvg_low)} \u2013 ${fmt(alert.fvg_high)}`, inline: true },
         { name: 'IFVG', value: alert.ifvg_high != null ? `${fmt(alert.ifvg_low)} \u2013 ${fmt(alert.ifvg_high)}` : '\u2014', inline: true },
         { name: 'Signal', value: 'Continuation confirmed. Waiting for hold...', inline: false },
@@ -155,7 +155,7 @@ function buildAlertEmbed(
       { name: 'Entry', value: `**${fmt(alert.entry_price)}**`, inline: true },
       { name: 'Target', value: `**${fmt(alert.target_price)}**`, inline: true },
       { name: 'Stop', value: `**${fmt(alert.stop_price)}**`, inline: true },
-      { name: 'R:R', value: `**${fmt(alert.risk_reward)}:1**`, inline: true },
+      { name: 'R:R', value: `**1:${fmt(alert.risk_reward)}**`, inline: true },
       { name: 'Sweep', value: `London ${sweepSide} at ${fmt(alert.sweep_level)}`, inline: true },
     ];
 
@@ -189,7 +189,7 @@ function buildAlertEmbed(
 
     return {
       title: '\ud83d\udea8 ACCORD \u2014 ALL NOTES ALIGNED',
-      description: `**${symbol} \u2014 ${direction} NOW**\nEntry: ${fmt(alert.entry_price)} \u2192 Target: ${fmt(alert.target_price)}\nStop: ${fmt(alert.stop_price)} \u00b7 R:R ${fmt(alert.risk_reward)}:1`,
+      description: `**${symbol} \u2014 ${direction} NOW**\nEntry: ${fmt(alert.entry_price)} \u2192 Target: ${fmt(alert.target_price)}\nStop: ${fmt(alert.stop_price)} \u00b7 R:R 1:${fmt(alert.risk_reward)}`,
       color: 16396084,
       fields,
       footer: FOOTER,
@@ -282,7 +282,7 @@ export async function sendDrawdownWarning(
     title: isCritical
       ? '\ud83d\udd34 REDLINE CRITICAL \u2014 Drawdown Alert'
       : '\u26a0\ufe0f REDLINE WARNING \u2014 Drawdown Alert',
-    description: `Apex ${account.label}: Drawdown at ${Math.round(metrics.drawdown_pct)}%`,
+    description: `Alpha Futures ${account.label}: Drawdown at ${Math.round(metrics.drawdown_pct)}%`,
     color: isCritical ? 16396084 : 16776960,
     fields: [
       { name: 'Used', value: `$${metrics.drawdown_used.toFixed(2)} / $${metrics.drawdown_limit.toFixed(2)}`, inline: true },
@@ -313,7 +313,7 @@ export async function sendConsistencyWarning(
 
   const embed = {
     title: '\u26a0\ufe0f REV LIMIT WARNING \u2014 Consistency Alert',
-    description: `Apex ${account.label}: Best day is ${(100 - metrics.consistency_pct).toFixed(0)}% of total profit (limit: ${metrics.consistency_limit}%)`,
+    description: `Alpha Futures ${account.label}: Best day is ${(100 - metrics.consistency_pct).toFixed(0)}% of total profit (limit: ${metrics.consistency_limit}%)`,
     color: 16776960,
     fields: [
       { name: 'Best Day', value: `$${metrics.best_day.toFixed(2)}`, inline: true },
@@ -355,7 +355,7 @@ export async function sendSetupResultToAll(
     color,
     fields: [
       { name: 'P&L', value: `$${result.pnl != null ? result.pnl.toFixed(2) : '\u2014'}`, inline: true },
-      { name: 'R:R Achieved', value: `${result.actual_rr != null ? result.actual_rr.toFixed(1) : '\u2014'}:1`, inline: true },
+      { name: 'R:R Achieved', value: `1:${result.actual_rr != null ? result.actual_rr.toFixed(1) : '\u2014'}`, inline: true },
     ],
     footer: FOOTER,
   };

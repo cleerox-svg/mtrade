@@ -43,13 +43,13 @@ export interface DashboardMetrics {
   today_pnl: number;
 }
 
-interface ApexAccount {
+interface AlphaAccount {
   id: number;
   user_id: string;
   account_size: number;
   drawdown_limit: number;
   drawdown_type: string;
-  account_type: string;
+  account_type: string;  // 'zero', 'standard', 'advanced'
   max_contracts: number;
   scaling_limit: number;
   profit_target: number;
@@ -63,23 +63,33 @@ interface Instrument {
   tick_value: number;
 }
 
-// ── Daily Loss Limits for EOD accounts ──
+// ── Alpha Futures MLL (Maximum Loss Limit) ──
+// 4% of account size for Standard/Zero, 3.5% for Advanced
+function getMLL(account: AlphaAccount): number {
+  const rate = account.account_type === 'advanced' ? 0.035 : 0.04;
+  return account.account_size * rate;
+}
 
-const EOD_DAILY_LOSS_LIMITS: Record<number, number> = {
-  50000: 1250,
-  100000: 1500,
-  150000: 2000,
-};
+// ── Daily Loss Guard: 2% of account size ──
+function getDailyLossGuard(account: AlphaAccount): number {
+  return account.account_size * 0.02;
+}
+
+// ── Consistency rule: 40% for Standard/Zero, none for Advanced ──
+function getConsistencyLimit(accountType: string): number | null {
+  if (accountType === 'advanced') return null;
+  return 40;
+}
 
 // ── Shared Dashboard Metrics Computation ──
 
 export async function computeAccountMetrics(
   env: Env,
   accountId: number,
-  account: ApexAccount
+  account: AlphaAccount
 ): Promise<DashboardMetrics> {
   const { results: rows } = await env.DB.prepare(
-    'SELECT * FROM apex_daily_pnl WHERE apex_account_id = ? ORDER BY date ASC'
+    'SELECT * FROM alpha_daily_pnl WHERE alpha_account_id = ? ORDER BY date ASC'
   ).bind(accountId).all<Record<string, unknown>>();
 
   const totalPnl = rows.reduce((s, r) => s + (r.pnl as number), 0);
@@ -88,16 +98,18 @@ export async function computeAccountMetrics(
   // Best day PnL
   const bestDayPnl = rows.length ? Math.max(...rows.map(r => r.pnl as number)) : 0;
 
-  // Consistency
+  // Consistency (40% rule for Standard/Zero, skip for Advanced)
   const profitDays = rows.filter(r => (r.pnl as number) > 0);
   const totalProfit = profitDays.reduce((s, r) => s + (r.pnl as number), 0);
   let consistencyPct = 100;
-  if (totalProfit > 0 && profitDays.length > 0) {
+  const consistencyLimit = getConsistencyLimit(account.account_type);
+  if (consistencyLimit !== null && totalProfit > 0 && profitDays.length > 0) {
     const maxDayPct = Math.max(...profitDays.map(r => ((r.pnl as number) / totalProfit) * 100));
-    consistencyPct = Math.round(100 - Math.max(0, maxDayPct - 30));
+    consistencyPct = Math.round(100 - Math.max(0, maxDayPct - consistencyLimit));
   }
 
-  // Drawdown
+  // Drawdown (MLL calculated on EOD balance)
+  const mll = getMLL(account);
   let drawdownUsed = 0;
   if (account.drawdown_type === 'trailing') {
     let peak = account.account_size;
@@ -112,12 +124,10 @@ export async function computeAccountMetrics(
     drawdownUsed = Math.abs(losses.reduce((s, r) => s + (r.pnl as number), 0));
   }
 
-  const drawdownRemaining = account.drawdown_limit - drawdownUsed;
+  const drawdownRemaining = mll - drawdownUsed;
 
-  // Safety net: for trailing accounts, safety net is reached when the trailing drawdown
-  // floor is above the starting balance (i.e., profits have moved the floor up enough).
-  // Simplified: safety net reached when total_pnl >= drawdown_limit
-  const safetyNetReached = totalPnl >= account.drawdown_limit;
+  // Safety net: reached when total_pnl >= MLL
+  const safetyNetReached = totalPnl >= mll;
 
   // Today's PnL
   const todayET = new Date().toLocaleString('en-US', { timeZone: 'America/New_York' });
@@ -149,8 +159,8 @@ export async function checkTradeCompliance(
 ): Promise<ComplianceResult> {
   // Load account
   const account = await env.DB.prepare(
-    'SELECT * FROM apex_accounts WHERE id = ? AND user_id = ?'
-  ).bind(accountId, userId).first<ApexAccount>();
+    'SELECT * FROM alpha_accounts WHERE id = ? AND user_id = ?'
+  ).bind(accountId, userId).first<AlphaAccount>();
   if (!account) throw new Error('Account not found');
 
   // Load instrument
@@ -185,42 +195,26 @@ export async function checkTradeCompliance(
       : `Exceeds ${metrics.safety_net_reached ? 'max' : 'scaling'} limit — max ${allowedContracts} contracts${metrics.safety_net_reached ? '' : ' until safety net reached'}`,
   });
 
-  // 2. Max Loss Check (MAE — Legacy accounts only)
-  if (account.account_type === 'legacy') {
-    let threshold: number;
-    if (metrics.total_pnl <= 0) {
-      // Use 30% of fixed drawdown
-      threshold = account.drawdown_limit * 0.3;
-    } else if (!metrics.safety_net_reached) {
-      // Below safety net: 30% of fixed drawdown
-      threshold = account.drawdown_limit * 0.3;
-    } else {
-      // Above safety net: 30% of total_pnl
-      threshold = metrics.total_pnl * 0.3;
-    }
-    const maePass = maxLoss <= threshold;
-    checks.push({
-      check: 'mae',
-      passed: maePass,
-      max_loss: round2(maxLoss),
-      threshold: round2(threshold),
-      message: maePass
-        ? `Max loss $${round2(maxLoss)} within $${round2(threshold)} limit`
-        : `Max loss $${round2(maxLoss)} exceeds 30% threshold of $${round2(threshold)}`,
-    });
-  } else {
-    checks.push({
-      check: 'mae',
-      passed: true,
-      max_loss: round2(maxLoss),
-      threshold: null,
-      message: 'V4 account — no MAE rule',
-    });
-  }
+  // 2. Daily Loss Guard Check (replaces MAE — Alpha Futures has no MAE rule)
+  const dlg = getDailyLossGuard(account);
+  const todayPnlAfterLoss = metrics.today_pnl - maxLoss;
+  const dlgPass = Math.abs(Math.min(todayPnlAfterLoss, 0)) < dlg;
+  checks.push({
+    check: 'daily_loss_guard',
+    passed: dlgPass,
+    max_loss: round2(maxLoss),
+    daily_loss_guard: round2(dlg),
+    today_pnl: round2(metrics.today_pnl),
+    today_after_loss: round2(todayPnlAfterLoss),
+    message: dlgPass
+      ? `Daily Loss Guard safe — $${round2(Math.abs(Math.min(todayPnlAfterLoss, 0)))} of $${round2(dlg)} DLG`
+      : `Would breach $${round2(dlg)} Daily Loss Guard — today would be -$${round2(Math.abs(todayPnlAfterLoss))}`,
+  });
 
-  // 3. Drawdown Impact Check
+  // 3. Drawdown Impact Check (MLL)
+  const mll = getMLL(account);
   const remainingAfterLoss = metrics.drawdown_remaining - maxLoss;
-  const pctOfDrawdown = account.drawdown_limit > 0 ? (maxLoss / account.drawdown_limit) * 100 : 0;
+  const pctOfDrawdown = mll > 0 ? (maxLoss / mll) * 100 : 0;
   const drawdownPass = remainingAfterLoss > 0;
   let drawdownSeverity: 'safe' | 'warning' | 'critical' = 'safe';
   if (!drawdownPass) {
@@ -239,64 +233,46 @@ export async function checkTradeCompliance(
     remaining_after_loss: round2(remainingAfterLoss),
     pct_of_drawdown: round2(pctOfDrawdown),
     message: drawdownPass
-      ? `Drawdown safe — $${round2(remainingAfterLoss)} remains after max loss`
-      : `This trade could breach drawdown! Only $${round2(metrics.drawdown_remaining)} buffer`,
+      ? `MLL safe — $${round2(remainingAfterLoss)} remains after max loss`
+      : `This trade could breach MLL! Only $${round2(metrics.drawdown_remaining)} buffer`,
   });
 
-  // 4. Consistency Impact Check
-  const newTodayPnl = metrics.today_pnl + potentialWin;
-  const newTotalPnl = metrics.total_pnl + potentialWin;
-  let newConsistency = metrics.consistency_pct;
-  const consistencyLimit = account.account_type === 'legacy' ? 30 : 50;
-  // Consistency is about best day as % of total profit
-  // If new_today_pnl exceeds best_day, recalculate
-  if (newTodayPnl > metrics.best_day_pnl && newTotalPnl > 0) {
-    // best day % of total profit
-    const bestDayPct = (newTodayPnl / newTotalPnl) * 100;
-    newConsistency = Math.round(100 - Math.max(0, bestDayPct - consistencyLimit));
-  }
-  // The projected % is best day as % of total profit
-  const projectedBestDayPct = newTodayPnl > metrics.best_day_pnl && newTotalPnl > 0
-    ? round2((newTodayPnl / newTotalPnl) * 100)
-    : (metrics.total_pnl > 0 ? round2((metrics.best_day_pnl / metrics.total_pnl) * 100) : 0);
-  const consistencyPass = projectedBestDayPct <= consistencyLimit;
-  checks.push({
-    check: 'consistency',
-    passed: consistencyPass,
-    current_pct: metrics.consistency_pct,
-    projected_pct: round2(projectedBestDayPct),
-    limit: consistencyLimit,
-    potential_win: round2(potentialWin),
-    message: consistencyPass
-      ? `Consistency safe at ${round2(projectedBestDayPct)}%`
-      : `Win of $${round2(potentialWin)} would push best day to ${round2(projectedBestDayPct)}% — over ${consistencyLimit}% limit. Consider reducing size.`,
-  });
+  // 4. Consistency Impact Check (40% for Standard/Zero, skip for Advanced)
+  const consistencyLimit = getConsistencyLimit(account.account_type);
+  let consistencyPass = true;
+  let projectedBestDayPct = 0;
 
-  // 5. Daily Loss Limit Check (EOD accounts only)
-  if (account.drawdown_type === 'eod') {
-    const dll = EOD_DAILY_LOSS_LIMITS[account.account_size] || 1500;
-    const todayAfterLoss = metrics.today_pnl - maxLoss;
-    const dllPass = Math.abs(todayAfterLoss) < dll;
+  if (consistencyLimit !== null) {
+    const newTodayPnl = metrics.today_pnl + potentialWin;
+    const newTotalPnl = metrics.total_pnl + potentialWin;
+    // Consistency is about best day as % of total profit
+    if (newTodayPnl > metrics.best_day_pnl && newTotalPnl > 0) {
+      projectedBestDayPct = round2((newTodayPnl / newTotalPnl) * 100);
+    } else {
+      projectedBestDayPct = metrics.total_pnl > 0 ? round2((metrics.best_day_pnl / metrics.total_pnl) * 100) : 0;
+    }
+    consistencyPass = projectedBestDayPct <= consistencyLimit;
     checks.push({
-      check: 'daily_loss',
-      passed: dllPass,
-      today_pnl: round2(metrics.today_pnl),
-      max_loss: round2(maxLoss),
-      dll,
-      today_after_loss: round2(todayAfterLoss),
-      message: dllPass
-        ? `Daily loss limit safe — $${round2(Math.abs(todayAfterLoss))} of $${dll} DLL`
-        : `Would breach $${dll} daily loss limit — today would be -$${round2(Math.abs(todayAfterLoss))}`,
+      check: 'consistency',
+      passed: consistencyPass,
+      current_pct: metrics.consistency_pct,
+      projected_pct: projectedBestDayPct,
+      limit: consistencyLimit,
+      potential_win: round2(potentialWin),
+      message: consistencyPass
+        ? `Consistency safe at ${projectedBestDayPct}%`
+        : `Win of $${round2(potentialWin)} would push best day to ${projectedBestDayPct}% — over ${consistencyLimit}% limit. Consider reducing size.`,
     });
   } else {
     checks.push({
-      check: 'daily_loss',
+      check: 'consistency',
       passed: true,
-      message: 'Non-EOD account — no daily loss limit',
+      limit: null,
+      message: 'Advanced account — no consistency rule',
     });
   }
 
-  // 6. Position Size Recommendation
+  // 5. Position Size Recommendation
   const allPassed = checks.every(c => c.passed);
   const hasWarnings = checks.some(c => c.severity === 'warning');
   const hasCritical = checks.some(c => c.severity === 'critical');
@@ -334,12 +310,11 @@ export async function checkTradeCompliance(
   // Risk score: 0-100
   let riskScore = 0;
   if (!checks.find(c => c.check === 'contracts')?.passed) riskScore += 25;
-  if (!checks.find(c => c.check === 'mae')?.passed) riskScore += 20;
+  if (!checks.find(c => c.check === 'daily_loss_guard')?.passed) riskScore += 20;
   if (!checks.find(c => c.check === 'drawdown')?.passed) riskScore += 30;
   else if (drawdownSeverity === 'critical') riskScore += 20;
   else if (drawdownSeverity === 'warning') riskScore += 10;
   if (!checks.find(c => c.check === 'consistency')?.passed) riskScore += 15;
-  if (!checks.find(c => c.check === 'daily_loss')?.passed) riskScore += 20;
   riskScore = Math.min(riskScore, 100);
 
   return {
@@ -359,8 +334,8 @@ export async function quickTradeCheck(
   input: QuickCheckInput
 ): Promise<{ passed: boolean; blockers: string[]; max_contracts: number; drawdown_remaining: number }> {
   const account = await env.DB.prepare(
-    'SELECT * FROM apex_accounts WHERE id = ? AND user_id = ?'
-  ).bind(accountId, userId).first<ApexAccount>();
+    'SELECT * FROM alpha_accounts WHERE id = ? AND user_id = ?'
+  ).bind(accountId, userId).first<AlphaAccount>();
   if (!account) throw new Error('Account not found');
 
   const instrument = await env.DB.prepare(
@@ -379,27 +354,16 @@ export async function quickTradeCheck(
     blockers.push(`Max ${allowedContracts} contracts (${metrics.safety_net_reached ? 'full' : 'scaling'} limit)`);
   }
 
-  // Drawdown check
+  // MLL drawdown check
   if (maxLoss > metrics.drawdown_remaining) {
-    blockers.push(`Loss of $${round2(maxLoss)} would breach drawdown ($${round2(metrics.drawdown_remaining)} remaining)`);
+    blockers.push(`Loss of $${round2(maxLoss)} would breach MLL ($${round2(metrics.drawdown_remaining)} remaining)`);
   }
 
-  // MAE check for legacy
-  if (account.account_type === 'legacy') {
-    const threshold = metrics.total_pnl > 0 && metrics.safety_net_reached
-      ? metrics.total_pnl * 0.3
-      : account.drawdown_limit * 0.3;
-    if (maxLoss > threshold) {
-      blockers.push(`Loss of $${round2(maxLoss)} exceeds MAE limit of $${round2(threshold)}`);
-    }
-  }
-
-  // EOD daily loss
-  if (account.drawdown_type === 'eod') {
-    const dll = EOD_DAILY_LOSS_LIMITS[account.account_size] || 1500;
-    if (Math.abs(metrics.today_pnl - maxLoss) >= dll) {
-      blockers.push(`Would breach $${dll} daily loss limit`);
-    }
+  // Daily Loss Guard check
+  const dlg = getDailyLossGuard(account);
+  const todayAfterLoss = metrics.today_pnl - maxLoss;
+  if (Math.abs(Math.min(todayAfterLoss, 0)) >= dlg) {
+    blockers.push(`Would breach $${round2(dlg)} Daily Loss Guard`);
   }
 
   return {
@@ -419,10 +383,10 @@ export async function getComplianceSummary(
 ): Promise<{ name: string; value: string; inline: boolean } | null> {
   if (!alertData.entry_price || !alertData.stop_price) return null;
 
-  // Find user's active apex account
+  // Find user's active Alpha Futures account
   const account = await env.DB.prepare(
-    'SELECT * FROM apex_accounts WHERE user_id = ? AND is_active = 1 LIMIT 1'
-  ).bind(userId).first<ApexAccount>();
+    'SELECT * FROM alpha_accounts WHERE user_id = ? AND is_active = 1 LIMIT 1'
+  ).bind(userId).first<AlphaAccount>();
   if (!account) return null;
 
   try {
@@ -447,7 +411,7 @@ export async function getComplianceSummary(
       const consPct = (consistencyCheck?.projected_pct as number) || 0;
       return {
         name: 'Compliance',
-        value: `✅ All clear — ${maxContracts} contracts safe\nDrawdown: $${round2(remaining)} buffer · Consistency: ${round2(consPct)}%`,
+        value: `✅ All clear — ${maxContracts} contracts safe\nMLL: $${round2(remaining)} buffer · Consistency: ${round2(consPct)}%`,
         inline: false,
       };
     } else {
@@ -462,7 +426,7 @@ export async function getComplianceSummary(
       if (recContracts > 0) {
         value += `\nRecommended: ${recContracts} contract${recContracts > 1 ? 's' : ''}`;
       }
-      value += `\nDrawdown: $${round2(remaining)} buffer`;
+      value += `\nMLL: $${round2(remaining)} buffer`;
       return {
         name: '⚠ Compliance',
         value,
@@ -482,10 +446,10 @@ function round2(n: number): number {
 
 function findMaxSafeContracts(
   trade: TradeInput,
-  account: ApexAccount,
+  account: AlphaAccount,
   instrument: Instrument,
   metrics: DashboardMetrics,
-  consistencyLimit: number
+  consistencyLimit: number | null
 ): number {
   const ticksRisk = Math.abs(trade.entry_price - trade.stop_price) / instrument.tick_size;
   const lossPerContract = ticksRisk * instrument.tick_value;
@@ -495,7 +459,7 @@ function findMaxSafeContracts(
 
   let maxSafe = allowedContracts;
 
-  // Drawdown constraint
+  // MLL drawdown constraint
   if (metrics.drawdown_remaining > 0) {
     const ddMax = Math.floor(metrics.drawdown_remaining / lossPerContract);
     maxSafe = Math.min(maxSafe, ddMax);
@@ -503,46 +467,34 @@ function findMaxSafeContracts(
     return 0;
   }
 
-  // MAE constraint (legacy only)
-  if (account.account_type === 'legacy') {
-    let threshold: number;
-    if (metrics.total_pnl <= 0 || !metrics.safety_net_reached) {
-      threshold = account.drawdown_limit * 0.3;
-    } else {
-      threshold = metrics.total_pnl * 0.3;
-    }
-    const maeMax = Math.floor(threshold / lossPerContract);
-    maxSafe = Math.min(maxSafe, maeMax);
+  // Daily Loss Guard constraint
+  const dlg = getDailyLossGuard(account);
+  const availableLoss = dlg - Math.abs(Math.min(metrics.today_pnl, 0));
+  if (availableLoss > 0) {
+    const dlgMax = Math.floor(availableLoss / lossPerContract);
+    maxSafe = Math.min(maxSafe, dlgMax);
+  } else {
+    return 0;
   }
 
-  // EOD daily loss constraint
-  if (account.drawdown_type === 'eod') {
-    const dll = EOD_DAILY_LOSS_LIMITS[account.account_size] || 1500;
-    const availableLoss = dll - Math.abs(metrics.today_pnl);
-    if (availableLoss > 0) {
-      const dllMax = Math.floor(availableLoss / lossPerContract);
-      maxSafe = Math.min(maxSafe, dllMax);
-    } else {
-      return 0;
-    }
-  }
-
-  // Consistency constraint (target-based)
-  const ticksTarget = Math.abs(trade.target_price - trade.entry_price) / instrument.tick_size;
-  const winPerContract = ticksTarget * instrument.tick_value;
-  if (winPerContract > 0) {
-    for (let c = maxSafe; c >= 1; c--) {
-      const potWin = c * winPerContract;
-      const newTodayPnl = metrics.today_pnl + potWin;
-      const newTotalPnl = metrics.total_pnl + potWin;
-      if (newTodayPnl > metrics.best_day_pnl && newTotalPnl > 0) {
-        const bestDayPct = (newTodayPnl / newTotalPnl) * 100;
-        if (bestDayPct > consistencyLimit) {
-          maxSafe = c - 1;
-          continue;
+  // Consistency constraint (target-based) — only for Standard/Zero
+  if (consistencyLimit !== null) {
+    const ticksTarget = Math.abs(trade.target_price - trade.entry_price) / instrument.tick_size;
+    const winPerContract = ticksTarget * instrument.tick_value;
+    if (winPerContract > 0) {
+      for (let c = maxSafe; c >= 1; c--) {
+        const potWin = c * winPerContract;
+        const newTodayPnl = metrics.today_pnl + potWin;
+        const newTotalPnl = metrics.total_pnl + potWin;
+        if (newTodayPnl > metrics.best_day_pnl && newTotalPnl > 0) {
+          const bestDayPct = (newTodayPnl / newTotalPnl) * 100;
+          if (bestDayPct > consistencyLimit) {
+            maxSafe = c - 1;
+            continue;
+          }
         }
+        break;
       }
-      break;
     }
   }
 

@@ -80,7 +80,7 @@ const DEFAULT_CONFIG: Omit<StrategyConfig, 'user_id'> = {
 
 async function loadStrategyConfigs(env: Env): Promise<StrategyConfig[]> {
   const { results: users } = await env.DB.prepare(
-    'SELECT DISTINCT user_id FROM apex_accounts WHERE is_active = 1'
+    'SELECT DISTINCT user_id FROM alpha_accounts WHERE is_active = 1'
   ).all<{ user_id: string }>();
 
   if (users.length === 0) return [{ user_id: 'system', ...DEFAULT_CONFIG }];
@@ -422,7 +422,7 @@ Sweep: Price broke London ${alert.sweep_direction} at ${alert.sweep_level}
 FVG: ${alert.fvg_low} - ${alert.fvg_high}
 IFVG: ${alert.ifvg_low && alert.ifvg_high ? alert.ifvg_low + ' - ' + alert.ifvg_high : 'none'}
 Entry: ${alert.entry_price}, Target: ${alert.target_price}, Stop: ${alert.stop_price}
-R:R: ${alert.risk_reward}
+R:R: 1:${alert.risk_reward}
 Respond: {"confidence":0-100,"signal":"ACCORD"|"BASE NOTE"|"HEART NOTE"|"TOP NOTE"|"NO TRADE","fragrance":"Prestige Silver"|"Armani Stronger With You"|"YSL Y","summary":"2-3 sentences","warnings":["array"],"contracts_suggestion":"recommendation"}`;
 
     const resp = await fetch('https://api.anthropic.com/v1/messages', {
@@ -467,7 +467,7 @@ export async function runSetupStateMachine(env: Env): Promise<void> {
   const todayET = getETDate(now);
   const etHour = getETHour(now);
 
-  // Load strategy configs for users with active apex accounts
+  // Load strategy configs for users with active Alpha Futures accounts
   const configs = await loadStrategyConfigs(env);
 
   // Auto-reset kill switches from previous days
@@ -746,7 +746,7 @@ export async function runSetupStateMachine(env: Env): Promise<void> {
         ).bind(continuationFvg.id, entry, target, stop, Math.round(rr * 100) / 100, setup.id).run();
 
         const direction = setup.sweep_direction === 'low' ? 'Long' : 'Short';
-        const msg = `${inst.symbol}: ${isIFVG ? 'IFVG' : 'FVG'} continuation confirmed. ${direction} at ${entry.toFixed(2)} → ${target.toFixed(2)}. Stop ${stop.toFixed(2)}. R:R ${rr.toFixed(1)}:1`;
+        const msg = `${inst.symbol}: ${isIFVG ? 'IFVG' : 'FVG'} continuation confirmed. ${direction} at ${entry.toFixed(2)} → ${target.toFixed(2)}. Stop ${stop.toFixed(2)}. R:R 1:${rr.toFixed(1)}`;
 
         console.log(`Setup advanced to phase 3: ${inst.symbol}`);
 
@@ -841,7 +841,7 @@ export async function runSetupStateMachine(env: Env): Promise<void> {
           await env.DB.prepare(
             `UPDATE setups SET status = 'skipped', updated_at = datetime('now') WHERE id = ?`
           ).bind(setup.id).run();
-          console.log(`${inst.symbol}: R:R ${rrRounded} below minimum ${effectiveConfig.min_rr} — setup skipped`);
+          console.log(`${inst.symbol}: R:R 1:${rrRounded} below minimum 1:${effectiveConfig.min_rr} — setup skipped`);
           continue;
         }
 
@@ -854,7 +854,7 @@ export async function runSetupStateMachine(env: Env): Promise<void> {
            updated_at = datetime('now') WHERE id = ?`
         ).bind(entry, target, stop, rrRounded, setup.id).run();
 
-        const msg = `ACCORD — all notes aligned. ${direction} ${inst.symbol} ${contracts}ct at ${entry.toFixed(2)} → Target ${target.toFixed(2)}. Stop ${stop.toFixed(2)}. R:R ${rr.toFixed(1)}:1`;
+        const msg = `ACCORD — all notes aligned. ${direction} ${inst.symbol} ${contracts}ct at ${entry.toFixed(2)} → Target ${target.toFixed(2)}. Stop ${stop.toFixed(2)}. R:R 1:${rr.toFixed(1)}`;
 
         console.log(`Setup advanced to phase 4: ${inst.symbol} — ACCORD`);
 

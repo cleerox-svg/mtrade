@@ -53,10 +53,10 @@ async function handleBuiltinApi(
   return null;
 }
 
-async function checkApexRiskAlerts(env: Env): Promise<void> {
+async function checkAlphaRiskAlerts(env: Env): Promise<void> {
   try {
     const { results: accounts } = await env.DB.prepare(
-      'SELECT * FROM apex_accounts WHERE is_active = 1'
+      'SELECT * FROM alpha_accounts WHERE is_active = 1'
     ).all<Record<string, unknown>>();
 
     for (const account of accounts) {
@@ -70,7 +70,7 @@ async function checkApexRiskAlerts(env: Env): Promise<void> {
       if (!settings.discord_enabled || !settings.discord_webhook_url) continue;
 
       const { results: rows } = await env.DB.prepare(
-        'SELECT * FROM apex_daily_pnl WHERE apex_account_id = ? ORDER BY date ASC'
+        'SELECT * FROM alpha_daily_pnl WHERE alpha_account_id = ? ORDER BY date ASC'
       ).bind(account.id).all<Record<string, unknown>>();
 
       if (rows.length === 0) continue;
@@ -141,7 +141,7 @@ async function checkApexRiskAlerts(env: Env): Promise<void> {
       }
     }
   } catch (err) {
-    console.error('Apex risk alerts error:', err);
+    console.error('Alpha Futures risk alerts error:', err);
   }
 }
 
@@ -235,10 +235,10 @@ export default {
       await computeSessionLevels(env);
       await runStrategyEngine(env);
 
-      // Run Apex risk checks every 5 minutes (when minute is divisible by 5)
+      // Run Alpha Futures risk checks every 5 minutes (when minute is divisible by 5)
       const minute = new Date().getMinutes();
       if (minute % 5 === 0) {
-        await checkApexRiskAlerts(env);
+        await checkAlphaRiskAlerts(env);
       }
     } catch (err) {
       console.error('Cron error:', err);
