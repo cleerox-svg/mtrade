@@ -701,6 +701,118 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
     }
     .modal-submit:disabled { opacity: 0.4; cursor: default; }
 
+    /* Candlestick Chart */
+    .chart-svg { width: 100%; height: 220px; display: block; background: #0a0a10; border-radius: 10px; }
+    .chart-legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      padding: 8px 4px 0;
+    }
+    .chart-legend-item {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 9px;
+      color: var(--muted);
+    }
+    .chart-legend-swatch {
+      width: 10px;
+      height: 10px;
+      border-radius: 2px;
+      flex-shrink: 0;
+    }
+
+    /* Entry pulse animation */
+    @keyframes entryPulse {
+      0%, 100% { filter: drop-shadow(0 0 2px var(--red)); }
+      50% { filter: drop-shadow(0 0 8px var(--red)) drop-shadow(0 0 14px rgba(251,44,90,0.4)); }
+    }
+    .entry-line-glow { animation: entryPulse 2s ease-in-out infinite; }
+
+    /* Signal Progression */
+    .signal-card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+    .signal-tag {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 8px;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      padding: 3px 8px;
+      border-radius: 4px;
+      border: 1px solid;
+    }
+    .phase-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 0;
+      border-bottom: 1px solid rgba(255,255,255,0.03);
+    }
+    .phase-row:last-child { border-bottom: none; }
+    .phase-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+    .phase-dot.completed {
+      background: var(--red);
+      box-shadow: 0 0 6px rgba(251,44,90,0.4);
+    }
+    .phase-dot.current {
+      background: var(--amber);
+      animation: breathe 2s ease-in-out infinite;
+      box-shadow: 0 0 8px rgba(251,191,36,0.5);
+    }
+    .phase-dot.pending {
+      background: rgba(255,255,255,0.08);
+    }
+    .phase-label {
+      font-family: 'Outfit', sans-serif;
+      font-size: 12px;
+      font-weight: 600;
+      min-width: 110px;
+    }
+    .phase-desc {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px;
+      color: var(--label);
+      flex: 1;
+    }
+    .phase-check {
+      font-size: 10px;
+      margin-left: auto;
+      flex-shrink: 0;
+    }
+    .phase-row.pending-row { opacity: 0.3; }
+    .phase-row.pending-row .phase-label { color: var(--subtle); }
+    .phase-row.pending-row .phase-desc { color: var(--subtle); }
+
+    .signal-status-box {
+      background: rgba(255,255,255,0.02);
+      border-radius: 8px;
+      padding: 12px;
+      margin-top: 12px;
+    }
+    .signal-status-label {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 9px;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      margin-bottom: 6px;
+    }
+    .signal-status-msg {
+      font-size: 12px;
+      color: var(--bright);
+      line-height: 1.5;
+    }
+
     @media (min-width: 768px) {
       .container { padding: 24px; }
       .card { padding: 20px; }
@@ -713,6 +825,9 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
         max-width: 480px;
         border-radius: 14px;
       }
+      .chart-svg { height: 300px; }
+      .phase-label { font-size: 13px; }
+      .phase-desc { font-size: 11px; }
     }
   </style>
 </head>
@@ -741,6 +856,8 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
     <div id="instrument-selector"></div>
     <div id="apex-selector"></div>
     <div id="dashboard-panel"></div>
+    <div id="price-chart"></div>
+    <div id="signal-tracker"></div>
     <div id="pnl-log"></div>
     <div id="trade-modal-root"></div>
 
@@ -1141,6 +1258,247 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
         startPolling();
       }
     }, 100);
+  })();
+  </script>
+
+  <script>
+  /* ── Candlestick Chart ── */
+  (function() {
+    var chartEl = document.getElementById('price-chart');
+
+    var demoData = {
+      NQ: { start: 21450, londonHigh: 21487.50, londonLow: 21422.75, fvg: { high: 21440, low: 21428 }, ifvg: { high: 21462, low: 21455 } },
+      ES: { start: 5890, londonHigh: 5902.25, londonLow: 5878.50, fvg: { high: 5886, low: 5880 }, ifvg: { high: 5894, low: 5890 } }
+    };
+
+    function generateCandles(start, count) {
+      var candles = [];
+      var price = start;
+      for (var i = 0; i < count; i++) {
+        var change = (Math.random() - 0.48) * (start * 0.003);
+        var o = price;
+        var c = price + change;
+        var wickUp = Math.abs(change) * (0.3 + Math.random() * 0.7);
+        var wickDown = Math.abs(change) * (0.3 + Math.random() * 0.7);
+        var h = Math.max(o, c) + wickUp;
+        var l = Math.min(o, c) - wickDown;
+        candles.push({ open: +o.toFixed(2), high: +h.toFixed(2), low: +l.toFixed(2), close: +c.toFixed(2) });
+        price = c;
+      }
+      return candles;
+    }
+
+    function renderChart() {
+      var sym = window.selectedInstrument || 'NQ';
+      var d = demoData[sym];
+      var candles = generateCandles(d.start, 60);
+      var entry = d.ifvg.high;
+      var target = d.londonHigh;
+      var stop = d.ifvg.low - 2;
+
+      // Find price range
+      var allPrices = [];
+      candles.forEach(function(c) { allPrices.push(c.high, c.low); });
+      allPrices.push(d.londonHigh, d.londonLow, d.fvg.high, d.fvg.low, d.ifvg.high, d.ifvg.low, entry, target, stop);
+      var minP = Math.min.apply(null, allPrices);
+      var maxP = Math.max.apply(null, allPrices);
+      var range = maxP - minP || 1;
+      var padPct = 0.05;
+      minP -= range * padPct;
+      maxP += range * padPct;
+      range = maxP - minP;
+
+      var svgW = 800;
+      var svgH = 300;
+      var padR = 65;
+      var padL = 4;
+      var padT = 8;
+      var padB = 8;
+      var chartW = svgW - padL - padR;
+      var chartH = svgH - padT - padB;
+
+      function priceY(p) { return padT + chartH - ((p - minP) / range) * chartH; }
+
+      var candleW = chartW / 60;
+      var bodyW = Math.max(candleW - 1, 1);
+
+      var svg = '<svg class="chart-svg" viewBox="0 0 ' + svgW + ' ' + svgH + '" preserveAspectRatio="none">';
+
+      // Grid lines
+      for (var g = 1; g <= 3; g++) {
+        var gy = padT + (chartH * g / 4);
+        svg += '<line x1="' + padL + '" y1="' + gy + '" x2="' + (svgW - padR) + '" y2="' + gy + '" stroke="rgba(255,255,255,0.04)" stroke-width="1"/>';
+      }
+
+      // Y-axis labels
+      for (var yi = 0; yi <= 4; yi++) {
+        var yPrice = minP + (range * yi / 4);
+        var yPos = priceY(yPrice);
+        svg += '<text x="' + (svgW - padR + 6) + '" y="' + (yPos + 3) + '" fill="var(--muted)" font-family="JetBrains Mono,monospace" font-size="8">' + yPrice.toFixed(2) + '</text>';
+      }
+
+      // Entry-to-target green zone
+      var targetY = priceY(target);
+      var entryY = priceY(entry);
+      var stopY = priceY(stop);
+      svg += '<rect x="' + padL + '" y="' + Math.min(targetY, entryY) + '" width="' + chartW + '" height="' + Math.abs(entryY - targetY) + '" fill="rgba(52,211,153,0.03)"/>';
+      // Entry-to-stop red zone
+      svg += '<rect x="' + padL + '" y="' + Math.min(entryY, stopY) + '" width="' + chartW + '" height="' + Math.abs(stopY - entryY) + '" fill="rgba(239,68,68,0.03)"/>';
+
+      // FVG zone
+      var fvgTopY = priceY(d.fvg.high);
+      var fvgBotY = priceY(d.fvg.low);
+      svg += '<rect x="' + padL + '" y="' + fvgTopY + '" width="' + chartW + '" height="' + (fvgBotY - fvgTopY) + '" fill="rgba(251,44,90,0.1)"/>';
+      svg += '<line x1="' + padL + '" y1="' + fvgTopY + '" x2="' + (padL + chartW) + '" y2="' + fvgTopY + '" stroke="var(--red)" stroke-width="0.5" stroke-dasharray="4,3" opacity="0.4"/>';
+      svg += '<line x1="' + padL + '" y1="' + fvgBotY + '" x2="' + (padL + chartW) + '" y2="' + fvgBotY + '" stroke="var(--red)" stroke-width="0.5" stroke-dasharray="4,3" opacity="0.4"/>';
+
+      // IFVG zone
+      var ifvgTopY = priceY(d.ifvg.high);
+      var ifvgBotY = priceY(d.ifvg.low);
+      svg += '<rect x="' + padL + '" y="' + ifvgTopY + '" width="' + chartW + '" height="' + (ifvgBotY - ifvgTopY) + '" fill="rgba(251,191,36,0.1)"/>';
+
+      // London High line
+      var ldnHY = priceY(d.londonHigh);
+      svg += '<line x1="' + padL + '" y1="' + ldnHY + '" x2="' + (padL + chartW) + '" y2="' + ldnHY + '" stroke="var(--red)" stroke-width="0.8" stroke-dasharray="6,4" opacity="0.7"/>';
+      svg += '<text x="' + (svgW - padR - 2) + '" y="' + (ldnHY - 3) + '" fill="var(--red-soft)" font-family="JetBrains Mono,monospace" font-size="9" text-anchor="end">LDN H</text>';
+
+      // London Low line
+      var ldnLY = priceY(d.londonLow);
+      svg += '<line x1="' + padL + '" y1="' + ldnLY + '" x2="' + (padL + chartW) + '" y2="' + ldnLY + '" stroke="var(--muted)" stroke-width="0.8" stroke-dasharray="6,4" opacity="0.6"/>';
+      svg += '<text x="' + (svgW - padR - 2) + '" y="' + (ldnLY - 3) + '" fill="var(--muted)" font-family="JetBrains Mono,monospace" font-size="9" text-anchor="end">LDN L</text>';
+
+      // Target line
+      svg += '<line x1="' + padL + '" y1="' + targetY + '" x2="' + (padL + chartW) + '" y2="' + targetY + '" stroke="var(--green)" stroke-width="1"/>';
+      svg += '<text x="' + (padL + 4) + '" y="' + (targetY - 3) + '" fill="var(--green)" font-family="JetBrains Mono,monospace" font-size="9">TARGET</text>';
+
+      // Stop line
+      svg += '<line x1="' + padL + '" y1="' + stopY + '" x2="' + (padL + chartW) + '" y2="' + stopY + '" stroke="var(--danger)" stroke-width="1"/>';
+      svg += '<text x="' + (padL + 4) + '" y="' + (stopY - 3) + '" fill="var(--danger)" font-family="JetBrains Mono,monospace" font-size="9">STOP</text>';
+
+      // Entry line with pulse glow
+      svg += '<g class="entry-line-glow">';
+      svg += '<line x1="' + padL + '" y1="' + entryY + '" x2="' + (padL + chartW) + '" y2="' + entryY + '" stroke="var(--red)" stroke-width="1"/>';
+      svg += '<text x="' + (padL + 4) + '" y="' + (entryY - 3) + '" fill="var(--red)" font-family="JetBrains Mono,monospace" font-size="9">ENTRY &#9656;</text>';
+      svg += '</g>';
+
+      // Candles
+      candles.forEach(function(c, i) {
+        var x = padL + i * candleW;
+        var cx = x + bodyW / 2;
+        var bullish = c.close >= c.open;
+        var bodyColor = bullish ? 'var(--red)' : '#475569';
+        var wickColor = bullish ? 'var(--red-soft)' : '#64748b';
+        var bodyTop = priceY(Math.max(c.open, c.close));
+        var bodyBot = priceY(Math.min(c.open, c.close));
+        var bodyH = Math.max(bodyBot - bodyTop, 1);
+        svg += '<line x1="' + cx + '" y1="' + priceY(c.high) + '" x2="' + cx + '" y2="' + priceY(c.low) + '" stroke="' + wickColor + '" stroke-width="1"/>';
+        svg += '<rect x="' + x + '" y="' + bodyTop + '" width="' + bodyW + '" height="' + bodyH + '" fill="' + bodyColor + '" rx="0.5"/>';
+      });
+
+      svg += '</svg>';
+
+      // Legend
+      var legend = '<div class="chart-legend">' +
+        '<div class="chart-legend-item"><span class="chart-legend-swatch" style="background:rgba(251,44,90,0.3);border:1px dashed var(--red)"></span>FVG</div>' +
+        '<div class="chart-legend-item"><span class="chart-legend-swatch" style="background:rgba(251,191,36,0.25)"></span>IFVG</div>' +
+        '<div class="chart-legend-item"><span class="chart-legend-swatch" style="background:var(--red);width:14px;height:2px;border-radius:0"></span>LDN H</div>' +
+        '<div class="chart-legend-item"><span class="chart-legend-swatch" style="background:var(--muted);width:14px;height:2px;border-radius:0"></span>LDN L</div>' +
+        '</div>';
+
+      chartEl.innerHTML = '<div class="card" style="animation:slideUp 0.3s ease"><div class="card-title">\u25C8 PRICE ACTION</div>' + svg + legend + '</div>';
+    }
+
+    renderChart();
+    document.addEventListener('instrument-changed', function() { renderChart(); });
+  })();
+  </script>
+
+  <script>
+  /* ── Signal Progression Tracker ── */
+  (function() {
+    var trackerEl = document.getElementById('signal-tracker');
+    var currentPhase = 3;
+
+    var phases = [
+      { name: 'London Range', desc: 'Session high & low forming' },
+      { name: 'Liquidity Sweep', desc: 'Price breaks London H/L' },
+      { name: 'FVG Retracement', desc: 'Retrace into 1H/4H FVG' },
+      { name: 'Continuation', desc: 'FVG or IFVG confirms direction' },
+      { name: 'Entry', desc: 'Execute on gap, target opposite level' }
+    ];
+
+    var demoData = {
+      NQ: { londonHigh: 21487.50, londonLow: 21422.75, fvg: { high: 21440, low: 21428 }, ifvg: { high: 21462, low: 21455 } },
+      ES: { londonHigh: 5902.25, londonLow: 5878.50, fvg: { high: 5886, low: 5880 }, ifvg: { high: 5894, low: 5890 } }
+    };
+
+    function renderTracker() {
+      var sym = window.selectedInstrument || 'NQ';
+      var d = demoData[sym];
+      var entry = d.ifvg.high;
+      var target = d.londonHigh;
+
+      // Tag
+      var tagText, tagColor;
+      if (currentPhase >= 4) { tagText = 'ACCORD'; tagColor = 'var(--red)'; }
+      else if (currentPhase >= 3) { tagText = 'BASE NOTE'; tagColor = 'var(--amber)'; }
+      else if (currentPhase >= 2) { tagText = 'HEART NOTE'; tagColor = 'var(--amber)'; }
+      else { tagText = 'TOP NOTE'; tagColor = 'var(--muted)'; }
+
+      var html = '<div class="card" style="animation:slideUp 0.3s ease">';
+      html += '<div class="signal-card-header">';
+      html += '<div class="card-title" style="margin-bottom:0">\u25C7 SIGNAL PROGRESSION</div>';
+      html += '<span class="signal-tag" style="color:' + tagColor + ';border-color:' + tagColor + '">' + tagText + '</span>';
+      html += '</div>';
+
+      // Phase rows
+      phases.forEach(function(p, i) {
+        var dotClass, labelColor, rowClass = '', checkHtml = '';
+        if (i < currentPhase) {
+          dotClass = 'completed';
+          labelColor = 'var(--red)';
+          checkHtml = '<span class="phase-check" style="color:var(--red)">\u2713</span>';
+        } else if (i === currentPhase) {
+          dotClass = 'current';
+          labelColor = 'var(--amber)';
+        } else {
+          dotClass = 'pending';
+          labelColor = 'var(--subtle)';
+          rowClass = ' pending-row';
+        }
+
+        html += '<div class="phase-row' + rowClass + '">';
+        html += '<span class="phase-dot ' + dotClass + '"></span>';
+        html += '<span class="phase-label" style="color:' + labelColor + '">Phase ' + i + ' \u2014 ' + p.name + '</span>';
+        html += '<span class="phase-desc">' + p.desc + '</span>';
+        html += checkHtml;
+        html += '</div>';
+      });
+
+      // Status box
+      var borderColor = currentPhase >= 3 ? 'var(--red)' : 'var(--amber)';
+      var statusLabelColor = currentPhase >= 3 ? 'var(--red)' : 'var(--amber)';
+      var statusLabel = 'PHASE ' + currentPhase + ' \u2014 ' + phases[currentPhase].name.toUpperCase();
+
+      var messages = [
+        'London session forming. Like a top note \u2014 the opening impression.',
+        'Sweep confirmed \u2014 London Low at ' + d.londonLow.toFixed(2) + ' broken. Sillage trail detected.',
+        'Heart note developing. Retracing into 4H FVG (' + d.fvg.low.toFixed(2) + ' \u2013 ' + d.fvg.high.toFixed(2) + ')',
+        'Base note locked. IFVG at ' + d.ifvg.low.toFixed(2) + ' \u2013 ' + d.ifvg.high.toFixed(2) + ' confirms direction.',
+        'ACCORD \u2014 all notes aligned. Buy ' + entry.toFixed(2) + ' \u2192 Target ' + target.toFixed(2)
+      ];
+
+      html += '<div class="signal-status-box" style="border-left:2px solid ' + borderColor + '">';
+      html += '<div class="signal-status-label" style="color:' + statusLabelColor + '">' + statusLabel + '</div>';
+      html += '<div class="signal-status-msg">' + messages[currentPhase] + '</div>';
+      html += '</div>';
+
+      html += '</div>';
+      trackerEl.innerHTML = html;
+    }
+
+    renderTracker();
+    document.addEventListener('instrument-changed', function() { renderTracker(); });
   })();
   </script>
 
