@@ -1,19 +1,8 @@
--- Rename Apex tables to Alpha Futures
+-- Migration 0007: Rename Apex to Alpha Futures
+-- Note: Table renames (apex_accounts → alpha_accounts, etc.) were already applied.
+-- This migration updates any remaining KB article references.
 
-ALTER TABLE apex_accounts RENAME TO alpha_accounts;
-ALTER TABLE apex_daily_pnl RENAME TO alpha_daily_pnl;
-
--- Rename the foreign key column in daily pnl
-ALTER TABLE alpha_daily_pnl RENAME COLUMN apex_account_id TO alpha_account_id;
-
--- Rename account templates table
-ALTER TABLE apex_account_templates RENAME TO alpha_account_templates;
-
--- Update account_type CHECK constraint to support new values
--- SQLite doesn't support ALTER TABLE to modify constraints,
--- but the new code handles 'zero', 'standard', 'advanced' values
-
--- Update KB articles: rename Apex references to Alpha Futures
+-- Update KB articles: rename Apex references to Alpha Futures (no-op if already done or empty)
 UPDATE kb_articles SET
   slug = 'alpha-consistency',
   title = 'Alpha Futures Consistency Rule',
