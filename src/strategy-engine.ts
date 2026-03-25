@@ -47,10 +47,100 @@ const INSTRUMENTS = [
   { id: 2, symbol: 'NQ', tick_size: 0.25 },
 ];
 
+// ── Strategy Config ──
+
+interface StrategyConfig {
+  user_id: string;
+  trade_london_sweep: number;
+  trade_ny_sweep: number;
+  fvg_scan_1h: number;
+  fvg_scan_4h: number;
+  continuation_require_ifvg: number;
+  min_rr: number;
+  min_confidence: number;
+  max_contracts_override: number | null;
+  default_contracts: number;
+  kill_switch: number;
+  kill_switch_date: string | null;
+}
+
+const DEFAULT_CONFIG: Omit<StrategyConfig, 'user_id'> = {
+  trade_london_sweep: 1,
+  trade_ny_sweep: 1,
+  fvg_scan_1h: 1,
+  fvg_scan_4h: 1,
+  continuation_require_ifvg: 0,
+  min_rr: 2.0,
+  min_confidence: 60,
+  max_contracts_override: null,
+  default_contracts: 1,
+  kill_switch: 0,
+  kill_switch_date: null,
+};
+
+async function loadStrategyConfigs(env: Env): Promise<StrategyConfig[]> {
+  const { results: users } = await env.DB.prepare(
+    'SELECT DISTINCT user_id FROM apex_accounts WHERE is_active = 1'
+  ).all<{ user_id: string }>();
+
+  if (users.length === 0) return [{ user_id: 'system', ...DEFAULT_CONFIG }];
+
+  const configs: StrategyConfig[] = [];
+  for (const u of users) {
+    const row = await env.DB.prepare(
+      `SELECT user_id, trade_london_sweep, trade_ny_sweep, fvg_scan_1h, fvg_scan_4h,
+              continuation_require_ifvg, min_rr, min_confidence, max_contracts_override,
+              default_contracts, kill_switch, kill_switch_date
+       FROM strategy_config WHERE user_id = ?`
+    ).bind(u.user_id).first<StrategyConfig>();
+    configs.push(row ?? { user_id: u.user_id, ...DEFAULT_CONFIG });
+  }
+  return configs;
+}
+
+/** Merge multiple user configs into a single effective config for the engine. */
+function mergeConfigs(configs: StrategyConfig[]): Omit<StrategyConfig, 'user_id'> {
+  if (configs.length === 0) return { ...DEFAULT_CONFIG };
+  if (configs.length === 1) {
+    const { user_id: _, ...rest } = configs[0];
+    return rest;
+  }
+  return {
+    trade_london_sweep: configs.some(c => c.trade_london_sweep) ? 1 : 0,
+    trade_ny_sweep: configs.some(c => c.trade_ny_sweep) ? 1 : 0,
+    fvg_scan_1h: configs.some(c => c.fvg_scan_1h) ? 1 : 0,
+    fvg_scan_4h: configs.some(c => c.fvg_scan_4h) ? 1 : 0,
+    continuation_require_ifvg: configs.every(c => c.continuation_require_ifvg) ? 1 : 0,
+    min_rr: Math.min(...configs.map(c => c.min_rr)),
+    min_confidence: Math.min(...configs.map(c => c.min_confidence)),
+    max_contracts_override: configs.some(c => c.max_contracts_override === null)
+      ? null
+      : Math.max(...configs.map(c => c.max_contracts_override!)),
+    default_contracts: Math.max(...configs.map(c => c.default_contracts)),
+    kill_switch: configs.every(c => c.kill_switch) ? 1 : 0,
+    kill_switch_date: configs[0]?.kill_switch_date ?? null,
+  };
+}
+
+function calculateContracts(config: Omit<StrategyConfig, 'user_id'>): number {
+  let contracts = config.default_contracts;
+  if (config.max_contracts_override !== null && contracts > config.max_contracts_override) {
+    contracts = config.max_contracts_override;
+  }
+  return contracts;
+}
+
 // ── 1. Scan for Fair Value Gaps ──
 
-export async function scanForFVGs(env: Env): Promise<void> {
-  const timeframes = ['5m', '15m', '1H', '4H'];
+export async function scanForFVGs(
+  env: Env,
+  fvgConfig?: { fvg_scan_1h: number; fvg_scan_4h: number }
+): Promise<void> {
+  let timeframes = ['5m', '15m', '1H', '4H'];
+  if (fvgConfig) {
+    if (!fvgConfig.fvg_scan_1h) timeframes = timeframes.filter(t => t !== '1H');
+    if (!fvgConfig.fvg_scan_4h) timeframes = timeframes.filter(t => t !== '4H');
+  }
 
   for (const inst of INSTRUMENTS) {
     for (const tf of timeframes) {
@@ -314,8 +404,8 @@ async function sendAlertDiscord(
   }
 }
 
-async function triggerHaikuAnalysis(env: Env, alertId: number): Promise<void> {
-  if (!env.ANTHROPIC_API_KEY) return;
+async function triggerHaikuAnalysis(env: Env, alertId: number): Promise<number | null> {
+  if (!env.ANTHROPIC_API_KEY) return null;
 
   try {
     const alert = await env.DB.prepare(
@@ -323,7 +413,7 @@ async function triggerHaikuAnalysis(env: Env, alertId: number): Promise<void> {
        FROM setup_alerts sa LEFT JOIN instruments i ON sa.instrument_id = i.id
        WHERE sa.id = ?`
     ).bind(alertId).first<Record<string, unknown>>();
-    if (!alert) return;
+    if (!alert) return null;
 
     const systemPrompt = 'You are an ICT (Inner Circle Trader) strategy analyst. Analyze futures trading setups using ICT methodology. Respond ONLY with valid JSON.';
     const userPrompt = `Analyze this trading setup:
@@ -354,13 +444,21 @@ Respond: {"confidence":0-100,"signal":"ACCORD"|"BASE NOTE"|"HEART NOTE"|"TOP NOT
     let text = data.content[0].text.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
 
     // Store analysis on the setup
+    let confidence: number | null = null;
+    try {
+      const analysis = JSON.parse(text);
+      if (typeof analysis.confidence === 'number') confidence = analysis.confidence;
+    } catch { /* parsing error — confidence stays null */ }
+
     if (alert.setup_id) {
       await env.DB.prepare(
-        `UPDATE setups SET haiku_analysis_json = ?, updated_at = datetime('now') WHERE id = ?`
-      ).bind(text, alert.setup_id).run();
+        `UPDATE setups SET haiku_analysis_json = ?, confidence = ?, updated_at = datetime('now') WHERE id = ?`
+      ).bind(text, confidence, alert.setup_id).run();
     }
+    return confidence;
   } catch (err) {
     console.error('Haiku analysis error:', err);
+    return null;
   }
 }
 
@@ -368,6 +466,29 @@ export async function runSetupStateMachine(env: Env): Promise<void> {
   const now = new Date();
   const todayET = getETDate(now);
   const etHour = getETHour(now);
+
+  // Load strategy configs for users with active apex accounts
+  const configs = await loadStrategyConfigs(env);
+
+  // Auto-reset kill switches from previous days
+  for (const cfg of configs) {
+    if (cfg.kill_switch === 1 && cfg.kill_switch_date && cfg.kill_switch_date !== todayET) {
+      await env.DB.prepare(
+        `UPDATE strategy_config SET kill_switch = 0, kill_switch_date = NULL, updated_at = datetime('now') WHERE user_id = ?`
+      ).bind(cfg.user_id).run();
+      cfg.kill_switch = 0;
+      cfg.kill_switch_date = null;
+      console.log(`Kill switch auto-reset for user ${cfg.user_id}`);
+    }
+  }
+
+  const effectiveConfig = mergeConfigs(configs);
+  const killSwitchActive = configs.length > 0 &&
+    configs.every(c => c.kill_switch === 1 && c.kill_switch_date === todayET);
+
+  if (killSwitchActive) {
+    console.log('Kill switch active — skipping alert creation');
+  }
 
   for (const inst of INSTRUMENTS) {
     try {
@@ -437,6 +558,7 @@ export async function runSetupStateMachine(env: Env): Promise<void> {
       // ── Phase 0 → Phase 1: London Range → Sweep ──
       if (setup.phase === 0) {
         if (etHour < 5) continue; // London not done
+        if (!effectiveConfig.trade_london_sweep) continue; // London sweeps disabled
 
         const sweeps = await detectSweeps(env);
         const sweep = sweeps.find(s => s.instrument_id === inst.id);
@@ -448,21 +570,24 @@ export async function runSetupStateMachine(env: Env): Promise<void> {
         ).bind(sweep.sweep_direction, sweep.sweep_level, setup.id).run();
 
         const msg = `${inst.symbol}: London ${sweep.sweep_direction} swept at ${sweep.sweep_level.toFixed(2)}. Sillage trail detected.`;
-        const alertData = {
-          alert_type: 'approaching' as const,
-          sweep_direction: sweep.sweep_direction,
-          sweep_level: sweep.sweep_level,
-          fvg_high: null, fvg_low: null, ifvg_high: null, ifvg_low: null,
-          entry_price: null, target_price: null, stop_price: null, risk_reward: null,
-        };
-        const alertId1 = await createAlert(env, setup.id, inst.id, 'approaching', 1, msg, alertData);
         console.log(`Setup advanced to phase 1: ${inst.symbol}`);
 
-        // Get session levels for Discord embed
-        const session1 = await env.DB.prepare(
-          'SELECT london_high, london_low FROM sessions WHERE date = ? AND instrument_id = ?'
-        ).bind(todayET, inst.id).first<{ london_high: number | null; london_low: number | null }>();
-        await sendAlertDiscord(env, alertId1, alertData, { id: setup.id, phase: 1, sweep_direction: sweep.sweep_direction, sweep_level: sweep.sweep_level }, inst.symbol, session1 ?? null);
+        if (!killSwitchActive) {
+          const alertData = {
+            alert_type: 'approaching' as const,
+            sweep_direction: sweep.sweep_direction,
+            sweep_level: sweep.sweep_level,
+            fvg_high: null, fvg_low: null, ifvg_high: null, ifvg_low: null,
+            entry_price: null, target_price: null, stop_price: null, risk_reward: null,
+          };
+          const alertId1 = await createAlert(env, setup.id, inst.id, 'approaching', 1, msg, alertData);
+
+          // Get session levels for Discord embed
+          const session1 = await env.DB.prepare(
+            'SELECT london_high, london_low FROM sessions WHERE date = ? AND instrument_id = ?'
+          ).bind(todayET, inst.id).first<{ london_high: number | null; london_low: number | null }>();
+          await sendAlertDiscord(env, alertId1, alertData, { id: setup.id, phase: 1, sweep_direction: sweep.sweep_direction, sweep_level: sweep.sweep_level }, inst.symbol, session1 ?? null);
+        }
         setup.phase = 1;
         setup.sweep_direction = sweep.sweep_direction;
         setup.sweep_level = sweep.sweep_level;
@@ -515,13 +640,15 @@ export async function runSetupStateMachine(env: Env): Promise<void> {
         ).bind(matchedFvg.id, setup.id).run();
 
         const msg = `${inst.symbol}: Retracing into ${matchedFvg.timeframe} ${fvgType} FVG (${matchedFvg.low.toFixed(2)} – ${matchedFvg.high.toFixed(2)})`;
-        await createAlert(env, setup.id, inst.id, 'approaching', 2, msg, {
-          sweep_direction: setup.sweep_direction,
-          sweep_level: setup.sweep_level,
-          fvg_high: matchedFvg.high,
-          fvg_low: matchedFvg.low,
-        });
         console.log(`Setup advanced to phase 2: ${inst.symbol}`);
+        if (!killSwitchActive) {
+          await createAlert(env, setup.id, inst.id, 'approaching', 2, msg, {
+            sweep_direction: setup.sweep_direction,
+            sweep_level: setup.sweep_level,
+            fvg_high: matchedFvg.high,
+            fvg_low: matchedFvg.low,
+          });
+        }
         setup.phase = 2;
         setup.fvg_id = matchedFvg.id;
       }
@@ -582,6 +709,12 @@ export async function runSetupStateMachine(env: Env): Promise<void> {
 
         if (!continuationFvg) continue;
 
+        // Config: require IFVG for continuation
+        if (effectiveConfig.continuation_require_ifvg && !isIFVG) {
+          console.log(`${inst.symbol}: Non-IFVG continuation skipped (continuation_require_ifvg=1)`);
+          continue;
+        }
+
         // Get session levels for target calculation
         const session = await env.DB.prepare(
           `SELECT london_high, london_low FROM sessions WHERE date = ? AND instrument_id = ?`
@@ -615,28 +748,37 @@ export async function runSetupStateMachine(env: Env): Promise<void> {
         const direction = setup.sweep_direction === 'low' ? 'Long' : 'Short';
         const msg = `${inst.symbol}: ${isIFVG ? 'IFVG' : 'FVG'} continuation confirmed. ${direction} at ${entry.toFixed(2)} → ${target.toFixed(2)}. Stop ${stop.toFixed(2)}. R:R ${rr.toFixed(1)}:1`;
 
-        const readyAlertData = {
-          alert_type: 'ready' as const,
-          sweep_direction: setup.sweep_direction,
-          sweep_level: setup.sweep_level,
-          fvg_high: continuationFvg.high,
-          fvg_low: continuationFvg.low,
-          ifvg_high: isIFVG ? continuationFvg.high : null,
-          ifvg_low: isIFVG ? continuationFvg.low : null,
-          entry_price: entry,
-          target_price: target,
-          stop_price: stop,
-          risk_reward: Math.round(rr * 100) / 100,
-        };
-        const alertId = await createAlert(env, setup.id, inst.id, 'ready', 3, msg, readyAlertData);
-
         console.log(`Setup advanced to phase 3: ${inst.symbol}`);
 
-        // Auto-trigger Haiku analysis
-        await triggerHaikuAnalysis(env, alertId);
+        if (!killSwitchActive) {
+          const readyAlertData = {
+            alert_type: 'ready' as const,
+            sweep_direction: setup.sweep_direction,
+            sweep_level: setup.sweep_level,
+            fvg_high: continuationFvg.high,
+            fvg_low: continuationFvg.low,
+            ifvg_high: isIFVG ? continuationFvg.high : null,
+            ifvg_low: isIFVG ? continuationFvg.low : null,
+            entry_price: entry,
+            target_price: target,
+            stop_price: stop,
+            risk_reward: Math.round(rr * 100) / 100,
+          };
+          const alertId = await createAlert(env, setup.id, inst.id, 'ready', 3, msg, readyAlertData);
 
-        // Send Discord notification
-        await sendAlertDiscord(env, alertId, readyAlertData, { id: setup.id, phase: 3, sweep_direction: setup.sweep_direction, sweep_level: setup.sweep_level }, inst.symbol, session ?? null);
+          // Haiku analysis + confidence check
+          const confidence = await triggerHaikuAnalysis(env, alertId);
+          if (confidence !== null && confidence < effectiveConfig.min_confidence) {
+            console.log(`${inst.symbol}: Confidence ${confidence}% below minimum ${effectiveConfig.min_confidence}% — setup skipped`);
+            await env.DB.prepare(
+              `UPDATE setups SET status = 'skipped', updated_at = datetime('now') WHERE id = ?`
+            ).bind(setup.id).run();
+            continue;
+          }
+
+          // Send Discord notification
+          await sendAlertDiscord(env, alertId, readyAlertData, { id: setup.id, phase: 3, sweep_direction: setup.sweep_direction, sweep_level: setup.sweep_level }, inst.symbol, session ?? null);
+        }
 
         setup.phase = 3;
       }
@@ -692,42 +834,63 @@ export async function runSetupStateMachine(env: Env): Promise<void> {
         }
 
         const rr = Math.abs(target - entry) / Math.abs(entry - stop);
+        const rrRounded = Math.round(rr * 100) / 100;
+
+        // Check minimum R:R
+        if (rrRounded < effectiveConfig.min_rr) {
+          await env.DB.prepare(
+            `UPDATE setups SET status = 'skipped', updated_at = datetime('now') WHERE id = ?`
+          ).bind(setup.id).run();
+          console.log(`${inst.symbol}: R:R ${rrRounded} below minimum ${effectiveConfig.min_rr} — setup skipped`);
+          continue;
+        }
+
         const direction = setup.sweep_direction === 'low' ? 'Buy' : 'Sell';
+        const contracts = calculateContracts(effectiveConfig);
 
         await env.DB.prepare(
           `UPDATE setups SET phase = 4, status = 'ready',
            entry_price = ?, target_price = ?, stop_price = ?, risk_reward = ?,
            updated_at = datetime('now') WHERE id = ?`
-        ).bind(entry, target, stop, Math.round(rr * 100) / 100, setup.id).run();
+        ).bind(entry, target, stop, rrRounded, setup.id).run();
 
-        const msg = `ACCORD — all notes aligned. ${direction} ${inst.symbol} at ${entry.toFixed(2)} → Target ${target.toFixed(2)}. Stop ${stop.toFixed(2)}. R:R ${rr.toFixed(1)}:1`;
-
-        const execAlertData = {
-          alert_type: 'execute' as const,
-          sweep_direction: setup.sweep_direction,
-          sweep_level: setup.sweep_level,
-          fvg_high: gap.high,
-          fvg_low: gap.low,
-          ifvg_high: setup.ifvg_id ? gap.high : null,
-          ifvg_low: setup.ifvg_id ? gap.low : null,
-          entry_price: entry,
-          target_price: target,
-          stop_price: stop,
-          risk_reward: Math.round(rr * 100) / 100,
-        };
-        const alertId = await createAlert(env, setup.id, inst.id, 'execute', 4, msg, execAlertData);
+        const msg = `ACCORD — all notes aligned. ${direction} ${inst.symbol} ${contracts}ct at ${entry.toFixed(2)} → Target ${target.toFixed(2)}. Stop ${stop.toFixed(2)}. R:R ${rr.toFixed(1)}:1`;
 
         console.log(`Setup advanced to phase 4: ${inst.symbol} — ACCORD`);
 
-        // Final Haiku analysis
-        await triggerHaikuAnalysis(env, alertId);
+        if (!killSwitchActive) {
+          const execAlertData = {
+            alert_type: 'execute' as const,
+            sweep_direction: setup.sweep_direction,
+            sweep_level: setup.sweep_level,
+            fvg_high: gap.high,
+            fvg_low: gap.low,
+            ifvg_high: setup.ifvg_id ? gap.high : null,
+            ifvg_low: setup.ifvg_id ? gap.low : null,
+            entry_price: entry,
+            target_price: target,
+            stop_price: stop,
+            risk_reward: rrRounded,
+          };
+          const alertId = await createAlert(env, setup.id, inst.id, 'execute', 4, msg, execAlertData);
 
-        // Reload setup to get haiku_analysis_json
-        const updatedSetup = await env.DB.prepare('SELECT id, phase, sweep_direction, sweep_level, haiku_analysis_json FROM setups WHERE id = ?')
-          .bind(setup.id).first<{ id: number; phase: number; sweep_direction: string | null; sweep_level: number | null; haiku_analysis_json: string | null }>();
+          // Final Haiku analysis + confidence check
+          const confidence = await triggerHaikuAnalysis(env, alertId);
+          if (confidence !== null && confidence < effectiveConfig.min_confidence) {
+            console.log(`${inst.symbol}: Confidence ${confidence}% below minimum ${effectiveConfig.min_confidence}% — setup skipped`);
+            await env.DB.prepare(
+              `UPDATE setups SET status = 'skipped', updated_at = datetime('now') WHERE id = ?`
+            ).bind(setup.id).run();
+            continue;
+          }
 
-        // Send Discord ACCORD notification
-        await sendAlertDiscord(env, alertId, execAlertData, updatedSetup ?? { id: setup.id, phase: 4, sweep_direction: setup.sweep_direction, sweep_level: setup.sweep_level }, inst.symbol, session ?? null);
+          // Reload setup to get haiku_analysis_json
+          const updatedSetup = await env.DB.prepare('SELECT id, phase, sweep_direction, sweep_level, haiku_analysis_json FROM setups WHERE id = ?')
+            .bind(setup.id).first<{ id: number; phase: number; sweep_direction: string | null; sweep_level: number | null; haiku_analysis_json: string | null }>();
+
+          // Send Discord ACCORD notification
+          await sendAlertDiscord(env, alertId, execAlertData, updatedSetup ?? { id: setup.id, phase: 4, sweep_direction: setup.sweep_direction, sweep_level: setup.sweep_level }, inst.symbol, session ?? null);
+        }
       }
     } catch (err) {
       console.error(`runSetupStateMachine error ${inst.symbol}:`, err);
@@ -753,7 +916,11 @@ export async function runStrategyEngine(env: Env): Promise<void> {
     return;
   }
 
-  await scanForFVGs(env);
+  // Load configs for FVG timeframe filtering (FVG scanning always runs globally)
+  const configs = await loadStrategyConfigs(env);
+  const fvgConfig = mergeConfigs(configs);
+
+  await scanForFVGs(env, { fvg_scan_1h: fvgConfig.fvg_scan_1h, fvg_scan_4h: fvgConfig.fvg_scan_4h });
   await updateFVGStatuses(env);
   await runSetupStateMachine(env);
 }
