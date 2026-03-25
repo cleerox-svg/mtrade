@@ -2094,7 +2094,7 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
 
     <div class="selectors-row">
       <div id="instrument-selector"></div>
-      <div id="apex-selector"></div>
+      <div id="alpha-selector"></div>
     </div>
     <div id="live-price-card"></div>
     <div id="alert-overlay"></div>
@@ -2197,9 +2197,9 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
       });
     })();
 
-    /* ── Apex Account Selector ── */
-    (function initApexSelector() {
-      var el = document.getElementById('apex-selector');
+    /* ── Alpha Futures Account Selector ── */
+    (function initAlphaSelector() {
+      var el = document.getElementById('alpha-selector');
       var cachedAccounts = [];
       var templates = [];
       var selectedTemplate = null;
@@ -2261,7 +2261,7 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
 
         var activeAccounts = accounts.filter(function(a) { return a.is_active !== 0; });
         var promises = activeAccounts.map(function(a) {
-          return fetch('/api/apex/' + a.id + '/dashboard', { credentials: 'same-origin' })
+          return fetch('/api/alpha/' + a.id + '/dashboard', { credentials: 'same-origin' })
             .then(function(r) { return r.json(); })
             .then(function(d) { return { account: a, dash: d }; })
             .catch(function() { return { account: a, dash: null }; });
@@ -2324,7 +2324,7 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
       function renderCreateForm() {
         selectedTemplate = null;
         var html = '<div class="card">' +
-          '<div style="margin-bottom:12px;font-family:JetBrains Mono,monospace;font-size:10px;color:var(--label);letter-spacing:1px;text-transform:uppercase">CREATE APEX ACCOUNT</div>' +
+          '<div style="margin-bottom:12px;font-family:JetBrains Mono,monospace;font-size:10px;color:var(--label);letter-spacing:1px;text-transform:uppercase">CREATE ALPHA FUTURES ACCOUNT</div>' +
           '<div class="template-grid" id="template-grid"></div>' +
           '<div id="template-step2"></div>' +
           '</div>';
@@ -2333,7 +2333,7 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
         if (templates.length) {
           renderTemplateGrid();
         } else {
-          fetch('/api/apex/templates', { credentials: 'same-origin' })
+          fetch('/api/alpha/templates', { credentials: 'same-origin' })
             .then(function(r) { return r.json(); })
             .then(function(data) { templates = data; renderTemplateGrid(); })
             .catch(function() {});
@@ -2368,16 +2368,16 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
         var defaultLabel = t.label + ' Legacy #1';
 
         var html = '<div class="tpl-step2">';
-        html += '<div class="form-group"><label class="form-label">LABEL</label><input type="text" id="apex-label" class="form-input" value="' + defaultLabel + '"></div>';
+        html += '<div class="form-group"><label class="form-label">LABEL</label><input type="text" id="alpha-label" class="form-input" value="' + defaultLabel + '"></div>';
 
         html += '<div class="form-group"><label class="form-label">ACCOUNT TYPE</label>';
-        html += '<div class="tpl-type-toggle" id="apex-type-toggle">';
+        html += '<div class="tpl-type-toggle" id="alpha-type-toggle">';
         html += '<button class="tpl-type-btn active" data-val="legacy">LEGACY</button>';
         html += '<button class="tpl-type-btn" data-val="v4">V4</button>';
         html += '</div></div>';
 
         html += '<div class="form-group"><label class="form-label">DRAWDOWN TYPE</label>';
-        html += '<div class="tpl-type-toggle" id="apex-dd-toggle">';
+        html += '<div class="tpl-type-toggle" id="alpha-dd-toggle">';
         html += '<button class="tpl-type-btn active" data-val="trailing">TRAILING</button>';
         html += '<button class="tpl-type-btn" data-val="eod">EOD</button>';
         html += '<button class="tpl-type-btn" data-val="static">STATIC</button>';
@@ -2391,7 +2391,7 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
         html += '<div class="tpl-readonly-row"><span class="tpl-readonly-label">Scaling Limit</span><span class="tpl-readonly-value">' + t.scaling_limit + '</span></div>';
         html += '</div>';
 
-        html += '<button id="apex-submit" class="btn-submit">CREATE ACCOUNT</button>';
+        html += '<button id="alpha-submit" class="btn-submit">CREATE ACCOUNT</button>';
         html += '</div>';
 
         document.getElementById('template-step2').innerHTML = html;
@@ -2406,25 +2406,25 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
             };
           });
         }
-        bindToggleGroup('apex-type-toggle');
-        bindToggleGroup('apex-dd-toggle');
+        bindToggleGroup('alpha-type-toggle');
+        bindToggleGroup('alpha-dd-toggle');
 
-        document.getElementById('apex-submit').addEventListener('click', function() {
+        document.getElementById('alpha-submit').addEventListener('click', function() {
           var btn = this;
           btn.disabled = true;
           btn.textContent = 'CREATING\\u2026';
 
-          var accountType = document.querySelector('#apex-type-toggle .tpl-type-btn.active').dataset.val;
-          var ddType = document.querySelector('#apex-dd-toggle .tpl-type-btn.active').dataset.val;
+          var accountType = document.querySelector('#alpha-type-toggle .tpl-type-btn.active').dataset.val;
+          var ddType = document.querySelector('#alpha-dd-toggle .tpl-type-btn.active').dataset.val;
 
           var body = {
             template_id: selectedTemplate.id,
-            label: document.getElementById('apex-label').value || selectedTemplate.label + ' Account',
+            label: document.getElementById('alpha-label').value || selectedTemplate.label + ' Account',
             account_type: accountType,
             drawdown_type: ddType
           };
 
-          fetch('/api/apex/accounts', {
+          fetch('/api/alpha/accounts', {
             method: 'POST',
             credentials: 'same-origin',
             headers: { 'Content-Type': 'application/json' },
@@ -2444,7 +2444,7 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
       }
 
       function loadAccounts() {
-        fetch('/api/apex/accounts', { credentials: 'same-origin' })
+        fetch('/api/alpha/accounts', { credentials: 'same-origin' })
           .then(function(r) { return r.json(); })
           .then(function(accounts) {
             if (accounts && accounts.length) {
@@ -2467,7 +2467,7 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
     let currentAccountId = null;
 
     function getSelectedAccountId() {
-      const sel = document.querySelector('#apex-selector select');
+      const sel = document.querySelector('#alpha-selector select');
       return sel ? sel.value : null;
     }
 
@@ -2646,7 +2646,7 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
         showSkeleton();
         currentAccountId = accountId;
       }
-      fetch('/api/apex/' + accountId + '/dashboard')
+      fetch('/api/alpha/' + accountId + '/dashboard')
         .then(function(r) { return r.json(); })
         .then(function(data) {
           if (data.error) {
@@ -3393,7 +3393,7 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
     var INSTRUMENTS = { 1: { symbol: 'ES', tick_size: 0.25, tick_value: 12.50 }, 2: { symbol: 'NQ', tick_size: 0.25, tick_value: 5.00 } };
 
     function getSelectedAccountId() {
-      var sel = document.querySelector('#apex-selector select');
+      var sel = document.querySelector('#alpha-selector select');
       return sel ? sel.value : null;
     }
 
@@ -3418,7 +3418,7 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
       var accountId = getSelectedAccountId();
       if (!accountId) { pnlLog.innerHTML = ''; return; }
       showPnlSkeleton();
-      fetch('/api/apex/' + accountId + '/daily-pnl?days=30')
+      fetch('/api/alpha/' + accountId + '/daily-pnl?days=30')
         .then(function(r) { return r.json(); })
         .then(function(rows) { renderPnlLog(rows); })
         .catch(function() { renderPnlLog([]); });
@@ -3643,7 +3643,7 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
       btn.disabled = true;
       btn.innerHTML = '<span class="compliance-spinner"></span>CHECKING...';
 
-      fetch('/api/apex/' + accountId + '/compliance-check', {
+      fetch('/api/alpha/' + accountId + '/compliance-check', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -3713,7 +3713,7 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
       .then(function(r) { return r.json(); })
       .then(function() {
         if (!accountId) { closeModal(); return; }
-        return fetch('/api/apex/' + accountId + '/daily-pnl', {
+        return fetch('/api/alpha/' + accountId + '/daily-pnl', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ date: today, pnl: pnl })
@@ -3796,7 +3796,7 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
       html += '<div><div class="alert-level-label">TARGET</div><div class="alert-level-value" style="color:var(--green)">' + fmtPrice(alert.target_price) + '</div></div>';
       html += '<div><div class="alert-level-label">STOP</div><div class="alert-level-value" style="color:var(--danger)">' + fmtPrice(alert.stop_price) + '</div></div>';
       html += '</div>';
-      html += '<div class="alert-rr">R:R ' + rr + '</div>';
+      html += '<div class="alert-rr">R:R 1:' + rr + '</div>';
       if (alert.message) {
         html += '<div class="alert-message">' + alert.message + '</div>';
       }
@@ -3860,7 +3860,7 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
         inBtn.innerHTML = '<span class="compliance-spinner"></span>CHECKING...';
       }
 
-      fetch('/api/apex/' + accountId + '/compliance-check', {
+      fetch('/api/alpha/' + accountId + '/compliance-check', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -4059,7 +4059,7 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
         html += '<div class="ai-level-row"><span class="ai-level-label">ENTRY</span><span class="ai-level-value" style="color:var(--red)">' + (a.entry_price != null ? a.entry_price.toFixed(2) : '--') + '</span></div>';
         html += '<div class="ai-level-row"><span class="ai-level-label">TARGET</span><span class="ai-level-value" style="color:var(--green)">' + (a.target_price != null ? a.target_price.toFixed(2) : '--') + '</span></div>';
         html += '<div class="ai-level-row"><span class="ai-level-label">STOP</span><span class="ai-level-value" style="color:var(--danger)">' + (a.stop_price != null ? a.stop_price.toFixed(2) : '--') + '</span></div>';
-        html += '<div class="ai-level-row"><span class="ai-level-label">R:R</span><span class="ai-level-value" style="color:var(--amber)">' + (a.risk_reward != null ? a.risk_reward.toFixed(1) + ' : 1' : '--') + '</span></div>';
+        html += '<div class="ai-level-row"><span class="ai-level-label">R:R</span><span class="ai-level-value" style="color:var(--amber)">' + (a.risk_reward != null ? '1:' + a.risk_reward.toFixed(1) : '--') + '</span></div>';
         html += '</div>';
 
         if (a.warnings && a.warnings.length) {
@@ -4404,7 +4404,7 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
       html += '<div class="strat-number-row">';
       html += '<div class="strat-toggle-label">Min R:R</div>';
       html += '<div style="text-align:right"><input type="number" class="strat-number-input" id="strat-minrr" value="' + (c.min_rr || 2.0) + '" min="1.0" max="5.0" step="0.5">';
-      html += '<div class="strat-number-display">' + (c.min_rr || 2.0).toFixed(1) + ':1</div></div>';
+      html += '<div class="strat-number-display">1:' + (c.min_rr || 2.0).toFixed(1) + '</div></div>';
       html += '</div>';
       html += '<div class="strat-toggle-row">';
       html += '<div class="strat-toggle-label">Require candle close beyond London</div>';
