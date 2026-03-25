@@ -279,7 +279,7 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
       align-items: flex-start;
       justify-content: space-between;
       padding: 16px 0 12px;
-      margin-bottom: 8px;
+      margin-bottom: 0;
     }
     .header-brand h1 {
       font-family: 'Outfit', sans-serif;
@@ -358,6 +358,26 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
       letter-spacing: 1px;
     }
     .header-user a:hover { color: var(--label); }
+
+    /* Tab bar */
+    .tab-bar {
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 16px;
+    }
+    .tab-bar a {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+      padding: 10px 20px;
+      display: inline-block;
+      text-decoration: none;
+      color: var(--muted);
+    }
+    .tab-bar a.active {
+      color: var(--red);
+      border-bottom: 2px solid var(--red);
+    }
 
     /* Footer */
     .footer {
@@ -1720,6 +1740,11 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
           <div id="logout-dropdown" style="display:none"></div>
         </div>
       </div>
+    </div>
+
+    <div class="tab-bar">
+      <a href="/app" class="active">DASHBOARD</a>
+      <a href="/app/learn">LEARN</a>
     </div>
 
     <div class="selectors-row">
