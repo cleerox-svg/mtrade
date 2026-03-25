@@ -1,0 +1,13 @@
+name = "mtrade"
+main = "src/index.ts"
+compatibility_date = "2026-03-25"
+
+routes = [
+  { pattern = "mtrade.lrxradar.com", custom_domain = true }
+]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "mtrade-db"
+database_id = "PLACEHOLDER_RUN_wrangler_d1_create"
+migrations_dir = "migrations"
