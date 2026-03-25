@@ -669,6 +669,24 @@ export function getLearnPage(user: { name: string; email: string; avatar_url: st
             });
           });
           setTimeout(updateSidebarActive, 100);
+
+          // Add seed link at bottom
+          var seedLink = document.createElement('div');
+          seedLink.style.cssText = 'text-align:center;padding:24px 0 8px';
+          seedLink.innerHTML = '<a href="#" id="seed-kb" style="font-size:10px;color:var(--muted);text-decoration:none;font-family:var(--mono)">Seed Knowledge Base</a>';
+          contentContainer.appendChild(seedLink);
+          document.getElementById('seed-kb').addEventListener('click', function(e) {
+            e.preventDefault();
+            var link = this;
+            link.textContent = 'Seeding...';
+            fetch('/api/kb/seed', { method: 'POST' })
+              .then(function(r) { return r.json(); })
+              .then(function(data) {
+                link.textContent = data.inserted + ' article(s) inserted';
+                if (data.inserted > 0) setTimeout(function() { location.reload(); }, 1200);
+              })
+              .catch(function() { link.textContent = 'Error seeding'; });
+          });
         });
     })();
 
