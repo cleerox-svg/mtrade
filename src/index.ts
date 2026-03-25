@@ -2,6 +2,7 @@ import { Env, JwtPayload, User } from './types';
 import { verifyJwt } from './jwt';
 import { handleGoogleRedirect, handleCallback, handleLogout } from './auth';
 import { loginPage, appPage } from './pages';
+import { handleApiRoutes } from './api';
 
 function getCookie(request: Request, name: string): string | null {
   const header = request.headers.get('Cookie');
@@ -16,12 +17,12 @@ async function getJwtPayload(request: Request, env: Env): Promise<JwtPayload | n
   return verifyJwt(token, env.JWT_SECRET);
 }
 
-async function handleApiRoutes(
+async function handleBuiltinApi(
   request: Request,
   env: Env,
   path: string,
   user: JwtPayload
-): Promise<Response> {
+): Promise<Response | null> {
   const json = (data: unknown, status = 200) =>
     new Response(JSON.stringify(data), {
       status,
@@ -44,7 +45,7 @@ async function handleApiRoutes(
     return json(fullUser);
   }
 
-  return json({ error: 'Not found' }, 404);
+  return null;
 }
 
 export default {
@@ -66,7 +67,9 @@ export default {
           headers: { 'Content-Type': 'application/json' },
         });
       }
-      return handleApiRoutes(request, env, path, payload);
+      const builtinResponse = await handleBuiltinApi(request, env, path, payload);
+      if (builtinResponse) return builtinResponse;
+      return handleApiRoutes(request, env, path, url, payload);
     }
 
     // Landing page
