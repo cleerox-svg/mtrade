@@ -148,6 +148,9 @@ export async function handleApiRoutes(
     const totalLoss = Math.abs(rows.filter(r => (r.pnl as number) < 0).reduce((s, r) => s + (r.pnl as number), 0));
     const profitFactor = totalLoss > 0 ? Math.round((totalProfit / totalLoss) * 100) / 100 : totalProfit > 0 ? Infinity : 0;
 
+    // Worst day
+    const worstDay = rows.length ? Math.min(...rows.map(r => r.pnl as number)) : 0;
+
     // Payout eligibility
     const profitTarget = account.profit_target as number;
     const blockers: string[] = [];
@@ -157,17 +160,35 @@ export async function handleApiRoutes(
     if (safetyNet < 0) blockers.push('Drawdown limit exceeded');
     const payoutEligible = blockers.length === 0;
 
+    // Payout checks for status row
+    const gripReached = totalPnl >= profitTarget;
+    const minTradingDays = rows.length >= 10;
+    const consistencyPass = consistencyPct >= 70;
+    const minProfit = totalPnl >= 500;
+
     return json({
       balance: Math.round(balance * 100) / 100,
       total_pnl: Math.round(totalPnl * 100) / 100,
       best_day: Math.round(bestDay * 100) / 100,
+      worst_day: Math.round(worstDay * 100) / 100,
       consistency_pct: consistencyPct,
+      consistency_limit: 30,
       drawdown_used: Math.round(drawdownUsed * 100) / 100,
+      drawdown_limit: drawdownLimit,
       safety_net: Math.round(safetyNet * 100) / 100,
+      profit_target: profitTarget,
       win_rate: winRate,
       profit_factor: profitFactor,
+      trading_days: rows.length,
+      daily_pnl: rows.map(r => ({ date: r.date, pnl: r.pnl })),
       payout_eligible: payoutEligible,
       blockers,
+      payout_checks: {
+        consistency: consistencyPass,
+        trading_days: minTradingDays,
+        grip: gripReached,
+        min_500: minProfit,
+      },
     });
   }
 

@@ -332,11 +332,182 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
     .btn-submit:hover { background: #d9204a; }
     .btn-submit:disabled { opacity: 0.5; cursor: not-allowed; }
 
+    /* Skeleton loading */
+    @keyframes skeletonPulse {
+      0%, 100% { background-color: var(--card); }
+      50% { background-color: #141420; }
+    }
+    .skeleton-rect {
+      height: 64px;
+      border-radius: 10px;
+      animation: skeletonPulse 1.5s ease-in-out infinite;
+      margin-bottom: 10px;
+    }
+    .skeleton-rect:nth-child(2) { animation-delay: 0.2s; }
+    .skeleton-rect:nth-child(3) { animation-delay: 0.4s; }
+
+    /* Dashboard panel */
+    .dash-balance-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 14px;
+    }
+    .dash-balance-label,
+    .dash-pnl-label {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 9px;
+      color: var(--label);
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      margin-bottom: 2px;
+    }
+    .dash-balance-value {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 24px;
+      color: var(--white);
+      font-weight: 700;
+    }
+    .dash-pnl-value {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 24px;
+      font-weight: 700;
+      text-align: right;
+    }
+    .dash-pnl-right { text-align: right; }
+
+    /* Sparkline */
+    .dash-sparkline { margin-bottom: 16px; }
+    .dash-sparkline svg { display: block; width: 100%; height: 36px; }
+
+    /* Gauges */
+    .dash-gauge {
+      margin-bottom: 12px;
+    }
+    .dash-gauge-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 4px;
+    }
+    .dash-gauge-label {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px;
+      color: var(--label);
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+    }
+    .dash-gauge-value {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px;
+      font-weight: 700;
+    }
+    .dash-gauge-track {
+      height: 5px;
+      background: rgba(255,255,255,0.08);
+      border-radius: 3px;
+      overflow: hidden;
+      position: relative;
+    }
+    .dash-gauge-fill {
+      height: 100%;
+      border-radius: 3px;
+      transition: width 0.6s ease;
+    }
+    .dash-gauge-fill.normal {
+      background: linear-gradient(90deg, var(--red), var(--red-soft));
+      box-shadow: 0 0 6px rgba(251,44,90,0.3);
+    }
+    .dash-gauge-fill.warning {
+      background: linear-gradient(90deg, var(--amber), #f59e0b);
+      box-shadow: 0 0 6px rgba(251,191,36,0.3);
+    }
+    .dash-gauge-fill.critical {
+      background: linear-gradient(90deg, var(--danger), #dc2626);
+      box-shadow: 0 0 10px rgba(239,68,68,0.5);
+    }
+
+    /* Stat grid */
+    .dash-stat-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+      margin: 16px 0;
+    }
+    .dash-stat-cell {
+      background: rgba(255,255,255,0.03);
+      border-radius: 8px;
+      padding: 8px;
+      text-align: center;
+    }
+    .dash-stat-label {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 8px;
+      color: var(--label);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 4px;
+    }
+    .dash-stat-value {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 14px;
+      font-weight: 700;
+    }
+
+    /* Payout status */
+    .dash-payout-label {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 9px;
+      color: var(--label);
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      margin-bottom: 8px;
+    }
+    .dash-payout-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+    .dash-payout-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .dash-payout-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+    .dash-payout-dot.pass {
+      background: var(--red);
+      box-shadow: 0 0 6px var(--red), 0 0 12px rgba(251,44,90,0.3);
+    }
+    .dash-payout-dot.fail {
+      background: var(--subtle);
+    }
+    .dash-payout-text {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px;
+      color: var(--label);
+    }
+
+    /* Empty state */
+    .dash-empty {
+      text-align: center;
+      padding: 32px 16px;
+      color: var(--muted);
+      font-style: italic;
+      font-size: 14px;
+    }
+
     @media (min-width: 768px) {
       .container { padding: 24px; }
       .card { padding: 20px; }
       .toggle-row { flex-wrap: nowrap; }
       .form-grid { grid-template-columns: 1fr 1fr; }
+      .dash-stat-grid { grid-template-columns: repeat(6, 1fr); }
+      .dash-gauge { padding: 0 8px; }
     }
   </style>
 </head>
@@ -551,6 +722,219 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
 
       loadAccounts();
     })();
+  </script>
+
+  <script>
+  (function() {
+    const panel = document.getElementById('dashboard-panel');
+    let pollTimer = null;
+    let currentAccountId = null;
+
+    function getSelectedAccountId() {
+      const sel = document.querySelector('#apex-selector select');
+      return sel ? sel.value : null;
+    }
+
+    function showSkeleton() {
+      panel.innerHTML =
+        '<div class="skeleton-rect"></div>' +
+        '<div class="skeleton-rect"></div>' +
+        '<div class="skeleton-rect"></div>';
+    }
+
+    function fmt(n) {
+      return n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    function buildSparkline(dailyPnl) {
+      if (!dailyPnl || dailyPnl.length < 2) return '';
+      var vals = dailyPnl.map(function(d) { return d.pnl; });
+      var min = Math.min.apply(null, vals);
+      var max = Math.max.apply(null, vals);
+      var range = max - min || 1;
+      var w = 100;
+      var h = 36;
+      var pad = 2;
+      var points = vals.map(function(v, i) {
+        var x = (i / (vals.length - 1)) * w;
+        var y = h - pad - ((v - min) / range) * (h - pad * 2);
+        return x.toFixed(2) + ',' + y.toFixed(2);
+      }).join(' ');
+
+      return '<div class="dash-sparkline">' +
+        '<svg viewBox="0 0 ' + w + ' ' + h + '" preserveAspectRatio="none">' +
+        '<defs><linearGradient id="spark-grad" x1="0" y1="0" x2="1" y2="0">' +
+        '<stop offset="0%" stop-color="var(--label)"/>' +
+        '<stop offset="100%" stop-color="var(--red)"/>' +
+        '</linearGradient></defs>' +
+        '<polyline points="' + points + '" fill="none" stroke="url(#spark-grad)" stroke-width="2" vector-effect="non-scaling-stroke"/>' +
+        '</svg></div>';
+    }
+
+    function gaugeState(value, warnThreshold, critThreshold) {
+      if (value >= critThreshold) return 'critical';
+      if (value >= warnThreshold) return 'warning';
+      return 'normal';
+    }
+
+    function buildGauge(label, valueText, fillPct, state) {
+      var colorMap = { normal: 'var(--red)', warning: 'var(--amber)', critical: 'var(--danger)' };
+      var color = colorMap[state];
+      return '<div class="dash-gauge">' +
+        '<div class="dash-gauge-header">' +
+        '<span class="dash-gauge-label">' + label + '</span>' +
+        '<span class="dash-gauge-value" style="color:' + color + '">' + valueText + '</span>' +
+        '</div>' +
+        '<div class="dash-gauge-track">' +
+        '<div class="dash-gauge-fill ' + state + '" style="width:' + Math.min(fillPct, 100) + '%"></div>' +
+        '</div></div>';
+    }
+
+    function renderDashboard(d) {
+      if (!d || d.error || (d.trading_days === 0 && d.total_pnl === 0)) {
+        panel.innerHTML = '<div class="card"><div class="dash-empty">No trades yet — tap + to log your first</div></div>';
+        return;
+      }
+
+      var pnlColor = d.total_pnl >= 0 ? 'var(--red)' : 'var(--label)';
+      var pnlPrefix = d.total_pnl > 0 ? '+' : '';
+
+      var html = '<div class="card" style="animation:slideUp 0.3s ease">';
+
+      // Balance row
+      html += '<div class="dash-balance-row">' +
+        '<div><div class="dash-balance-label">BALANCE</div>' +
+        '<div class="dash-balance-value">$' + fmt(d.balance) + '</div></div>' +
+        '<div class="dash-pnl-right"><div class="dash-pnl-label">P&L</div>' +
+        '<div class="dash-pnl-value" style="color:' + pnlColor + '">' + pnlPrefix + '$' + fmt(d.total_pnl) + '</div></div>' +
+        '</div>';
+
+      // Sparkline
+      html += buildSparkline(d.daily_pnl);
+
+      // Gauges
+      // REV LIMIT - consistency
+      var consistencyState = gaugeState(d.consistency_pct >= 100 ? 0 : (100 - d.consistency_pct),
+        100 - (d.consistency_limit + 5), 100 - d.consistency_limit);
+      // Actually: warning when consistency drops near limit. Let's think differently:
+      // consistency_pct is how "good" you are. Lower is worse.
+      // warning at limit-5 from max (so consistency <= consistency_limit + 5 in inverted? no)
+      // The limit is 30% max single day. consistency_pct = 100 - (maxDayPct - 30).
+      // So 100% = perfect, 70% = threshold. Warning at 75%, critical at 70%.
+      var revState = d.consistency_pct <= 70 ? 'critical' : d.consistency_pct <= 75 ? 'warning' : 'normal';
+      html += buildGauge(
+        'REV LIMIT · ' + d.consistency_limit + '% MAX',
+        d.consistency_pct + '%',
+        d.consistency_pct,
+        revState
+      );
+
+      // REDLINE - drawdown
+      var ddPct = d.drawdown_limit > 0 ? (d.drawdown_used / d.drawdown_limit) * 100 : 0;
+      var ddState = ddPct >= 85 ? 'critical' : ddPct >= 70 ? 'warning' : 'normal';
+      html += buildGauge(
+        'REDLINE · DRAWDOWN',
+        '$' + fmt(d.drawdown_used) + ' / $' + fmt(d.drawdown_limit),
+        ddPct,
+        ddState
+      );
+
+      // BOOST - profit target
+      var boostPct = d.profit_target > 0 ? (d.total_pnl / d.profit_target) * 100 : 0;
+      var boostState = boostPct >= 100 ? 'normal' : boostPct >= 70 ? 'warning' : 'normal';
+      html += buildGauge(
+        'BOOST · PROFIT TARGET',
+        '$' + fmt(d.total_pnl) + ' / $' + fmt(d.profit_target),
+        Math.max(0, boostPct),
+        boostPct >= 100 ? 'normal' : 'warning'
+      );
+
+      // Stat grid
+      var winColor = d.win_rate >= 50 ? 'var(--red)' : 'var(--label)';
+      var gripReached = d.payout_checks && d.payout_checks.grip;
+      var gripColor = gripReached ? 'var(--red)' : 'var(--amber)';
+
+      html += '<div class="dash-stat-grid">';
+      html += statCell('Win Rate', d.win_rate + '%', winColor);
+      html += statCell('PF', d.profit_factor === Infinity ? '∞' : d.profit_factor.toFixed(2), 'var(--bright)');
+      html += statCell('Best Day', '$' + fmt(d.best_day), 'var(--red)');
+      html += statCell('Worst Day', '$' + fmt(d.worst_day), 'var(--label)');
+      html += statCell('Days', String(d.trading_days), 'var(--bright)');
+      html += statCell('GRIP', gripReached ? 'REACHED' : 'PENDING', gripColor);
+      html += '</div>';
+
+      // Payout status
+      var checks = d.payout_checks || {};
+      html += '<div class="dash-payout-label">PAYOUT STATUS</div>';
+      html += '<div class="dash-payout-row">';
+      html += payoutItem('Consistency', checks.consistency);
+      html += payoutItem('Trading Days', checks.trading_days);
+      html += payoutItem('GRIP', checks.grip);
+      html += payoutItem('Min $500', checks.min_500);
+      html += '</div>';
+
+      html += '</div>';
+      panel.innerHTML = html;
+    }
+
+    function statCell(label, value, color) {
+      return '<div class="dash-stat-cell">' +
+        '<div class="dash-stat-label">' + label + '</div>' +
+        '<div class="dash-stat-value" style="color:' + color + '">' + value + '</div>' +
+        '</div>';
+    }
+
+    function payoutItem(label, pass) {
+      var cls = pass ? 'pass' : 'fail';
+      return '<div class="dash-payout-item">' +
+        '<span class="dash-payout-dot ' + cls + '"></span>' +
+        '<span class="dash-payout-text">' + label + '</span>' +
+        '</div>';
+    }
+
+    function fetchDashboard() {
+      var accountId = getSelectedAccountId();
+      if (!accountId) {
+        panel.innerHTML = '';
+        return;
+      }
+      if (accountId !== currentAccountId) {
+        showSkeleton();
+        currentAccountId = accountId;
+      }
+      fetch('/api/apex/' + accountId + '/dashboard')
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+          if (data.error) {
+            panel.innerHTML = '<div class="card"><div class="dash-empty">No trades yet — tap + to log your first</div></div>';
+          } else {
+            renderDashboard(data);
+          }
+        })
+        .catch(function() {
+          panel.innerHTML = '<div class="card"><div class="dash-empty">No trades yet — tap + to log your first</div></div>';
+        });
+    }
+
+    function startPolling() {
+      if (pollTimer) clearInterval(pollTimer);
+      pollTimer = setInterval(fetchDashboard, 30000);
+    }
+
+    // Listen for account changes
+    document.addEventListener('account-changed', function() {
+      fetchDashboard();
+      startPolling();
+    });
+
+    // Initial load — wait a tick for selectors to render
+    setTimeout(function() {
+      if (getSelectedAccountId()) {
+        fetchDashboard();
+        startPolling();
+      }
+    }, 100);
+  })();
   </script>
 </body>
 </html>`;
