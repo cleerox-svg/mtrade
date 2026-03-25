@@ -6,6 +6,7 @@ import { handleApiRoutes } from './api';
 import { fetchAndStoreCandles, computeSessionLevels } from './market-data';
 import { runStrategyEngine } from './strategy-engine';
 import { sendDrawdownWarning, sendConsistencyWarning, hasNotificationToday, logNotification, getUserSettings } from './notifications';
+import { getManifestJson, getServiceWorkerJs, getIconSvg, getFaviconSvg } from './pwa';
 
 function getCookie(request: Request, name: string): string | null {
   const header = request.headers.get('Cookie');
@@ -147,6 +148,29 @@ export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
     const path = url.pathname;
+
+    // PWA assets — publicly accessible, no auth
+    if (path === '/manifest.json') {
+      return new Response(getManifestJson(), {
+        headers: { 'Content-Type': 'application/json', 'Cache-Control': 'public, max-age=86400' },
+      });
+    }
+    if (path === '/icon-192.png' || path === '/icon-512.png') {
+      const size = path === '/icon-192.png' ? 192 : 512;
+      return new Response(getIconSvg(size), {
+        headers: { 'Content-Type': 'image/svg+xml', 'Cache-Control': 'public, max-age=604800' },
+      });
+    }
+    if (path === '/favicon.svg' || path === '/favicon.ico') {
+      return new Response(getFaviconSvg(), {
+        headers: { 'Content-Type': 'image/svg+xml', 'Cache-Control': 'public, max-age=604800' },
+      });
+    }
+    if (path === '/sw.js') {
+      return new Response(getServiceWorkerJs(), {
+        headers: { 'Content-Type': 'application/javascript', 'Cache-Control': 'no-cache', 'Service-Worker-Allowed': '/' },
+      });
+    }
 
     // Auth routes
     if (path === '/auth/google') return handleGoogleRedirect(request, env);
