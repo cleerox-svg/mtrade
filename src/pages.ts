@@ -1223,6 +1223,8 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
 
     <button class="demo-alert-link" id="demo-alert-btn">Create Demo Alert</button>
 
+    <div id="engine-status" style="text-align:center;padding:8px 0;font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--muted);letter-spacing:0.5px"></div>
+
     <div class="footer">
       <div class="footer-brand">MTRADE</div>
       <div class="footer-copy">&copy; 2026 LRX Enterprises Inc.</div>
@@ -1765,6 +1767,8 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
 
     var cachedCandles = {};
     var cachedSessions = {};
+    var cachedFvgs = {};
+    var cachedIfvgs = {};
     var alertLevels = null;
 
     function fetchCandleData(sym) {
@@ -1785,6 +1789,17 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
             data.forEach(function(s) { cachedSessions[s.symbol] = s; });
           }
         }).catch(function() {});
+    }
+
+    function fetchFvgData(sym) {
+      return Promise.all([
+        fetch('/api/fvg/' + sym + '?status=active&days=2').then(function(r) { return r.json(); }).then(function(data) {
+          if (Array.isArray(data) && data.length > 0) cachedFvgs[sym] = data;
+        }).catch(function() {}),
+        fetch('/api/fvg/' + sym + '?status=inverted&days=2').then(function(r) { return r.json(); }).then(function(data) {
+          if (Array.isArray(data) && data.length > 0) cachedIfvgs[sym] = data;
+        }).catch(function() {})
+      ]);
     }
 
     function generateFallbackCandles(start, count) {
@@ -1920,25 +1935,30 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
       var sess = cachedSessions[sym] || {};
       var fb = fallbackData[sym];
 
-      // Build annotation data from session levels or alert or fallback
+      // Build annotation data from session levels or alert or real FVG data
       var d = {};
+      var entry = null, target = null, stop = null;
+
+      // Use real FVG data from API if available
+      var realFvgs = cachedFvgs[sym] || [];
+      var realIfvgs = cachedIfvgs[sym] || [];
+      var bestFvg = realFvgs.length > 0 ? { high: realFvgs[0].high, low: realFvgs[0].low } : null;
+      var bestIfvg = realIfvgs.length > 0 ? { high: realIfvgs[0].high, low: realIfvgs[0].low } : null;
+
       if (alertLevels && (alertLevels.symbol === sym || !alertLevels.symbol)) {
         d.londonHigh = alertLevels.sweep_level || sess.london_high || fb.londonHigh;
         d.londonLow = alertLevels.sweep_direction === 'low' ? (alertLevels.sweep_level || sess.london_low || fb.londonLow) : (sess.london_low || fb.londonLow);
         if (alertLevels.sweep_direction === 'high') d.londonHigh = alertLevels.sweep_level || sess.london_high || fb.londonHigh;
-        d.fvg = { high: alertLevels.fvg_high || fb.fvg.high, low: alertLevels.fvg_low || fb.fvg.low };
-        d.ifvg = { high: alertLevels.ifvg_high || fb.ifvg.high, low: alertLevels.ifvg_low || fb.ifvg.low };
-        var entry = alertLevels.entry_price;
-        var target = alertLevels.target_price;
-        var stop = alertLevels.stop_price;
+        d.fvg = { high: alertLevels.fvg_high || (bestFvg ? bestFvg.high : fb.fvg.high), low: alertLevels.fvg_low || (bestFvg ? bestFvg.low : fb.fvg.low) };
+        d.ifvg = { high: alertLevels.ifvg_high || (bestIfvg ? bestIfvg.high : fb.ifvg.high), low: alertLevels.ifvg_low || (bestIfvg ? bestIfvg.low : fb.ifvg.low) };
+        entry = alertLevels.entry_price;
+        target = alertLevels.target_price;
+        stop = alertLevels.stop_price;
       } else {
         d.londonHigh = sess.london_high != null ? sess.london_high : fb.londonHigh;
         d.londonLow = sess.london_low != null ? sess.london_low : fb.londonLow;
-        d.fvg = fb.fvg;
-        d.ifvg = fb.ifvg;
-        var entry = null;
-        var target = null;
-        var stop = null;
+        d.fvg = bestFvg || fb.fvg;
+        d.ifvg = bestIfvg || fb.ifvg;
       }
 
       // Use real candles if available, else generate fallback
@@ -1962,7 +1982,7 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
 
     function loadAndRender() {
       var sym = window.selectedInstrument || 'NQ';
-      Promise.all([fetchCandleData(sym), fetchSessionData()]).then(function() {
+      Promise.all([fetchCandleData(sym), fetchSessionData(), fetchFvgData(sym)]).then(function() {
         renderChartWithData();
       });
     }
@@ -1981,7 +2001,8 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
   /* ── Signal Progression Tracker ── */
   (function() {
     var trackerEl = document.getElementById('signal-tracker');
-    var currentPhase = 3;
+    var currentPhase = 0;
+    var activeSetup = null;
 
     var phases = [
       { name: 'London Range', desc: 'Session high & low forming' },
@@ -1991,16 +2012,52 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
       { name: 'Entry', desc: 'Execute on gap, target opposite level' }
     ];
 
-    var demoData = {
+    var fallbackData = {
       NQ: { londonHigh: 21487.50, londonLow: 21422.75, fvg: { high: 21440, low: 21428 }, ifvg: { high: 21462, low: 21455 } },
       ES: { londonHigh: 5902.25, londonLow: 5878.50, fvg: { high: 5886, low: 5880 }, ifvg: { high: 5894, low: 5890 } }
     };
 
+    function fetchActiveSetups() {
+      fetch('/api/setups/active', { credentials: 'same-origin' })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+          var sym = window.selectedInstrument || 'NQ';
+          if (data.setups && data.setups.length > 0) {
+            var match = null;
+            data.setups.forEach(function(s) { if (s.symbol === sym && !match) match = s; });
+            if (match) {
+              activeSetup = match;
+              currentPhase = match.phase || 0;
+            } else {
+              activeSetup = null;
+              currentPhase = 0;
+            }
+          } else {
+            activeSetup = null;
+            currentPhase = 0;
+          }
+          renderTracker();
+        }).catch(function() {});
+    }
+
+    fetchActiveSetups();
+    setInterval(fetchActiveSetups, 15000);
+
     function renderTracker() {
       var sym = window.selectedInstrument || 'NQ';
-      var d = demoData[sym];
-      var entry = d.ifvg.high;
-      var target = d.londonHigh;
+      var fb = fallbackData[sym];
+      var d = {};
+      if (activeSetup) {
+        var sess = activeSetup;
+        d.londonHigh = sess.target_price || fb.londonHigh;
+        d.londonLow = sess.sweep_level || fb.londonLow;
+        d.fvg = sess.fvg_data ? { high: sess.fvg_data.high, low: sess.fvg_data.low } : fb.fvg;
+        d.ifvg = sess.ifvg_data ? { high: sess.ifvg_data.high, low: sess.ifvg_data.low } : fb.ifvg;
+      } else {
+        d = { londonHigh: fb.londonHigh, londonLow: fb.londonLow, fvg: fb.fvg, ifvg: fb.ifvg };
+      }
+      var entry = d.ifvg ? d.ifvg.high : fb.ifvg.high;
+      var target = d.londonHigh || fb.londonHigh;
 
       // Tag
       var tagText, tagColor;
@@ -2045,10 +2102,10 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
       var statusLabel = 'PHASE ' + currentPhase + ' \u2014 ' + phases[currentPhase].name.toUpperCase();
 
       var messages = [
-        'London session forming. Like a top note \u2014 the opening impression.',
-        'Sweep confirmed \u2014 London Low at ' + d.londonLow.toFixed(2) + ' broken. Sillage trail detected.',
-        'Heart note developing. Retracing into 4H FVG (' + d.fvg.low.toFixed(2) + ' \u2013 ' + d.fvg.high.toFixed(2) + ')',
-        'Base note locked. IFVG at ' + d.ifvg.low.toFixed(2) + ' \u2013 ' + d.ifvg.high.toFixed(2) + ' confirms direction.',
+        activeSetup ? 'London session forming. Like a top note \u2014 the opening impression.' : 'Waiting for London session to complete...',
+        'Sweep confirmed \u2014 London Low at ' + (d.londonLow || 0).toFixed(2) + ' broken. Sillage trail detected.',
+        'Heart note developing. Retracing into 4H FVG (' + (d.fvg ? d.fvg.low.toFixed(2) : '?') + ' \u2013 ' + (d.fvg ? d.fvg.high.toFixed(2) : '?') + ')',
+        'Base note locked. IFVG at ' + (d.ifvg ? d.ifvg.low.toFixed(2) : '?') + ' \u2013 ' + (d.ifvg ? d.ifvg.high.toFixed(2) : '?') + ' confirms direction.',
         'ACCORD \u2014 all notes aligned. Buy ' + entry.toFixed(2) + ' \u2192 Target ' + target.toFixed(2)
       ];
 
@@ -2552,6 +2609,34 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
     }
 
     renderCard();
+  })();
+  </script>
+
+  <script>
+  /* ── Engine Status Indicator ── */
+  (function() {
+    var el = document.getElementById('engine-status');
+    function fetchStatus() {
+      fetch('/api/engine/status', { credentials: 'same-origin' })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+          var lastRun = data.last_run;
+          var timeAgo = 'never';
+          if (lastRun) {
+            var diff = Math.floor((Date.now() - new Date(lastRun + 'Z').getTime()) / 1000);
+            if (diff < 60) timeAgo = diff + 's ago';
+            else if (diff < 3600) timeAgo = Math.floor(diff / 60) + 'm ago';
+            else timeAgo = Math.floor(diff / 3600) + 'h ago';
+          }
+          var activeFvgs = data.fvg_counts ? data.fvg_counts.active : 0;
+          var setups = data.active_setups || 0;
+          el.textContent = 'Engine: last run ' + timeAgo + ' \\u00B7 ' + activeFvgs + ' active FVGs \\u00B7 ' + setups + ' setups today';
+        }).catch(function() {
+          el.textContent = 'Engine: offline';
+        });
+    }
+    fetchStatus();
+    setInterval(fetchStatus, 30000);
   })();
   </script>
 </body>
