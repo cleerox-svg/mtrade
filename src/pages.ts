@@ -1180,6 +1180,135 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
       color: var(--bright);
     }
 
+    /* Compliance Results */
+    .compliance-results {
+      margin-top: 12px;
+      animation: slideUp 0.3s ease;
+    }
+    .compliance-check-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 10px;
+      background: rgba(255,255,255,0.02);
+      border-radius: 8px;
+      margin-bottom: 4px;
+    }
+    .compliance-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+    .compliance-dot.pass { background: var(--green); box-shadow: 0 0 4px var(--green); }
+    .compliance-dot.warn { background: var(--amber); box-shadow: 0 0 4px var(--amber); }
+    .compliance-dot.fail { background: var(--danger); box-shadow: 0 0 4px var(--danger); }
+    .compliance-label {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px;
+      color: var(--label);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      min-width: 72px;
+    }
+    .compliance-msg {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      color: var(--text);
+      flex: 1;
+    }
+    .compliance-rec {
+      padding: 10px;
+      border-radius: 8px;
+      margin-top: 8px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+    }
+    .compliance-rec.reduce {
+      background: rgba(251,191,36,0.08);
+      border: 1px solid rgba(251,191,36,0.2);
+      color: var(--amber);
+    }
+    .compliance-rec.skip {
+      background: rgba(239,68,68,0.08);
+      border: 1px solid rgba(239,68,68,0.2);
+      color: var(--danger);
+    }
+    .compliance-actions {
+      display: flex;
+      gap: 8px;
+      margin-top: 12px;
+    }
+    .compliance-confirm {
+      flex: 1;
+      padding: 14px;
+      font-family: 'Outfit', sans-serif;
+      font-size: 14px;
+      font-weight: 700;
+      border-radius: 10px;
+      border: none;
+      cursor: pointer;
+      min-height: 44px;
+      color: white;
+    }
+    .compliance-confirm.all-pass { background: var(--green); }
+    .compliance-confirm.warnings { background: var(--amber); color: #000; }
+    .compliance-confirm:disabled { opacity: 0.4; cursor: default; }
+    .compliance-cancel {
+      flex: 1;
+      padding: 14px;
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--muted);
+      font-family: 'Outfit', sans-serif;
+      font-size: 14px;
+      font-weight: 700;
+      border-radius: 10px;
+      cursor: pointer;
+      min-height: 44px;
+    }
+    .alert-compliance-summary {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px;
+      padding: 6px 10px;
+      border-radius: 6px;
+      margin-top: 8px;
+    }
+    .alert-compliance-summary.warn {
+      background: rgba(251,191,36,0.08);
+      color: var(--amber);
+      border: 1px solid rgba(251,191,36,0.15);
+    }
+    .alert-compliance-summary.fail {
+      background: rgba(239,68,68,0.08);
+      color: var(--danger);
+      border: 1px solid rgba(239,68,68,0.15);
+    }
+    .alert-btn-reduce {
+      flex: 1;
+      background: rgba(251,191,36,0.1);
+      border: 1px solid var(--amber);
+      color: var(--amber);
+      font-family: 'Outfit', sans-serif;
+      font-size: 14px;
+      font-weight: 700;
+      border-radius: 10px;
+      padding: 14px;
+      cursor: pointer;
+      min-height: 44px;
+    }
+    .compliance-spinner {
+      display: inline-block;
+      width: 14px;
+      height: 14px;
+      border: 2px solid transparent;
+      border-top-color: currentColor;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      vertical-align: middle;
+      margin-right: 6px;
+    }
+
     /* AI Analysis */
     .ai-analysis-card { margin-bottom: 12px; }
     .ai-analysis-header {
@@ -2686,8 +2815,11 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
         '<div class="modal-label">Entry Price</div>' +
         '<input class="modal-input" id="tm-entry" type="number" step="0.25" inputmode="decimal">' +
 
-        '<div class="modal-label">Exit Price</div>' +
+        '<div class="modal-label">Exit Price (Target)</div>' +
         '<input class="modal-input" id="tm-exit" type="number" step="0.25" inputmode="decimal">' +
+
+        '<div class="modal-label">Stop Price</div>' +
+        '<input class="modal-input" id="tm-stop" type="number" step="0.25" inputmode="decimal">' +
 
         '<div class="modal-label">P&L</div>' +
         '<div class="modal-pnl-display" id="tm-pnl-display">--</div>' +
@@ -2696,6 +2828,7 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
         '<textarea class="modal-input" id="tm-notes" rows="3" style="resize:vertical"></textarea>' +
 
         '<button class="modal-submit" id="tm-submit" disabled>LOG TRADE</button>' +
+        '<div id="tm-compliance-results"></div>' +
         '</div></div>';
 
       modalRoot.innerHTML = html;
@@ -2739,18 +2872,127 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
         document.getElementById(id).addEventListener('input', updatePnlDisplay);
       });
 
-      // Submit
-      document.getElementById('tm-submit').onclick = submitTrade;
+      // Submit — first runs compliance, then allows confirm
+      document.getElementById('tm-submit').onclick = runComplianceCheck;
     }
 
     function closeModal() {
       modalRoot.innerHTML = '';
     }
 
-    function submitTrade() {
+    function getCheckNames() {
+      return { contracts: 'Contracts', mae: 'MAE', drawdown: 'Drawdown', consistency: 'Consistency', daily_loss: 'Daily Loss' };
+    }
+
+    function renderComplianceResults(result) {
+      var container = document.getElementById('tm-compliance-results');
+      var names = getCheckNames();
+      var html = '<div class="compliance-results">';
+
+      for (var i = 0; i < result.checks.length; i++) {
+        var c = result.checks[i];
+        if (c.check === 'recommendation') continue;
+        var dotClass = c.passed ? (c.severity === 'warning' ? 'warn' : 'pass') : 'fail';
+        if (c.passed && c.severity === 'critical') dotClass = 'warn';
+        html += '<div class="compliance-check-row">';
+        html += '<span class="compliance-dot ' + dotClass + '"></span>';
+        html += '<span class="compliance-label">' + (names[c.check] || c.check) + '</span>';
+        html += '<span class="compliance-msg">' + (c.message || '') + '</span>';
+        html += '</div>';
+      }
+
+      var rec = result.recommendation;
+      if (rec.action === 'reduce') {
+        html += '<div class="compliance-rec reduce">Recommended: ' + rec.recommended_contracts + ' contract' + (rec.recommended_contracts > 1 ? 's' : '') + ' — ' + rec.reasoning + '</div>';
+      } else if (rec.action === 'skip') {
+        html += '<div class="compliance-rec skip">Trade not recommended — ' + rec.reasoning + '</div>';
+      }
+
+      // Buttons
+      var hasCriticalFail = result.checks.some(function(c) { return !c.passed && c.severity === 'critical'; });
+      var anyFail = !result.passed;
+      var hasWarnings = result.checks.some(function(c) { return c.severity === 'warning' || c.severity === 'critical'; });
+      var canConfirm = !hasCriticalFail && !(anyFail && rec.action === 'skip');
+
+      html += '<div class="compliance-actions">';
+      var confirmClass = result.passed && !hasWarnings ? 'all-pass' : 'warnings';
+      html += '<button class="compliance-confirm ' + confirmClass + '" id="tm-confirm"' + (canConfirm ? '' : ' disabled') + '>CONFIRM & LOG</button>';
+      html += '<button class="compliance-cancel" id="tm-cancel-compliance">CANCEL</button>';
+      html += '</div>';
+      html += '</div>';
+
+      container.innerHTML = html;
+
+      document.getElementById('tm-confirm').onclick = function() { doSubmitTrade(); };
+      document.getElementById('tm-cancel-compliance').onclick = function() { container.innerHTML = ''; document.getElementById('tm-submit').textContent = 'LOG TRADE'; document.getElementById('tm-submit').disabled = false; };
+    }
+
+    function runComplianceCheck() {
       var btn = document.getElementById('tm-submit');
+      var accountId = getSelectedAccountId();
+      var entry = parseFloat(document.getElementById('tm-entry').value);
+      var exit = parseFloat(document.getElementById('tm-exit').value);
+      var stop = parseFloat(document.getElementById('tm-stop').value);
+      var contracts = parseInt(document.getElementById('tm-contracts').value) || 1;
+
+      if (!accountId || isNaN(entry) || isNaN(exit)) {
+        doSubmitTrade();
+        return;
+      }
+
+      // If no stop price, skip compliance and log directly
+      if (isNaN(stop)) {
+        doSubmitTrade();
+        return;
+      }
+
       btn.disabled = true;
-      btn.textContent = 'SAVING...';
+      btn.innerHTML = '<span class="compliance-spinner"></span>CHECKING...';
+
+      fetch('/api/apex/' + accountId + '/compliance-check', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          instrument_id: modalState.instrument_id,
+          direction: modalState.direction,
+          contracts: contracts,
+          entry_price: entry,
+          stop_price: stop,
+          target_price: exit
+        })
+      })
+      .then(function(r) { return r.json(); })
+      .then(function(result) {
+        if (result.error) {
+          btn.disabled = false;
+          btn.textContent = 'LOG TRADE';
+          return;
+        }
+
+        // Fast path: all checks pass with no warnings — log directly
+        var hasWarnings = result.checks.some(function(c) { return c.severity === 'warning' || c.severity === 'critical' || !c.passed; });
+        if (result.passed && !hasWarnings) {
+          doSubmitTrade();
+          return;
+        }
+
+        // Show compliance results
+        btn.style.display = 'none';
+        renderComplianceResults(result);
+      })
+      .catch(function() {
+        btn.disabled = false;
+        btn.textContent = 'LOG TRADE';
+      });
+    }
+
+    function doSubmitTrade() {
+      var btn = document.getElementById('tm-submit');
+      if (btn) {
+        btn.disabled = true;
+        btn.textContent = 'SAVING...';
+        btn.style.display = '';
+      }
 
       var pnl = calcPnl();
       var accountId = getSelectedAccountId();
@@ -2787,8 +3029,11 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
         fetchPnlLog();
       })
       .catch(function() {
-        btn.disabled = false;
-        btn.textContent = 'LOG TRADE';
+        if (btn) {
+          btn.disabled = false;
+          btn.textContent = 'LOG TRADE';
+          btn.style.display = '';
+        }
       });
     }
 
@@ -2861,7 +3106,7 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
       return html;
     }
 
-    function handleImIn(alert) {
+    function logTradeFromAlert(alert, contracts) {
       var dir = getDirection(alert);
       var instId = alert.instrument_id || 2;
       var today = new Date().toISOString().slice(0, 10);
@@ -2870,7 +3115,7 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
         instrument_id: instId,
         date: today,
         direction: dir,
-        contracts: 1,
+        contracts: contracts || 1,
         entry_price: alert.entry_price,
         exit_price: alert.target_price,
         pnl: 0,
@@ -2890,6 +3135,102 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
         pollAlerts();
       })
       .catch(function(err) { console.error('Failed to log trade from alert', err); });
+    }
+
+    function handleImIn(alert) {
+      var dir = getDirection(alert);
+      var instId = alert.instrument_id || 2;
+      var accountId = window.selectedAccountId;
+
+      // If no account or no stop/entry, skip compliance
+      if (!accountId || !alert.entry_price || !alert.stop_price) {
+        logTradeFromAlert(alert, 1);
+        return;
+      }
+
+      var inBtn = overlayEl.querySelector('.alert-btn-in[data-alert-id="' + alert.id + '"]');
+      if (inBtn) {
+        inBtn.disabled = true;
+        inBtn.innerHTML = '<span class="compliance-spinner"></span>CHECKING...';
+      }
+
+      fetch('/api/apex/' + accountId + '/compliance-check', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          instrument_id: instId,
+          direction: dir,
+          contracts: 1,
+          entry_price: alert.entry_price,
+          stop_price: alert.stop_price,
+          target_price: alert.target_price || alert.entry_price
+        })
+      })
+      .then(function(r) { return r.json(); })
+      .then(function(result) {
+        if (result.error) {
+          logTradeFromAlert(alert, 1);
+          return;
+        }
+
+        var hasWarnings = result.checks.some(function(c) { return c.severity === 'warning' || c.severity === 'critical'; });
+        var anyFail = !result.passed;
+
+        if (result.passed && !hasWarnings) {
+          // All clear — log immediately
+          logTradeFromAlert(alert, 1);
+          return;
+        }
+
+        // Show compliance inline on alert card
+        var alertCard = overlayEl.querySelector('.alert-overlay');
+        if (!alertCard) { logTradeFromAlert(alert, 1); return; }
+
+        // Remove old actions
+        var oldActions = alertCard.querySelector('.alert-actions');
+        if (oldActions) oldActions.remove();
+
+        // Remove old compliance summary if exists
+        var oldSummary = alertCard.querySelector('.alert-compliance-summary');
+        if (oldSummary) oldSummary.remove();
+
+        var rec = result.recommendation;
+        var recContracts = rec.recommended_contracts || 0;
+
+        if (anyFail && rec.action === 'skip') {
+          // Compliance failed — show failure, disable I'M IN
+          var failMsgs = result.checks.filter(function(c) { return !c.passed; }).map(function(c) { return c.message; }).join(' · ');
+          var failHtml = '<div class="alert-compliance-summary fail">' + failMsgs + '</div>';
+          failHtml += '<div class="alert-actions"><button class="alert-btn-skip" data-alert-id="' + alert.id + '">SKIP</button></div>';
+          alertCard.insertAdjacentHTML('beforeend', failHtml);
+          alertCard.querySelector('.alert-btn-skip').onclick = function() { handleSkip(alert.id); };
+        } else {
+          // Warnings — show summary with options
+          var warnMsgs = result.checks.filter(function(c) { return !c.passed || c.severity === 'warning' || c.severity === 'critical'; }).map(function(c) { return c.message; }).join(' · ');
+          var warnHtml = '<div class="alert-compliance-summary warn">' + warnMsgs + '</div>';
+          warnHtml += '<div class="alert-actions">';
+          warnHtml += '<button class="alert-btn-in" data-alert-id="' + alert.id + '">Proceed Anyway</button>';
+          if (recContracts > 0 && recContracts < 1) {
+            // Already at 1 contract, can't reduce further
+          } else if (rec.action === 'reduce' && recContracts > 0) {
+            warnHtml += '<button class="alert-btn-reduce" data-alert-id="' + alert.id + '">Reduce to ' + recContracts + '</button>';
+          }
+          warnHtml += '<button class="alert-btn-skip" data-alert-id="' + alert.id + '">SKIP</button>';
+          warnHtml += '</div>';
+          alertCard.insertAdjacentHTML('beforeend', warnHtml);
+
+          alertCard.querySelector('.alert-btn-in').onclick = function() { logTradeFromAlert(alert, 1); };
+          var reduceBtn = alertCard.querySelector('.alert-btn-reduce');
+          if (reduceBtn) {
+            reduceBtn.onclick = function() { logTradeFromAlert(alert, recContracts); };
+          }
+          alertCard.querySelector('.alert-btn-skip').onclick = function() { handleSkip(alert.id); };
+        }
+      })
+      .catch(function(err) {
+        console.error('Compliance check failed', err);
+        logTradeFromAlert(alert, 1);
+      });
     }
 
     function handleSkip(alertId) {
