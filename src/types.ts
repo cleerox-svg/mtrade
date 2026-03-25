@@ -4,7 +4,6 @@ export interface Env {
   GOOGLE_CLIENT_SECRET: string;
   JWT_SECRET: string;
   ANTHROPIC_API_KEY: string;
-  DISCORD_WEBHOOK_URL?: string;
 }
 
 export interface User {

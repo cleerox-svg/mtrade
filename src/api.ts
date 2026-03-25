@@ -1,5 +1,5 @@
 import { Env, JwtPayload } from './types';
-import { sendTestNotification } from './notifications';
+import { sendTestNotification, getUserSettings } from './notifications';
 
 type Json = (data: unknown, status?: number) => Response;
 
@@ -761,14 +761,69 @@ Respond in this exact JSON format:
     });
   }
 
-  // POST /api/notifications/test
-  if (path === '/api/notifications/test' && method === 'POST') {
-    if (!env.DISCORD_WEBHOOK_URL) {
-      return json({ success: false, error: 'DISCORD_WEBHOOK_URL not configured' }, 400);
+  // GET /api/settings
+  if (path === '/api/settings' && method === 'GET') {
+    const settings = await getUserSettings(env, user.sub);
+    return json(settings);
+  }
+
+  // PUT /api/settings
+  if (path === '/api/settings' && method === 'PUT') {
+    const body = await request.json<Record<string, unknown>>();
+    const fields = [
+      'discord_webhook_url', 'discord_enabled',
+      'notify_sweep', 'notify_ready', 'notify_execute',
+      'notify_drawdown', 'notify_consistency', 'notify_setup_result',
+    ];
+
+    // Build upsert
+    const existing = await env.DB.prepare(
+      'SELECT id FROM user_settings WHERE user_id = ?'
+    ).bind(user.sub).first();
+
+    if (existing) {
+      const sets: string[] = ['updated_at = datetime(\'now\')'];
+      const vals: unknown[] = [];
+      for (const f of fields) {
+        if (body[f] !== undefined) {
+          sets.push(`${f} = ?`);
+          vals.push(body[f]);
+        }
+      }
+      if (vals.length > 0) {
+        await env.DB.prepare(
+          `UPDATE user_settings SET ${sets.join(', ')} WHERE user_id = ?`
+        ).bind(...vals, user.sub).run();
+      }
+    } else {
+      const cols = ['user_id'];
+      const placeholders = ['?'];
+      const vals: unknown[] = [user.sub];
+      for (const f of fields) {
+        if (body[f] !== undefined) {
+          cols.push(f);
+          placeholders.push('?');
+          vals.push(body[f]);
+        }
+      }
+      await env.DB.prepare(
+        `INSERT INTO user_settings (${cols.join(', ')}) VALUES (${placeholders.join(', ')})`
+      ).bind(...vals).run();
+    }
+
+    const updated = await getUserSettings(env, user.sub);
+    return json(updated);
+  }
+
+  // POST /api/settings/test-discord
+  if (path === '/api/settings/test-discord' && method === 'POST') {
+    const settings = await getUserSettings(env, user.sub);
+    if (!settings.discord_webhook_url) {
+      return json({ success: false, error: 'No webhook URL configured. Save a webhook URL first.' }, 400);
     }
     try {
-      const sent = await sendTestNotification(env);
-      return json({ success: sent });
+      const sent = await sendTestNotification(settings.discord_webhook_url);
+      return json({ success: sent, error: sent ? null : 'Webhook returned an error' });
     } catch (err) {
       return json({ success: false, error: String(err) }, 500);
     }
