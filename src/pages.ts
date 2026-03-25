@@ -813,6 +813,140 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
       line-height: 1.5;
     }
 
+    /* Alert border flash */
+    body {
+      border: 2px solid transparent;
+      transition: border-color 1s ease;
+    }
+    body.alert-flash {
+      border-color: var(--red) !important;
+      transition: border-color 0s;
+    }
+
+    /* Alert pulsing dot */
+    @keyframes alertPulse {
+      0%, 100% { opacity: 0.4; transform: scale(0.8); }
+      50% { opacity: 1; transform: scale(1.2); }
+    }
+    .alert-dot {
+      display: none;
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--red);
+      margin-left: 6px;
+      animation: alertPulse 1.5s ease-in-out infinite;
+    }
+    .alert-dot.visible { display: inline-block; }
+
+    /* Alert overlay card */
+    @keyframes alertBorderPulse {
+      0%, 100% { border-color: rgba(251,44,90,0.2); }
+      50% { border-color: rgba(251,44,90,0.6); }
+    }
+    @keyframes alertBreathe {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.003); }
+    }
+    .alert-overlay {
+      background: linear-gradient(135deg, rgba(251,44,90,0.06), rgba(251,44,90,0.01));
+      border: 2px solid rgba(251,44,90,0.2);
+      border-radius: 14px;
+      padding: 16px;
+      margin-bottom: 12px;
+      animation: alertBorderPulse 3s ease-in-out infinite, alertBreathe 3s ease-in-out infinite, slideUp 0.3s ease;
+    }
+    .alert-signal-name {
+      font-family: 'Outfit', sans-serif;
+      font-weight: 800;
+      font-size: 22px;
+      color: var(--red);
+      margin-bottom: 4px;
+    }
+    .alert-instrument-dir {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 18px;
+      color: var(--white);
+      margin-bottom: 12px;
+    }
+    .alert-levels-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 8px;
+      text-align: center;
+      margin-bottom: 10px;
+    }
+    .alert-level-label {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 8px;
+      color: var(--label);
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      margin-bottom: 2px;
+    }
+    .alert-level-value {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 20px;
+      font-weight: 700;
+    }
+    .alert-rr {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 14px;
+      color: var(--amber);
+      text-align: center;
+      margin-bottom: 8px;
+    }
+    .alert-message {
+      font-size: 13px;
+      color: var(--bright);
+      line-height: 1.6;
+      margin-top: 12px;
+    }
+    .alert-actions {
+      display: flex;
+      gap: 10px;
+      margin-top: 14px;
+    }
+    .alert-btn-in {
+      flex: 1;
+      background: var(--red);
+      color: white;
+      font-family: 'Outfit', sans-serif;
+      font-size: 14px;
+      font-weight: 700;
+      border: none;
+      border-radius: 10px;
+      padding: 14px;
+      cursor: pointer;
+      min-height: 44px;
+    }
+    .alert-btn-skip {
+      flex: 1;
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--muted);
+      font-family: 'Outfit', sans-serif;
+      font-size: 14px;
+      font-weight: 700;
+      border-radius: 10px;
+      padding: 14px;
+      cursor: pointer;
+      min-height: 44px;
+    }
+    .demo-alert-link {
+      display: block;
+      text-align: center;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px;
+      color: var(--subtle);
+      cursor: pointer;
+      background: none;
+      border: none;
+      padding: 8px;
+      margin: 0 auto;
+    }
+    .demo-alert-link:hover { color: var(--muted); }
+
     @media (min-width: 768px) {
       .container { padding: 24px; }
       .card { padding: 20px; }
@@ -828,6 +962,10 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
       .chart-svg { height: 300px; }
       .phase-label { font-size: 13px; }
       .phase-desc { font-size: 11px; }
+      .alert-overlay { padding: 20px; }
+      .alert-signal-name { font-size: 28px; }
+      .alert-levels-grid { gap: 16px; }
+      .alert-btn-in, .alert-btn-skip { padding: 16px; font-size: 15px; }
     }
   </style>
 </head>
@@ -835,7 +973,7 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
   <div class="container">
     <div class="header">
       <div class="header-brand">
-        <h1>MTRADE</h1>
+        <h1 style="display:inline-flex;align-items:center">MTRADE<span class="alert-dot" id="alert-dot"></span></h1>
         <div class="tagline">MATTHEW'S ICT MONITOR</div>
       </div>
       <div class="header-right">
@@ -853,6 +991,7 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
       </div>
     </div>
 
+    <div id="alert-overlay"></div>
     <div id="instrument-selector"></div>
     <div id="apex-selector"></div>
     <div id="dashboard-panel"></div>
@@ -862,6 +1001,8 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
     <div id="trade-modal-root"></div>
 
     <button class="fab-add" id="fab-add" aria-label="Log trade">+</button>
+
+    <button class="demo-alert-link" id="demo-alert-btn">Create Demo Alert</button>
 
     <div class="footer">
       <div class="footer-brand">MTRADE</div>
@@ -1408,8 +1549,142 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
       chartEl.innerHTML = '<div class="card" style="animation:slideUp 0.3s ease"><div class="card-title">\u25C8 PRICE ACTION</div>' + svg + legend + '</div>';
     }
 
-    renderChart();
-    document.addEventListener('instrument-changed', function() { renderChart(); });
+    var alertLevels = null;
+
+    function renderChartWithData() {
+      var sym = window.selectedInstrument || 'NQ';
+      var d;
+      if (alertLevels && (alertLevels.symbol === sym || !alertLevels.symbol)) {
+        d = {
+          start: alertLevels.entry_price || demoData[sym].start,
+          londonHigh: alertLevels.sweep_level || demoData[sym].londonHigh,
+          londonLow: alertLevels.sweep_direction === 'low' ? (alertLevels.sweep_level || demoData[sym].londonLow) : demoData[sym].londonLow,
+          fvg: { high: alertLevels.fvg_high || demoData[sym].fvg.high, low: alertLevels.fvg_low || demoData[sym].fvg.low },
+          ifvg: { high: alertLevels.ifvg_high || demoData[sym].ifvg.high, low: alertLevels.ifvg_low || demoData[sym].ifvg.low }
+        };
+        if (alertLevels.sweep_direction === 'high') {
+          d.londonHigh = alertLevels.sweep_level || demoData[sym].londonHigh;
+        }
+        // Override entry/target/stop from alert
+        chartEl._alertEntry = alertLevels.entry_price;
+        chartEl._alertTarget = alertLevels.target_price;
+        chartEl._alertStop = alertLevels.stop_price;
+      } else {
+        d = demoData[sym];
+        chartEl._alertEntry = null;
+        chartEl._alertTarget = null;
+        chartEl._alertStop = null;
+      }
+
+      var candles = generateCandles(d.start, 60);
+      var entry = chartEl._alertEntry || d.ifvg.high;
+      var target = chartEl._alertTarget || d.londonHigh;
+      var stop = chartEl._alertStop || (d.ifvg.low - 2);
+
+      var allPrices = [];
+      candles.forEach(function(c) { allPrices.push(c.high, c.low); });
+      allPrices.push(d.londonHigh, d.londonLow, d.fvg.high, d.fvg.low, d.ifvg.high, d.ifvg.low, entry, target, stop);
+      var minP = Math.min.apply(null, allPrices);
+      var maxP = Math.max.apply(null, allPrices);
+      var range = maxP - minP || 1;
+      var padPct = 0.05;
+      minP -= range * padPct;
+      maxP += range * padPct;
+      range = maxP - minP;
+
+      var svgW = 800;
+      var svgH = 300;
+      var padR = 65;
+      var padL = 4;
+      var padT = 8;
+      var padB = 8;
+      var chartW = svgW - padL - padR;
+      var chartH = svgH - padT - padB;
+
+      function priceY(p) { return padT + chartH - ((p - minP) / range) * chartH; }
+
+      var candleW = chartW / 60;
+      var bodyW = Math.max(candleW - 1, 1);
+
+      var svg = '<svg class="chart-svg" viewBox="0 0 ' + svgW + ' ' + svgH + '" preserveAspectRatio="none">';
+
+      for (var g = 1; g <= 3; g++) {
+        var gy = padT + (chartH * g / 4);
+        svg += '<line x1="' + padL + '" y1="' + gy + '" x2="' + (svgW - padR) + '" y2="' + gy + '" stroke="rgba(255,255,255,0.04)" stroke-width="1"/>';
+      }
+
+      for (var yi = 0; yi <= 4; yi++) {
+        var yPrice = minP + (range * yi / 4);
+        var yPos = priceY(yPrice);
+        svg += '<text x="' + (svgW - padR + 6) + '" y="' + (yPos + 3) + '" fill="var(--muted)" font-family="JetBrains Mono,monospace" font-size="8">' + yPrice.toFixed(2) + '</text>';
+      }
+
+      var targetY = priceY(target);
+      var entryY = priceY(entry);
+      var stopY = priceY(stop);
+      svg += '<rect x="' + padL + '" y="' + Math.min(targetY, entryY) + '" width="' + chartW + '" height="' + Math.abs(entryY - targetY) + '" fill="rgba(52,211,153,0.03)"/>';
+      svg += '<rect x="' + padL + '" y="' + Math.min(entryY, stopY) + '" width="' + chartW + '" height="' + Math.abs(stopY - entryY) + '" fill="rgba(239,68,68,0.03)"/>';
+
+      var fvgTopY = priceY(d.fvg.high);
+      var fvgBotY = priceY(d.fvg.low);
+      svg += '<rect x="' + padL + '" y="' + fvgTopY + '" width="' + chartW + '" height="' + (fvgBotY - fvgTopY) + '" fill="rgba(251,44,90,0.1)"/>';
+      svg += '<line x1="' + padL + '" y1="' + fvgTopY + '" x2="' + (padL + chartW) + '" y2="' + fvgTopY + '" stroke="var(--red)" stroke-width="0.5" stroke-dasharray="4,3" opacity="0.4"/>';
+      svg += '<line x1="' + padL + '" y1="' + fvgBotY + '" x2="' + (padL + chartW) + '" y2="' + fvgBotY + '" stroke="var(--red)" stroke-width="0.5" stroke-dasharray="4,3" opacity="0.4"/>';
+
+      var ifvgTopY = priceY(d.ifvg.high);
+      var ifvgBotY = priceY(d.ifvg.low);
+      svg += '<rect x="' + padL + '" y="' + ifvgTopY + '" width="' + chartW + '" height="' + (ifvgBotY - ifvgTopY) + '" fill="rgba(251,191,36,0.1)"/>';
+
+      var ldnHY = priceY(d.londonHigh);
+      svg += '<line x1="' + padL + '" y1="' + ldnHY + '" x2="' + (padL + chartW) + '" y2="' + ldnHY + '" stroke="var(--red)" stroke-width="0.8" stroke-dasharray="6,4" opacity="0.7"/>';
+      svg += '<text x="' + (svgW - padR - 2) + '" y="' + (ldnHY - 3) + '" fill="var(--red-soft)" font-family="JetBrains Mono,monospace" font-size="9" text-anchor="end">LDN H</text>';
+
+      var ldnLY = priceY(d.londonLow);
+      svg += '<line x1="' + padL + '" y1="' + ldnLY + '" x2="' + (padL + chartW) + '" y2="' + ldnLY + '" stroke="var(--muted)" stroke-width="0.8" stroke-dasharray="6,4" opacity="0.6"/>';
+      svg += '<text x="' + (svgW - padR - 2) + '" y="' + (ldnLY - 3) + '" fill="var(--muted)" font-family="JetBrains Mono,monospace" font-size="9" text-anchor="end">LDN L</text>';
+
+      svg += '<line x1="' + padL + '" y1="' + targetY + '" x2="' + (padL + chartW) + '" y2="' + targetY + '" stroke="var(--green)" stroke-width="1"/>';
+      svg += '<text x="' + (padL + 4) + '" y="' + (targetY - 3) + '" fill="var(--green)" font-family="JetBrains Mono,monospace" font-size="9">TARGET</text>';
+
+      svg += '<line x1="' + padL + '" y1="' + stopY + '" x2="' + (padL + chartW) + '" y2="' + stopY + '" stroke="var(--danger)" stroke-width="1"/>';
+      svg += '<text x="' + (padL + 4) + '" y="' + (stopY - 3) + '" fill="var(--danger)" font-family="JetBrains Mono,monospace" font-size="9">STOP</text>';
+
+      svg += '<g class="entry-line-glow">';
+      svg += '<line x1="' + padL + '" y1="' + entryY + '" x2="' + (padL + chartW) + '" y2="' + entryY + '" stroke="var(--red)" stroke-width="1"/>';
+      svg += '<text x="' + (padL + 4) + '" y="' + (entryY - 3) + '" fill="var(--red)" font-family="JetBrains Mono,monospace" font-size="9">ENTRY &#9656;</text>';
+      svg += '</g>';
+
+      candles.forEach(function(c, i) {
+        var x = padL + i * candleW;
+        var cx = x + bodyW / 2;
+        var bullish = c.close >= c.open;
+        var bodyColor = bullish ? 'var(--red)' : '#475569';
+        var wickColor = bullish ? 'var(--red-soft)' : '#64748b';
+        var bodyTop = priceY(Math.max(c.open, c.close));
+        var bodyBot = priceY(Math.min(c.open, c.close));
+        var bodyH = Math.max(bodyBot - bodyTop, 1);
+        svg += '<line x1="' + cx + '" y1="' + priceY(c.high) + '" x2="' + cx + '" y2="' + priceY(c.low) + '" stroke="' + wickColor + '" stroke-width="1"/>';
+        svg += '<rect x="' + x + '" y="' + bodyTop + '" width="' + bodyW + '" height="' + bodyH + '" fill="' + bodyColor + '" rx="0.5"/>';
+      });
+
+      svg += '</svg>';
+
+      var legend = '<div class="chart-legend">' +
+        '<div class="chart-legend-item"><span class="chart-legend-swatch" style="background:rgba(251,44,90,0.3);border:1px dashed var(--red)"></span>FVG</div>' +
+        '<div class="chart-legend-item"><span class="chart-legend-swatch" style="background:rgba(251,191,36,0.25)"></span>IFVG</div>' +
+        '<div class="chart-legend-item"><span class="chart-legend-swatch" style="background:var(--red);width:14px;height:2px;border-radius:0"></span>LDN H</div>' +
+        '<div class="chart-legend-item"><span class="chart-legend-swatch" style="background:var(--muted);width:14px;height:2px;border-radius:0"></span>LDN L</div>' +
+        '</div>';
+
+      chartEl.innerHTML = '<div class="card" style="animation:slideUp 0.3s ease"><div class="card-title">\\u25C8 PRICE ACTION</div>' + svg + legend + '</div>';
+    }
+
+    renderChartWithData();
+    document.addEventListener('instrument-changed', function() { renderChartWithData(); });
+    document.addEventListener('alert-levels', function(e) {
+      alertLevels = e.detail;
+      renderChartWithData();
+    });
   })();
   </script>
 
@@ -1499,6 +1774,14 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
 
     renderTracker();
     document.addEventListener('instrument-changed', function() { renderTracker(); });
+    document.addEventListener('alert-phase', function(e) {
+      if (e.detail && e.detail.phase != null) {
+        currentPhase = e.detail.phase;
+      } else {
+        currentPhase = 3;
+      }
+      renderTracker();
+    });
   })();
   </script>
 
@@ -1728,6 +2011,167 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
     setTimeout(function() {
       if (getSelectedAccountId()) fetchPnlLog();
     }, 150);
+  })();
+  </script>
+
+  <script>
+  /* ── Alert System ── */
+  (function() {
+    var overlayEl = document.getElementById('alert-overlay');
+    var alertDot = document.getElementById('alert-dot');
+    var seenIds = {};
+    var firstPoll = true;
+
+    function flashBorder() {
+      document.body.classList.add('alert-flash');
+      setTimeout(function() { document.body.classList.remove('alert-flash'); }, 50);
+    }
+
+    function getSignalName(phase) {
+      if (phase >= 4) return 'ACCORD';
+      if (phase >= 3) return 'BASE NOTE';
+      if (phase >= 2) return 'HEART NOTE';
+      return 'TOP NOTE';
+    }
+
+    function getDirection(alert) {
+      return alert.sweep_direction === 'low' ? 'LONG' : 'SHORT';
+    }
+
+    function fmtPrice(n) {
+      if (n == null) return '--';
+      return Number(n).toFixed(2);
+    }
+
+    function renderOverlay(alert) {
+      var dir = getDirection(alert);
+      var signalName = getSignalName(alert.phase || 0);
+      var rr = alert.risk_reward ? (Number(alert.risk_reward).toFixed(1) + ' : 1') : '--';
+
+      var html = '<div class="alert-overlay">';
+      html += '<div class="alert-signal-name">' + signalName + '</div>';
+      html += '<div class="alert-instrument-dir">' + (alert.symbol || 'NQ') + ' \\u2014 ' + dir + '</div>';
+      html += '<div class="alert-levels-grid">';
+      html += '<div><div class="alert-level-label">ENTRY</div><div class="alert-level-value" style="color:var(--red)">' + fmtPrice(alert.entry_price) + '</div></div>';
+      html += '<div><div class="alert-level-label">TARGET</div><div class="alert-level-value" style="color:var(--green)">' + fmtPrice(alert.target_price) + '</div></div>';
+      html += '<div><div class="alert-level-label">STOP</div><div class="alert-level-value" style="color:var(--danger)">' + fmtPrice(alert.stop_price) + '</div></div>';
+      html += '</div>';
+      html += '<div class="alert-rr">R:R ' + rr + '</div>';
+      if (alert.message) {
+        html += '<div class="alert-message">' + alert.message + '</div>';
+      }
+      html += '<div class="alert-actions">';
+      html += '<button class="alert-btn-in" data-alert-id="' + alert.id + '">I\\u2019M IN</button>';
+      html += '<button class="alert-btn-skip" data-alert-id="' + alert.id + '">SKIP</button>';
+      html += '</div>';
+      html += '</div>';
+      return html;
+    }
+
+    function handleImIn(alert) {
+      var dir = getDirection(alert);
+      var instId = alert.instrument_id || 2;
+      var today = new Date().toISOString().slice(0, 10);
+
+      var payload = {
+        instrument_id: instId,
+        date: today,
+        direction: dir,
+        contracts: 1,
+        entry_price: alert.entry_price,
+        exit_price: alert.target_price,
+        pnl: 0,
+        notes: 'From alert: ' + (alert.message || '')
+      };
+
+      fetch('/api/trade-log', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      })
+      .then(function() {
+        return fetch('/api/alerts/' + alert.id + '/dismiss', { method: 'PUT' });
+      })
+      .then(function() {
+        document.dispatchEvent(new Event('account-changed'));
+        pollAlerts();
+      })
+      .catch(function(err) { console.error('Failed to log trade from alert', err); });
+    }
+
+    function handleSkip(alertId) {
+      fetch('/api/alerts/' + alertId + '/dismiss', { method: 'PUT' })
+        .then(function() { pollAlerts(); })
+        .catch(function(err) { console.error('Failed to dismiss alert', err); });
+    }
+
+    function processAlerts(alerts) {
+      var hasNew = false;
+      alerts.forEach(function(a) {
+        if (!seenIds[a.id]) {
+          hasNew = true;
+          seenIds[a.id] = true;
+        }
+      });
+
+      if (hasNew && !firstPoll) {
+        flashBorder();
+      }
+      firstPoll = false;
+
+      // Update pulsing dot
+      if (alerts.length > 0) {
+        alertDot.classList.add('visible');
+      } else {
+        alertDot.classList.remove('visible');
+      }
+
+      // Find ready/execute alerts for overlay
+      var overlayAlert = null;
+      alerts.forEach(function(a) {
+        if ((a.alert_type === 'ready' || a.alert_type === 'execute') && !overlayAlert) {
+          overlayAlert = a;
+        }
+      });
+
+      if (overlayAlert) {
+        overlayEl.innerHTML = renderOverlay(overlayAlert);
+
+        var inBtn = overlayEl.querySelector('.alert-btn-in');
+        var skipBtn = overlayEl.querySelector('.alert-btn-skip');
+        if (inBtn) {
+          inBtn.onclick = function() { handleImIn(overlayAlert); };
+        }
+        if (skipBtn) {
+          skipBtn.onclick = function() { handleSkip(overlayAlert.id); };
+        }
+
+        // Update chart and tracker with alert data
+        document.dispatchEvent(new CustomEvent('alert-levels', { detail: overlayAlert }));
+        document.dispatchEvent(new CustomEvent('alert-phase', { detail: { phase: overlayAlert.phase || 0 } }));
+      } else {
+        overlayEl.innerHTML = '';
+        document.dispatchEvent(new CustomEvent('alert-levels', { detail: null }));
+        document.dispatchEvent(new CustomEvent('alert-phase', { detail: null }));
+      }
+    }
+
+    function pollAlerts() {
+      fetch('/api/alerts/active', { credentials: 'same-origin' })
+        .then(function(r) { return r.json(); })
+        .then(function(alerts) { processAlerts(alerts || []); })
+        .catch(function() {});
+    }
+
+    pollAlerts();
+    setInterval(pollAlerts, 10000);
+
+    // Demo button
+    document.getElementById('demo-alert-btn').onclick = function() {
+      fetch('/api/alerts/demo', { method: 'POST', credentials: 'same-origin' })
+        .then(function() { pollAlerts(); })
+        .catch(function(err) { console.error('Failed to create demo alert', err); });
+    };
   })();
   </script>
 </body>
