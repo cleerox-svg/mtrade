@@ -1013,5 +1013,170 @@ Respond in this exact JSON format:
     return json(results);
   }
 
+  // GET /api/strategy/config
+  if (path === '/api/strategy/config' && method === 'GET') {
+    const row = await env.DB.prepare(
+      'SELECT * FROM strategy_config WHERE user_id = ?'
+    ).bind(user.sub).first();
+    if (row) return json(row);
+    // Return defaults
+    return json({
+      trade_london_sweep: 1,
+      trade_ny_sweep: 1,
+      fvg_scan_1h: 1,
+      fvg_scan_4h: 1,
+      continuation_require_ifvg: 0,
+      min_rr: 2.0,
+      sweep_require_close: 0,
+      min_confidence: 60,
+      max_contracts_override: null,
+      default_contracts: 1,
+      kill_switch: 0,
+      kill_switch_date: null,
+      active_preset: 'normal',
+    });
+  }
+
+  // PUT /api/strategy/config
+  if (path === '/api/strategy/config' && method === 'PUT') {
+    const body = await request.json<Record<string, unknown>>();
+
+    // Validate
+    if (body.min_rr !== undefined) {
+      const v = Number(body.min_rr);
+      if (isNaN(v) || v < 1.0 || v > 10.0) return json({ error: 'min_rr must be 1.0-10.0' }, 400);
+    }
+    if (body.min_confidence !== undefined) {
+      const v = Number(body.min_confidence);
+      if (isNaN(v) || v < 0 || v > 100) return json({ error: 'min_confidence must be 0-100' }, 400);
+    }
+    if (body.max_contracts_override !== undefined && body.max_contracts_override !== null) {
+      const v = Number(body.max_contracts_override);
+      if (isNaN(v) || v < 1 || v > 20) return json({ error: 'max_contracts_override must be 1-20' }, 400);
+    }
+    if (body.default_contracts !== undefined) {
+      const v = Number(body.default_contracts);
+      if (isNaN(v) || v < 1 || v > 10) return json({ error: 'default_contracts must be 1-10' }, 400);
+    }
+
+    const fields = [
+      'trade_london_sweep', 'trade_ny_sweep', 'fvg_scan_1h', 'fvg_scan_4h',
+      'continuation_require_ifvg', 'min_rr', 'sweep_require_close', 'min_confidence',
+      'max_contracts_override', 'default_contracts', 'kill_switch', 'kill_switch_date',
+      'active_preset',
+    ];
+
+    const existing = await env.DB.prepare(
+      'SELECT id FROM strategy_config WHERE user_id = ?'
+    ).bind(user.sub).first();
+
+    if (existing) {
+      const sets: string[] = ["updated_at = datetime('now')"];
+      const vals: unknown[] = [];
+      for (const f of fields) {
+        if (body[f] !== undefined) {
+          sets.push(`${f} = ?`);
+          vals.push(body[f]);
+        }
+      }
+      if (vals.length > 0) {
+        await env.DB.prepare(
+          `UPDATE strategy_config SET ${sets.join(', ')} WHERE user_id = ?`
+        ).bind(...vals, user.sub).run();
+      }
+    } else {
+      const cols = ['user_id'];
+      const placeholders = ['?'];
+      const vals: unknown[] = [user.sub];
+      for (const f of fields) {
+        if (body[f] !== undefined) {
+          cols.push(f);
+          placeholders.push('?');
+          vals.push(body[f]);
+        }
+      }
+      await env.DB.prepare(
+        `INSERT INTO strategy_config (${cols.join(', ')}) VALUES (${placeholders.join(', ')})`
+      ).bind(...vals).run();
+    }
+
+    const updated = await env.DB.prepare(
+      'SELECT * FROM strategy_config WHERE user_id = ?'
+    ).bind(user.sub).first();
+    return json(updated);
+  }
+
+  // POST /api/strategy/config/preset
+  if (path === '/api/strategy/config/preset' && method === 'POST') {
+    const body = await request.json<{ preset: string }>();
+    const presets: Record<string, Record<string, unknown>> = {
+      conservative: { min_rr: 3.0, continuation_require_ifvg: 1, min_confidence: 75, default_contracts: 1 },
+      normal: { min_rr: 2.0, continuation_require_ifvg: 0, min_confidence: 60, default_contracts: 1 },
+      aggressive: { min_rr: 1.5, continuation_require_ifvg: 0, min_confidence: 40, default_contracts: 2 },
+    };
+    const preset = presets[body.preset];
+    if (!preset) return json({ error: 'Invalid preset. Must be conservative, normal, or aggressive.' }, 400);
+
+    const existing = await env.DB.prepare(
+      'SELECT id FROM strategy_config WHERE user_id = ?'
+    ).bind(user.sub).first();
+
+    if (existing) {
+      await env.DB.prepare(
+        `UPDATE strategy_config SET min_rr = ?, continuation_require_ifvg = ?, min_confidence = ?,
+         default_contracts = ?, active_preset = ?, updated_at = datetime('now') WHERE user_id = ?`
+      ).bind(preset.min_rr, preset.continuation_require_ifvg, preset.min_confidence,
+        preset.default_contracts, body.preset, user.sub).run();
+    } else {
+      await env.DB.prepare(
+        `INSERT INTO strategy_config (user_id, min_rr, continuation_require_ifvg, min_confidence, default_contracts, active_preset)
+         VALUES (?, ?, ?, ?, ?, ?)`
+      ).bind(user.sub, preset.min_rr, preset.continuation_require_ifvg, preset.min_confidence,
+        preset.default_contracts, body.preset).run();
+    }
+
+    const updated = await env.DB.prepare(
+      'SELECT * FROM strategy_config WHERE user_id = ?'
+    ).bind(user.sub).first();
+    return json(updated);
+  }
+
+  // POST /api/strategy/kill-switch
+  if (path === '/api/strategy/kill-switch' && method === 'POST') {
+    const body = await request.json<{ enabled: boolean }>();
+    const enabled = body.enabled ? 1 : 0;
+    const now = new Date();
+    const etStr = now.toLocaleString('en-US', { timeZone: 'America/New_York' });
+    const etDate = new Date(etStr);
+    const todayET = `${etDate.getFullYear()}-${String(etDate.getMonth() + 1).padStart(2, '0')}-${String(etDate.getDate()).padStart(2, '0')}`;
+
+    const existing = await env.DB.prepare(
+      'SELECT id FROM strategy_config WHERE user_id = ?'
+    ).bind(user.sub).first();
+
+    if (existing) {
+      await env.DB.prepare(
+        `UPDATE strategy_config SET kill_switch = ?, kill_switch_date = ?, updated_at = datetime('now') WHERE user_id = ?`
+      ).bind(enabled, enabled ? todayET : null, user.sub).run();
+    } else {
+      await env.DB.prepare(
+        `INSERT INTO strategy_config (user_id, kill_switch, kill_switch_date) VALUES (?, ?, ?)`
+      ).bind(user.sub, enabled, enabled ? todayET : null).run();
+    }
+
+    const updated = await env.DB.prepare(
+      'SELECT * FROM strategy_config WHERE user_id = ?'
+    ).bind(user.sub).first();
+    return json(updated);
+  }
+
+  // GET /api/apex/templates
+  if (path === '/api/apex/templates' && method === 'GET') {
+    const { results } = await env.DB.prepare(
+      'SELECT * FROM apex_account_templates ORDER BY account_size ASC'
+    ).all();
+    return json(results);
+  }
+
   return json({ error: 'Not found' }, 404);
 }
