@@ -1,4 +1,5 @@
 import { Env } from './types';
+import { sendDiscordAlert, sendSetupResult } from './notifications';
 
 // ── Timezone Helpers ──
 
@@ -295,6 +296,24 @@ async function createAlert(
   return result.meta.last_row_id as number;
 }
 
+async function sendAlertDiscord(
+  env: Env,
+  alertId: number,
+  alert: { alert_type: string; sweep_direction: string | null; sweep_level: number | null; fvg_high: number | null; fvg_low: number | null; ifvg_high: number | null; ifvg_low: number | null; entry_price: number | null; target_price: number | null; stop_price: number | null; risk_reward: number | null },
+  setup: { id: number; phase: number; sweep_direction: string | null; sweep_level: number | null; haiku_analysis_json?: string | null },
+  symbol: string,
+  sessionLevels: { london_high: number | null; london_low: number | null } | null
+): Promise<void> {
+  try {
+    const sent = await sendDiscordAlert(env, { id: alertId, ...alert }, setup, symbol, sessionLevels);
+    if (sent) {
+      await env.DB.prepare('UPDATE setup_alerts SET discord_sent = 1 WHERE id = ?').bind(alertId).run();
+    }
+  } catch (err) {
+    console.error('Discord alert error:', err);
+  }
+}
+
 async function triggerHaikuAnalysis(env: Env, alertId: number): Promise<void> {
   if (!env.ANTHROPIC_API_KEY) return;
 
@@ -369,6 +388,15 @@ export async function runSetupStateMachine(env: Env): Promise<void> {
               `UPDATE setups SET status = 'expired', updated_at = datetime('now') WHERE id = ?`
             ).bind(setup.id).run();
             console.log(`Setup expired: ${inst.symbol} phase ${setup.phase} after 3PM ET`);
+            try {
+              await sendSetupResult(env, {
+                symbol: inst.symbol,
+                direction: setup.sweep_direction === 'low' ? 'Long' : 'Short',
+                entry_price: setup.entry_price, exit_price: null,
+                pnl: null, risk_reward: setup.risk_reward, actual_rr: null,
+                status: 'expired',
+              });
+            } catch { /* non-critical */ }
             continue;
           }
           // Phase 2 stale for 2 hours → expire
@@ -380,6 +408,15 @@ export async function runSetupStateMachine(env: Env): Promise<void> {
                 `UPDATE setups SET status = 'expired', updated_at = datetime('now') WHERE id = ?`
               ).bind(setup.id).run();
               console.log(`Setup expired: ${inst.symbol} phase 2 stale for ${hoursElapsed.toFixed(1)}h`);
+              try {
+                await sendSetupResult(env, {
+                  symbol: inst.symbol,
+                  direction: setup.sweep_direction === 'low' ? 'Long' : 'Short',
+                  entry_price: setup.entry_price, exit_price: null,
+                  pnl: null, risk_reward: setup.risk_reward, actual_rr: null,
+                  status: 'expired',
+                });
+              } catch { /* non-critical */ }
               continue;
             }
           }
@@ -411,11 +448,21 @@ export async function runSetupStateMachine(env: Env): Promise<void> {
         ).bind(sweep.sweep_direction, sweep.sweep_level, setup.id).run();
 
         const msg = `${inst.symbol}: London ${sweep.sweep_direction} swept at ${sweep.sweep_level.toFixed(2)}. Sillage trail detected.`;
-        await createAlert(env, setup.id, inst.id, 'approaching', 1, msg, {
+        const alertData = {
+          alert_type: 'approaching' as const,
           sweep_direction: sweep.sweep_direction,
           sweep_level: sweep.sweep_level,
-        });
+          fvg_high: null, fvg_low: null, ifvg_high: null, ifvg_low: null,
+          entry_price: null, target_price: null, stop_price: null, risk_reward: null,
+        };
+        const alertId1 = await createAlert(env, setup.id, inst.id, 'approaching', 1, msg, alertData);
         console.log(`Setup advanced to phase 1: ${inst.symbol}`);
+
+        // Get session levels for Discord embed
+        const session1 = await env.DB.prepare(
+          'SELECT london_high, london_low FROM sessions WHERE date = ? AND instrument_id = ?'
+        ).bind(todayET, inst.id).first<{ london_high: number | null; london_low: number | null }>();
+        await sendAlertDiscord(env, alertId1, alertData, { id: setup.id, phase: 1, sweep_direction: sweep.sweep_direction, sweep_level: sweep.sweep_level }, inst.symbol, session1 ?? null);
         setup.phase = 1;
         setup.sweep_direction = sweep.sweep_direction;
         setup.sweep_level = sweep.sweep_level;
@@ -568,7 +615,8 @@ export async function runSetupStateMachine(env: Env): Promise<void> {
         const direction = setup.sweep_direction === 'low' ? 'Long' : 'Short';
         const msg = `${inst.symbol}: ${isIFVG ? 'IFVG' : 'FVG'} continuation confirmed. ${direction} at ${entry.toFixed(2)} → ${target.toFixed(2)}. Stop ${stop.toFixed(2)}. R:R ${rr.toFixed(1)}:1`;
 
-        const alertId = await createAlert(env, setup.id, inst.id, 'ready', 3, msg, {
+        const readyAlertData = {
+          alert_type: 'ready' as const,
           sweep_direction: setup.sweep_direction,
           sweep_level: setup.sweep_level,
           fvg_high: continuationFvg.high,
@@ -579,12 +627,16 @@ export async function runSetupStateMachine(env: Env): Promise<void> {
           target_price: target,
           stop_price: stop,
           risk_reward: Math.round(rr * 100) / 100,
-        });
+        };
+        const alertId = await createAlert(env, setup.id, inst.id, 'ready', 3, msg, readyAlertData);
 
         console.log(`Setup advanced to phase 3: ${inst.symbol}`);
 
         // Auto-trigger Haiku analysis
         await triggerHaikuAnalysis(env, alertId);
+
+        // Send Discord notification
+        await sendAlertDiscord(env, alertId, readyAlertData, { id: setup.id, phase: 3, sweep_direction: setup.sweep_direction, sweep_level: setup.sweep_level }, inst.symbol, session ?? null);
 
         setup.phase = 3;
       }
@@ -650,7 +702,8 @@ export async function runSetupStateMachine(env: Env): Promise<void> {
 
         const msg = `ACCORD — all notes aligned. ${direction} ${inst.symbol} at ${entry.toFixed(2)} → Target ${target.toFixed(2)}. Stop ${stop.toFixed(2)}. R:R ${rr.toFixed(1)}:1`;
 
-        const alertId = await createAlert(env, setup.id, inst.id, 'execute', 4, msg, {
+        const execAlertData = {
+          alert_type: 'execute' as const,
           sweep_direction: setup.sweep_direction,
           sweep_level: setup.sweep_level,
           fvg_high: gap.high,
@@ -661,12 +714,20 @@ export async function runSetupStateMachine(env: Env): Promise<void> {
           target_price: target,
           stop_price: stop,
           risk_reward: Math.round(rr * 100) / 100,
-        });
+        };
+        const alertId = await createAlert(env, setup.id, inst.id, 'execute', 4, msg, execAlertData);
 
         console.log(`Setup advanced to phase 4: ${inst.symbol} — ACCORD`);
 
         // Final Haiku analysis
         await triggerHaikuAnalysis(env, alertId);
+
+        // Reload setup to get haiku_analysis_json
+        const updatedSetup = await env.DB.prepare('SELECT id, phase, sweep_direction, sweep_level, haiku_analysis_json FROM setups WHERE id = ?')
+          .bind(setup.id).first<{ id: number; phase: number; sweep_direction: string | null; sweep_level: number | null; haiku_analysis_json: string | null }>();
+
+        // Send Discord ACCORD notification
+        await sendAlertDiscord(env, alertId, execAlertData, updatedSetup ?? { id: setup.id, phase: 4, sweep_direction: setup.sweep_direction, sweep_level: setup.sweep_level }, inst.symbol, session ?? null);
       }
     } catch (err) {
       console.error(`runSetupStateMachine error ${inst.symbol}:`, err);
