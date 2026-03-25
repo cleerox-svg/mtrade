@@ -3,6 +3,8 @@ import { Env } from './types';
 const INSTRUMENTS: { symbol: string; yahoo: string; id: number }[] = [
   { symbol: 'ES', yahoo: 'ES=F', id: 1 },
   { symbol: 'NQ', yahoo: 'NQ=F', id: 2 },
+  { symbol: 'MES', yahoo: 'MES=F', id: 3 },
+  { symbol: 'MNQ', yahoo: 'MNQ=F', id: 4 },
 ];
 
 const YAHOO_HEADERS = {
