@@ -342,6 +342,127 @@ export async function detectSweeps(env: Env): Promise<SweepInfo[]> {
   return sweeps;
 }
 
+// ── 3b. Break of Structure Detection ──
+
+interface SwingPoint {
+  type: 'high' | 'low';
+  level: number;
+  timestamp: string;
+  index: number;
+}
+
+const SWING_LENGTH = 3;
+
+export function detectSwingPoints(candles: { timestamp: string; high: number; low: number }[]): SwingPoint[] {
+  const swings: SwingPoint[] = [];
+
+  for (let i = SWING_LENGTH; i < candles.length - SWING_LENGTH; i++) {
+    // Check swing high: candle's high must be highest in 7-candle window
+    let isSwingHigh = true;
+    for (let j = i - SWING_LENGTH; j <= i + SWING_LENGTH; j++) {
+      if (j === i) continue;
+      if (candles[j].high >= candles[i].high) {
+        isSwingHigh = false;
+        break;
+      }
+    }
+    if (isSwingHigh) {
+      swings.push({ type: 'high', level: candles[i].high, timestamp: candles[i].timestamp, index: i });
+    }
+
+    // Check swing low: candle's low must be lowest in 7-candle window
+    let isSwingLow = true;
+    for (let j = i - SWING_LENGTH; j <= i + SWING_LENGTH; j++) {
+      if (j === i) continue;
+      if (candles[j].low <= candles[i].low) {
+        isSwingLow = false;
+        break;
+      }
+    }
+    if (isSwingLow) {
+      swings.push({ type: 'low', level: candles[i].low, timestamp: candles[i].timestamp, index: i });
+    }
+  }
+
+  return swings;
+}
+
+interface BOSResult {
+  confirmed: boolean;
+  bos_level: number;
+  bos_timestamp: string;
+  swing_type: 'high' | 'low';
+}
+
+export async function detectBOS(
+  env: Env,
+  instrumentId: number,
+  sweepDirection: string,
+  sweepTimestamp: string
+): Promise<BOSResult | null> {
+  // Fetch last 100 candles on 5m timeframe
+  const { results: rawCandles } = await env.DB.prepare(
+    `SELECT timestamp, open, high, low, close FROM candles
+     WHERE instrument_id = ? AND timeframe = '5m'
+     ORDER BY timestamp DESC LIMIT 100`
+  ).bind(instrumentId).all<{ timestamp: string; open: number; high: number; low: number; close: number }>();
+
+  if (rawCandles.length < 10) return null;
+
+  // Reverse to ascending order
+  const candles = rawCandles.slice().reverse();
+
+  const swings = detectSwingPoints(candles);
+
+  if (sweepDirection === 'low') {
+    // LOW sweep (expecting reversal UP): find most recent swing HIGH before/during sweep
+    const swingHighs = swings
+      .filter(s => s.type === 'high' && s.timestamp <= sweepTimestamp)
+      .sort((a, b) => b.timestamp.localeCompare(a.timestamp));
+
+    if (swingHighs.length === 0) return null;
+
+    const targetSwing = swingHighs[0];
+
+    // Check if any candle AFTER the sweep closed ABOVE that swing high
+    for (const c of candles) {
+      if (c.timestamp <= sweepTimestamp) continue;
+      if (c.close > targetSwing.level) {
+        return {
+          confirmed: true,
+          bos_level: targetSwing.level,
+          bos_timestamp: c.timestamp,
+          swing_type: 'high',
+        };
+      }
+    }
+  } else {
+    // HIGH sweep (expecting reversal DOWN): find most recent swing LOW before/during sweep
+    const swingLows = swings
+      .filter(s => s.type === 'low' && s.timestamp <= sweepTimestamp)
+      .sort((a, b) => b.timestamp.localeCompare(a.timestamp));
+
+    if (swingLows.length === 0) return null;
+
+    const targetSwing = swingLows[0];
+
+    // Check if any candle AFTER the sweep closed BELOW that swing low
+    for (const c of candles) {
+      if (c.timestamp <= sweepTimestamp) continue;
+      if (c.close < targetSwing.level) {
+        return {
+          confirmed: true,
+          bos_level: targetSwing.level,
+          bos_timestamp: c.timestamp,
+          swing_type: 'low',
+        };
+      }
+    }
+  }
+
+  return null;
+}
+
 // ── 4. Setup State Machine ──
 
 interface Setup {
@@ -359,6 +480,7 @@ interface Setup {
   status: string;
   updated_at: string;
   created_at: string;
+  metadata_json: string | null;
 }
 
 async function createAlert(
@@ -389,7 +511,7 @@ async function createAlert(
 async function sendAlertDiscord(
   env: Env,
   alertId: number,
-  alert: { alert_type: string; sweep_direction: string | null; sweep_level: number | null; fvg_high: number | null; fvg_low: number | null; ifvg_high: number | null; ifvg_low: number | null; entry_price: number | null; target_price: number | null; stop_price: number | null; risk_reward: number | null },
+  alert: { alert_type: string; sweep_direction: string | null; sweep_level: number | null; fvg_high: number | null; fvg_low: number | null; ifvg_high: number | null; ifvg_low: number | null; entry_price: number | null; target_price: number | null; stop_price: number | null; risk_reward: number | null; message?: string | null },
   setup: { id: number; phase: number; sweep_direction: string | null; sweep_level: number | null; haiku_analysis_json?: string | null },
   symbol: string,
   sessionLevels: { london_high: number | null; london_low: number | null } | null
@@ -415,10 +537,25 @@ async function triggerHaikuAnalysis(env: Env, alertId: number): Promise<number |
     ).bind(alertId).first<Record<string, unknown>>();
     if (!alert) return null;
 
+    // Get BOS context from setup metadata
+    let bosLine = '';
+    if (alert.setup_id) {
+      const setupMeta = await env.DB.prepare('SELECT metadata_json FROM setups WHERE id = ?').bind(alert.setup_id).first<{ metadata_json: string | null }>();
+      if (setupMeta?.metadata_json) {
+        try {
+          const meta = JSON.parse(setupMeta.metadata_json);
+          if (meta.bos_level) {
+            const bosDir = alert.sweep_direction === 'low' ? 'bullish' : 'bearish';
+            bosLine = `\nBOS: Confirmed at ${meta.bos_level} — structure shifted ${bosDir}`;
+          }
+        } catch { /* ignore */ }
+      }
+    }
+
     const systemPrompt = 'You are an ICT (Inner Circle Trader) strategy analyst. Analyze futures trading setups using ICT methodology. Respond ONLY with valid JSON.';
     const userPrompt = `Analyze this trading setup:
 Instrument: ${alert.symbol} (${alert.name})
-Sweep: Price broke London ${alert.sweep_direction} at ${alert.sweep_level}
+Sweep: Price broke London ${alert.sweep_direction} at ${alert.sweep_level}${bosLine}
 FVG: ${alert.fvg_low} - ${alert.fvg_high}
 IFVG: ${alert.ifvg_low && alert.ifvg_high ? alert.ifvg_low + ' - ' + alert.ifvg_high : 'none'}
 Entry: ${alert.entry_price}, Target: ${alert.target_price}, Stop: ${alert.stop_price}
@@ -501,14 +638,32 @@ export async function runSetupStateMachine(env: Env): Promise<void> {
 
       // Check expiry first
       if (setup) {
-        if ((setup.phase <= 1 && etHour >= 15) ||
-            (setup.phase === 2 && setup.updated_at)) {
-          // Phase 0/1 after 3PM → expire
-          if (setup.phase <= 1 && etHour >= 15) {
+        // Phase 0/1/2 after 3PM → expire
+        if (setup.phase <= 2 && etHour >= 15) {
+          await env.DB.prepare(
+            `UPDATE setups SET status = 'expired', updated_at = datetime('now') WHERE id = ?`
+          ).bind(setup.id).run();
+          console.log(`Setup expired: ${inst.symbol} phase ${setup.phase} after 3PM ET`);
+          try {
+            await sendSetupResultToAll(env, {
+              symbol: inst.symbol,
+              direction: setup.sweep_direction === 'low' ? 'Long' : 'Short',
+              entry_price: setup.entry_price, exit_price: null,
+              pnl: null, risk_reward: setup.risk_reward, actual_rr: null,
+              status: 'expired',
+            });
+          } catch { /* non-critical */ }
+          continue;
+        }
+        // Phase 3 (FVG Retracement) stale for 2 hours → expire
+        if (setup.phase === 3 && setup.updated_at) {
+          const updatedAt = new Date(setup.updated_at + 'Z');
+          const hoursElapsed = (now.getTime() - updatedAt.getTime()) / 3600000;
+          if (hoursElapsed >= 2) {
             await env.DB.prepare(
               `UPDATE setups SET status = 'expired', updated_at = datetime('now') WHERE id = ?`
             ).bind(setup.id).run();
-            console.log(`Setup expired: ${inst.symbol} phase ${setup.phase} after 3PM ET`);
+            console.log(`Setup expired: ${inst.symbol} phase 3 stale for ${hoursElapsed.toFixed(1)}h`);
             try {
               await sendSetupResultToAll(env, {
                 symbol: inst.symbol,
@@ -519,27 +674,6 @@ export async function runSetupStateMachine(env: Env): Promise<void> {
               });
             } catch { /* non-critical */ }
             continue;
-          }
-          // Phase 2 stale for 2 hours → expire
-          if (setup.phase === 2) {
-            const updatedAt = new Date(setup.updated_at + 'Z');
-            const hoursElapsed = (now.getTime() - updatedAt.getTime()) / 3600000;
-            if (hoursElapsed >= 2) {
-              await env.DB.prepare(
-                `UPDATE setups SET status = 'expired', updated_at = datetime('now') WHERE id = ?`
-              ).bind(setup.id).run();
-              console.log(`Setup expired: ${inst.symbol} phase 2 stale for ${hoursElapsed.toFixed(1)}h`);
-              try {
-                await sendSetupResultToAll(env, {
-                  symbol: inst.symbol,
-                  direction: setup.sweep_direction === 'low' ? 'Long' : 'Short',
-                  entry_price: setup.entry_price, exit_price: null,
-                  pnl: null, risk_reward: setup.risk_reward, actual_rr: null,
-                  status: 'expired',
-                });
-              } catch { /* non-critical */ }
-              continue;
-            }
           }
         }
       }
@@ -593,8 +727,43 @@ export async function runSetupStateMachine(env: Env): Promise<void> {
         setup.sweep_level = sweep.sweep_level;
       }
 
-      // ── Phase 1 → Phase 2: Sweep → FVG Retracement ──
+      // ── Phase 1 → Phase 2: Sweep → Break of Structure ──
       if (setup.phase === 1 && setup.sweep_direction) {
+        const bosResult = await detectBOS(env, inst.id, setup.sweep_direction, setup.updated_at);
+        if (!bosResult) continue;
+
+        const structureDir = setup.sweep_direction === 'low' ? 'bullish' : 'bearish';
+        const metadata = { bos_level: bosResult.bos_level, bos_timestamp: bosResult.bos_timestamp, swing_type: bosResult.swing_type };
+
+        await env.DB.prepare(
+          `UPDATE setups SET phase = 2, metadata_json = ?, updated_at = datetime('now') WHERE id = ?`
+        ).bind(JSON.stringify(metadata), setup.id).run();
+
+        const msg = `${inst.symbol}: Break of Structure confirmed at ${bosResult.bos_level.toFixed(2)}. Structure shifted ${structureDir}. Watching for FVG retracement...`;
+        console.log(`Setup advanced to phase 2 (BOS): ${inst.symbol}`);
+
+        if (!killSwitchActive) {
+          const alertData = {
+            alert_type: 'approaching' as const,
+            sweep_direction: setup.sweep_direction,
+            sweep_level: setup.sweep_level,
+            fvg_high: null, fvg_low: null, ifvg_high: null, ifvg_low: null,
+            entry_price: null, target_price: null, stop_price: null, risk_reward: null,
+            message: msg,
+          };
+          const alertId2 = await createAlert(env, setup.id, inst.id, 'approaching', 2, msg, alertData);
+
+          const session2 = await env.DB.prepare(
+            'SELECT london_high, london_low FROM sessions WHERE date = ? AND instrument_id = ?'
+          ).bind(todayET, inst.id).first<{ london_high: number | null; london_low: number | null }>();
+          await sendAlertDiscord(env, alertId2, alertData, { id: setup.id, phase: 2, sweep_direction: setup.sweep_direction, sweep_level: setup.sweep_level }, inst.symbol, session2 ?? null);
+        }
+        setup.phase = 2;
+        setup.metadata_json = JSON.stringify(metadata);
+      }
+
+      // ── Phase 2 → Phase 3: BOS → FVG Retracement ──
+      if (setup.phase === 2 && setup.sweep_direction) {
         const latest = await env.DB.prepare(
           `SELECT close FROM candles WHERE instrument_id = ? AND timeframe = '1m'
            ORDER BY timestamp DESC LIMIT 1`
@@ -636,25 +805,25 @@ export async function runSetupStateMachine(env: Env): Promise<void> {
         if (!matchedFvg) continue;
 
         await env.DB.prepare(
-          `UPDATE setups SET phase = 2, fvg_id = ?, updated_at = datetime('now') WHERE id = ?`
+          `UPDATE setups SET phase = 3, fvg_id = ?, updated_at = datetime('now') WHERE id = ?`
         ).bind(matchedFvg.id, setup.id).run();
 
         const msg = `${inst.symbol}: Retracing into ${matchedFvg.timeframe} ${fvgType} FVG (${matchedFvg.low.toFixed(2)} – ${matchedFvg.high.toFixed(2)})`;
-        console.log(`Setup advanced to phase 2: ${inst.symbol}`);
+        console.log(`Setup advanced to phase 3: ${inst.symbol}`);
         if (!killSwitchActive) {
-          await createAlert(env, setup.id, inst.id, 'approaching', 2, msg, {
+          await createAlert(env, setup.id, inst.id, 'approaching', 3, msg, {
             sweep_direction: setup.sweep_direction,
             sweep_level: setup.sweep_level,
             fvg_high: matchedFvg.high,
             fvg_low: matchedFvg.low,
           });
         }
-        setup.phase = 2;
+        setup.phase = 3;
         setup.fvg_id = matchedFvg.id;
       }
 
-      // ── Phase 2 → Phase 3: FVG Retracement → Continuation ──
-      if (setup.phase === 2 && setup.sweep_direction) {
+      // ── Phase 3 → Phase 4: FVG Retracement → Continuation ──
+      if (setup.phase === 3 && setup.sweep_direction) {
         // Look for continuation signal after phase 2 started
         const updatedAt = setup.updated_at;
 
@@ -738,8 +907,8 @@ export async function runSetupStateMachine(env: Env): Promise<void> {
         const rr = Math.abs(target - entry) / Math.abs(entry - stop);
 
         const updateFields = isIFVG
-          ? `phase = 3, ifvg_id = ?, entry_price = ?, target_price = ?, stop_price = ?, risk_reward = ?, updated_at = datetime('now')`
-          : `phase = 3, fvg_id = ?, entry_price = ?, target_price = ?, stop_price = ?, risk_reward = ?, updated_at = datetime('now')`;
+          ? `phase = 4, ifvg_id = ?, entry_price = ?, target_price = ?, stop_price = ?, risk_reward = ?, updated_at = datetime('now')`
+          : `phase = 4, fvg_id = ?, entry_price = ?, target_price = ?, stop_price = ?, risk_reward = ?, updated_at = datetime('now')`;
 
         await env.DB.prepare(
           `UPDATE setups SET ${updateFields} WHERE id = ?`
@@ -748,7 +917,7 @@ export async function runSetupStateMachine(env: Env): Promise<void> {
         const direction = setup.sweep_direction === 'low' ? 'Long' : 'Short';
         const msg = `${inst.symbol}: ${isIFVG ? 'IFVG' : 'FVG'} continuation confirmed. ${direction} at ${entry.toFixed(2)} → ${target.toFixed(2)}. Stop ${stop.toFixed(2)}. R:R 1:${rr.toFixed(1)}`;
 
-        console.log(`Setup advanced to phase 3: ${inst.symbol}`);
+        console.log(`Setup advanced to phase 4: ${inst.symbol}`);
 
         if (!killSwitchActive) {
           const readyAlertData = {
@@ -764,7 +933,7 @@ export async function runSetupStateMachine(env: Env): Promise<void> {
             stop_price: stop,
             risk_reward: Math.round(rr * 100) / 100,
           };
-          const alertId = await createAlert(env, setup.id, inst.id, 'ready', 3, msg, readyAlertData);
+          const alertId = await createAlert(env, setup.id, inst.id, 'ready', 4, msg, readyAlertData);
 
           // Haiku analysis + confidence check
           const confidence = await triggerHaikuAnalysis(env, alertId);
@@ -777,14 +946,14 @@ export async function runSetupStateMachine(env: Env): Promise<void> {
           }
 
           // Send Discord notification
-          await sendAlertDiscord(env, alertId, readyAlertData, { id: setup.id, phase: 3, sweep_direction: setup.sweep_direction, sweep_level: setup.sweep_level }, inst.symbol, session ?? null);
+          await sendAlertDiscord(env, alertId, readyAlertData, { id: setup.id, phase: 4, sweep_direction: setup.sweep_direction, sweep_level: setup.sweep_level }, inst.symbol, session ?? null);
         }
 
-        setup.phase = 3;
+        setup.phase = 4;
       }
 
-      // ── Phase 3 → Phase 4: Continuation → Entry ──
-      if (setup.phase === 3 && setup.sweep_direction) {
+      // ── Phase 4 → Phase 5: Continuation → Entry ──
+      if (setup.phase === 4 && setup.sweep_direction) {
         const gapId = setup.ifvg_id || setup.fvg_id;
         if (!gapId) continue;
 
@@ -849,14 +1018,14 @@ export async function runSetupStateMachine(env: Env): Promise<void> {
         const contracts = calculateContracts(effectiveConfig);
 
         await env.DB.prepare(
-          `UPDATE setups SET phase = 4, status = 'ready',
+          `UPDATE setups SET phase = 5, status = 'ready',
            entry_price = ?, target_price = ?, stop_price = ?, risk_reward = ?,
            updated_at = datetime('now') WHERE id = ?`
         ).bind(entry, target, stop, rrRounded, setup.id).run();
 
         const msg = `ACCORD — all notes aligned. ${direction} ${inst.symbol} ${contracts}ct at ${entry.toFixed(2)} → Target ${target.toFixed(2)}. Stop ${stop.toFixed(2)}. R:R 1:${rr.toFixed(1)}`;
 
-        console.log(`Setup advanced to phase 4: ${inst.symbol} — ACCORD`);
+        console.log(`Setup advanced to phase 5: ${inst.symbol} — ACCORD`);
 
         if (!killSwitchActive) {
           const execAlertData = {
@@ -872,7 +1041,7 @@ export async function runSetupStateMachine(env: Env): Promise<void> {
             stop_price: stop,
             risk_reward: rrRounded,
           };
-          const alertId = await createAlert(env, setup.id, inst.id, 'execute', 4, msg, execAlertData);
+          const alertId = await createAlert(env, setup.id, inst.id, 'execute', 5, msg, execAlertData);
 
           // Final Haiku analysis + confidence check
           const confidence = await triggerHaikuAnalysis(env, alertId);
@@ -889,7 +1058,7 @@ export async function runSetupStateMachine(env: Env): Promise<void> {
             .bind(setup.id).first<{ id: number; phase: number; sweep_direction: string | null; sweep_level: number | null; haiku_analysis_json: string | null }>();
 
           // Send Discord ACCORD notification
-          await sendAlertDiscord(env, alertId, execAlertData, updatedSetup ?? { id: setup.id, phase: 4, sweep_direction: setup.sweep_direction, sweep_level: setup.sweep_level }, inst.symbol, session ?? null);
+          await sendAlertDiscord(env, alertId, execAlertData, updatedSetup ?? { id: setup.id, phase: 5, sweep_direction: setup.sweep_direction, sweep_level: setup.sweep_level }, inst.symbol, session ?? null);
         }
       }
     } catch (err) {
