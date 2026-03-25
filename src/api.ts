@@ -541,5 +541,90 @@ Respond in this exact JSON format:
     }
   }
 
+  // GET /api/candles/:symbol/:timeframe
+  const candlesMatch = path.match(/^\/api\/candles\/([A-Z]+)\/(\w+)$/);
+  if (candlesMatch && method === 'GET') {
+    const symbol = candlesMatch[1];
+    const timeframe = candlesMatch[2];
+    const instrumentId = symbol === 'ES' ? 1 : symbol === 'NQ' ? 2 : null;
+    if (!instrumentId) return json({ error: 'Unknown symbol' }, 400);
+    const limit = parseInt(url.searchParams.get('limit') || '200', 10);
+    const before = url.searchParams.get('before');
+    let query = 'SELECT timestamp, open, high, low, close, volume FROM candles WHERE instrument_id = ? AND timeframe = ?';
+    const binds: unknown[] = [instrumentId, timeframe];
+    if (before) {
+      query += ' AND timestamp < ?';
+      binds.push(before);
+    }
+    query += ' ORDER BY timestamp DESC LIMIT ?';
+    binds.push(limit);
+    const stmt = env.DB.prepare(query);
+    const { results } = await stmt.bind(...binds).all();
+    return json({ symbol, timeframe, candles: results });
+  }
+
+  // GET /api/market/status
+  if (path === '/api/market/status' && method === 'GET') {
+    const { results: lastCandles } = await env.DB.prepare(
+      `SELECT i.symbol, c.timeframe, MAX(c.timestamp) as last_timestamp
+       FROM candles c JOIN instruments i ON c.instrument_id = i.id
+       GROUP BY i.symbol, c.timeframe`
+    ).all();
+    const countResult = await env.DB.prepare('SELECT COUNT(*) as total FROM candles').first<{ total: number }>();
+    const { results: sessions } = await env.DB.prepare(
+      `SELECT s.*, i.symbol FROM sessions s JOIN instruments i ON s.instrument_id = i.id
+       WHERE s.date = date('now') ORDER BY i.symbol`
+    ).all();
+    return json({
+      last_candles: lastCandles,
+      total_candles: countResult?.total ?? 0,
+      sessions,
+      status: 'ok',
+    });
+  }
+
+  // GET /api/market/price
+  if (path === '/api/market/price' && method === 'GET') {
+    const prices: Record<string, { price: number; timestamp: string; change_pct: number }> = {};
+    for (const [symbol, id] of [['ES', 1], ['NQ', 2]] as const) {
+      const latest = await env.DB.prepare(
+        `SELECT timestamp, close FROM candles WHERE instrument_id = ? AND timeframe = '1m' ORDER BY timestamp DESC LIMIT 1`
+      ).bind(id).first<{ timestamp: string; close: number }>();
+      if (!latest) continue;
+      // Get today's first candle for change %
+      const todayDate = latest.timestamp.substring(0, 10);
+      const first = await env.DB.prepare(
+        `SELECT open FROM candles WHERE instrument_id = ? AND timeframe = '1m' AND timestamp >= ? ORDER BY timestamp ASC LIMIT 1`
+      ).bind(id, todayDate + 'T00:00:00').first<{ open: number }>();
+      const changePct = first && first.open > 0 ? ((latest.close - first.open) / first.open) * 100 : 0;
+      prices[symbol] = {
+        price: latest.close,
+        timestamp: latest.timestamp,
+        change_pct: Math.round(changePct * 100) / 100,
+      };
+    }
+    return json(prices);
+  }
+
+  // GET /api/sessions/today
+  if (path === '/api/sessions/today' && method === 'GET') {
+    const { results } = await env.DB.prepare(
+      `SELECT s.*, i.symbol FROM sessions s JOIN instruments i ON s.instrument_id = i.id
+       WHERE s.date = date('now') ORDER BY i.symbol`
+    ).all();
+    return json(results);
+  }
+
+  // GET /api/sessions/:date
+  const sessionsDateMatch = path.match(/^\/api\/sessions\/(\d{4}-\d{2}-\d{2})$/);
+  if (sessionsDateMatch && method === 'GET') {
+    const date = sessionsDateMatch[1];
+    const { results } = await env.DB.prepare(
+      `SELECT s.*, i.symbol FROM sessions s JOIN instruments i ON s.instrument_id = i.id
+       WHERE s.date = ? ORDER BY i.symbol`
+    ).bind(date).all();
+    return json(results);
+  }
+
   return json({ error: 'Not found' }, 404);
 }
