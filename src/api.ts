@@ -1,5 +1,6 @@
 import { Env, JwtPayload } from './types';
 import { sendTestNotification, getUserSettings } from './notifications';
+import { checkTradeCompliance, quickTradeCheck, TradeInput, QuickCheckInput } from './compliance';
 
 type Json = (data: unknown, status?: number) => Response;
 
@@ -826,6 +827,43 @@ Respond in this exact JSON format:
       return json({ success: sent, error: sent ? null : 'Webhook returned an error' });
     } catch (err) {
       return json({ success: false, error: String(err) }, 500);
+    }
+  }
+
+  // POST /api/apex/:id/compliance-check
+  const complianceMatch = path.match(/^\/api\/apex\/(\d+)\/compliance-check$/);
+  if (complianceMatch && method === 'POST') {
+    const accountId = parseInt(complianceMatch[1], 10);
+    // Verify account belongs to user
+    const acct = await env.DB.prepare(
+      'SELECT id FROM apex_accounts WHERE id = ? AND user_id = ?'
+    ).bind(accountId, user.sub).first();
+    if (!acct) return json({ error: 'Account not found' }, 404);
+
+    try {
+      const body = await request.json<TradeInput>();
+      const result = await checkTradeCompliance(env, user.sub, accountId, body);
+      return json(result);
+    } catch (err) {
+      return json({ error: String(err) }, 400);
+    }
+  }
+
+  // POST /api/apex/:id/quick-check
+  const quickCheckMatch = path.match(/^\/api\/apex\/(\d+)\/quick-check$/);
+  if (quickCheckMatch && method === 'POST') {
+    const accountId = parseInt(quickCheckMatch[1], 10);
+    const acct = await env.DB.prepare(
+      'SELECT id FROM apex_accounts WHERE id = ? AND user_id = ?'
+    ).bind(accountId, user.sub).first();
+    if (!acct) return json({ error: 'Account not found' }, 404);
+
+    try {
+      const body = await request.json<QuickCheckInput>();
+      const result = await quickTradeCheck(env, user.sub, accountId, body);
+      return json(result);
+    } catch (err) {
+      return json({ error: String(err) }, 400);
     }
   }
 

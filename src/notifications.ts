@@ -1,4 +1,5 @@
 import { Env } from './types';
+import { getComplianceSummary } from './compliance';
 
 // ── User Settings ──
 
@@ -74,6 +75,7 @@ const FOOTER = { text: 'MTRADE \u00b7 LRX Enterprises Inc.' };
 interface AlertData {
   id: number;
   alert_type: string;
+  instrument_id?: number;
   sweep_direction: string | null;
   sweep_level: number | null;
   fvg_high: number | null;
@@ -208,7 +210,7 @@ function getNotifyKey(alertType: string): keyof UserSettings | null {
   }
 }
 
-/** Send a setup alert to all enabled users */
+/** Send a setup alert to all enabled users, with personalized compliance for ACCORD alerts */
 export async function sendDiscordAlertToAll(
   env: Env,
   alert: AlertData,
@@ -226,7 +228,29 @@ export async function sendDiscordAlertToAll(
   for (const u of users) {
     if (notifyKey && !u[notifyKey]) continue;
     if (!u.discord_webhook_url) continue;
-    const sent = await postDiscord(u.discord_webhook_url, { embeds: [embed] });
+
+    // For ACCORD alerts, add personalized compliance summary
+    let userEmbed = { ...embed };
+    if (alert.alert_type === 'execute' && alert.entry_price != null && alert.stop_price != null) {
+      try {
+        const complianceField = await getComplianceSummary(env, u.user_id, {
+          instrument_id: alert.instrument_id || 2,
+          entry_price: alert.entry_price,
+          target_price: alert.target_price,
+          stop_price: alert.stop_price,
+        });
+        if (complianceField) {
+          const fields = [...(userEmbed.fields as Record<string, unknown>[])];
+          // Insert compliance field before the last field (Open Mtrade link)
+          fields.splice(fields.length - 1, 0, complianceField);
+          userEmbed = { ...userEmbed, fields };
+        }
+      } catch (err) {
+        console.error('Compliance summary error for user:', u.user_id, err);
+      }
+    }
+
+    const sent = await postDiscord(u.discord_webhook_url, { embeds: [userEmbed] });
     if (sent) anySent = true;
   }
 
