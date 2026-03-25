@@ -1,2 +1,3 @@
--- Add metadata_json column to setups for storing BOS level and other phase metadata
-ALTER TABLE setups ADD COLUMN metadata_json TEXT;
+-- metadata_json column already exists on setups table (added manually)
+-- This migration is a no-op to advance the migration tracker
+SELECT 1;
