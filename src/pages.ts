@@ -139,6 +139,35 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
       background: linear-gradient(90deg, transparent, var(--red), transparent);
       border-radius: 14px 14px 0 0;
     }
+    /* Chart expand/collapse toggle */
+    .card-header-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 12px;
+    }
+    .card-header-row .card-title { margin-bottom: 0; }
+    .chart-expand-btn {
+      font-size: 14px;
+      color: var(--muted);
+      cursor: pointer;
+      background: none;
+      border: none;
+      padding: 0;
+      min-width: 44px;
+      min-height: 44px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      line-height: 1;
+      -webkit-tap-highlight-color: transparent;
+      transition: color 0.2s;
+    }
+    .chart-expand-btn:hover { color: var(--red); }
+
+    #tv-chart-wrap { transition: height 0.3s ease; }
+    .chart-svg { transition: height 0.3s ease; }
+
     @keyframes breathe {
       0%, 100% { transform: scale(1); }
       50% { transform: scale(1.2); }
@@ -1958,6 +1987,8 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
     .grid-left, .grid-right {
       width: 100%;
     }
+    .dashboard-grid.tv-expanded #tv-chart-wrap { height: 400px; }
+    .dashboard-grid.strat-expanded .chart-svg { height: 350px; }
     .selectors-row {
       display: flex;
       flex-direction: column;
@@ -2010,6 +2041,10 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
         grid-template-columns: 1fr 1fr;
         gap: 12px;
       }
+      .dashboard-grid.tv-expanded .grid-left,
+      .dashboard-grid.strat-expanded .grid-left { grid-column: 1 / -1; }
+      .dashboard-grid.tv-expanded #tv-chart-wrap { height: 400px; }
+      .dashboard-grid.strat-expanded .chart-svg { height: 350px; }
       .tf-btn { padding: 4px 12px; }
       .dash-payout-row { gap: 16px; }
       .footer { padding: 36px 0 28px; }
@@ -2053,6 +2088,10 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
         grid-template-columns: 3fr 2fr;
         gap: 16px;
       }
+      .dashboard-grid.tv-expanded .grid-left,
+      .dashboard-grid.strat-expanded .grid-left { grid-column: 1 / -1; }
+      .dashboard-grid.tv-expanded #tv-chart-wrap { height: 500px; }
+      .dashboard-grid.strat-expanded .chart-svg { height: 450px; }
       .footer { padding: 40px 0 32px; }
     }
 
@@ -2779,7 +2818,21 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
       var sym = window.selectedInstrument || 'NQ';
       var tvSymbol = symbolMap[sym] || symbolMap.NQ;
 
-      tvContainer.innerHTML = '<div class="card" style="animation:slideUp 0.3s ease"><div class="card-title">\\u25C8 TRADINGVIEW</div><div id="tv-chart-wrap"></div></div>';
+      var tvExpanded = document.querySelector('.dashboard-grid.tv-expanded');
+      var tvIcon = tvExpanded ? '\u2921' : '\u2922';
+      tvContainer.innerHTML = '<div class="card" style="animation:slideUp 0.3s ease"><div class="card-header-row"><div class="card-title">\\u25C8 TRADINGVIEW</div><button class="chart-expand-btn" id="tv-expand-btn" aria-label="Expand chart">' + tvIcon + '</button></div><div id="tv-chart-wrap"></div></div>';
+
+      document.getElementById('tv-expand-btn').addEventListener('click', function() {
+        var grid = document.querySelector('.dashboard-grid');
+        var isExpanded = grid.classList.toggle('tv-expanded');
+        this.textContent = isExpanded ? '\u2921' : '\u2922';
+        this.setAttribute('aria-label', isExpanded ? 'Collapse chart' : 'Expand chart');
+        var wrap = document.getElementById('tv-chart-wrap');
+        wrap.addEventListener('transitionend', function handler() {
+          wrap.removeEventListener('transitionend', handler);
+          createWidget(symbolMap[window.selectedInstrument || 'NQ'] || symbolMap.NQ);
+        });
+      });
 
       if (!scriptLoaded) {
         var s = document.createElement('script');
@@ -2910,7 +2963,11 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
       var vw = window.innerWidth;
       var isTablet = vw >= 768;
       var isDesktop = vw >= 1025;
-      var svgW = 800, svgH = isDesktop ? 420 : isTablet ? 340 : 240, padR = 65, padL = 4, padT = 8, padB = 20;
+      var stratIsExpanded = document.querySelector('.dashboard-grid.strat-expanded');
+      var svgH;
+      if (stratIsExpanded) { svgH = isDesktop ? 450 : 350; }
+      else { svgH = isDesktop ? 420 : isTablet ? 340 : 240; }
+      var svgW = 800, padR = 65, padL = 4, padT = 8, padB = 20;
       var chartW = svgW - padL - padR, chartH = svgH - padT - padB;
       function priceY(p) { return padT + chartH - ((p - minP) / range) * chartH; }
 
@@ -3228,7 +3285,9 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
         '<div class="chart-legend-item"><span class="chart-legend-swatch" style="background:var(--muted);width:14px;height:2px;border-radius:0"></span>LDN L</div>' +
         '</div>';
 
-      chartEl.innerHTML = '<div class="card" style="animation:slideUp 0.3s ease"><div class="card-title">\\u25C8 STRATEGY CHART</div>' + tfHtml + '<div class="chart-wrap">' + liveTag + svgHtml + '</div>' + legend + '</div>';
+      var stratExpanded = document.querySelector('.dashboard-grid.strat-expanded');
+      var stratIcon = stratExpanded ? '\u2921' : '\u2922';
+      chartEl.innerHTML = '<div class="card" style="animation:slideUp 0.3s ease"><div class="card-header-row"><div class="card-title">\\u25C8 STRATEGY CHART</div><button class="chart-expand-btn" id="strat-expand-btn" aria-label="Expand chart">' + stratIcon + '</button></div>' + tfHtml + '<div class="chart-wrap">' + liveTag + svgHtml + '</div>' + legend + '</div>';
 
       // Bind timeframe selector
       chartEl.querySelectorAll('.tf-btn').forEach(function(btn) {
@@ -3237,6 +3296,18 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
           loadAndRender();
         });
       });
+
+      // Bind expand/collapse for strategy chart
+      var stratBtn = document.getElementById('strat-expand-btn');
+      if (stratBtn) {
+        stratBtn.addEventListener('click', function() {
+          var grid = document.querySelector('.dashboard-grid');
+          var isExpanded = grid.classList.toggle('strat-expanded');
+          this.textContent = isExpanded ? '\u2921' : '\u2922';
+          this.setAttribute('aria-label', isExpanded ? 'Collapse chart' : 'Expand chart');
+          setTimeout(function() { renderChartWithData(); }, 320);
+        });
+      }
 
       // Setup crosshair
       var wrap = chartEl.querySelector('.chart-wrap');
