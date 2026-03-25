@@ -455,7 +455,7 @@ export async function handleApiRoutes(
     const result = await env.DB.prepare(
       `INSERT INTO setup_alerts (instrument_id, alert_type, phase, message, sweep_direction, sweep_level,
        fvg_high, fvg_low, entry_price, target_price, stop_price, risk_reward)
-       VALUES (2, 'ready', 3, 'NQ Setup: London high swept, FVG formed on 5m, waiting for entry',
+       VALUES (2, 'ready', 4, 'NQ Setup: London high swept, BOS confirmed, FVG formed on 5m, waiting for entry',
        'high', 21850.00, 21835.00, 21820.00, 21830.00, 21870.00, 21810.00, 3.0)`
     ).run();
     return json({ id: result.meta.last_row_id, message: 'Demo NQ alert created' }, 201);
@@ -474,6 +474,21 @@ export async function handleApiRoutes(
 
     const metrics = await computeDashboardMetrics(env, user.sub);
 
+    // Get BOS context from setup metadata
+    let bosContext = '';
+    if (alert.setup_id) {
+      const setupRow = await env.DB.prepare('SELECT metadata_json FROM setups WHERE id = ?').bind(alert.setup_id).first<{ metadata_json: string | null }>();
+      if (setupRow?.metadata_json) {
+        try {
+          const meta = JSON.parse(setupRow.metadata_json);
+          if (meta.bos_level) {
+            const bosDir = alert.sweep_direction === 'low' ? 'bullish' : 'bearish';
+            bosContext = `\nBreak of Structure: Confirmed at ${meta.bos_level} — market structure shifted ${bosDir}`;
+          }
+        } catch { /* ignore */ }
+      }
+    }
+
     const systemPrompt = 'You are an ICT (Inner Circle Trader) strategy analyst. You analyze futures trading setups using ICT methodology — fair value gaps, inverse fair value gaps, liquidity sweeps, and London/NY session levels. Respond ONLY with valid JSON, no markdown, no backticks, no explanation outside the JSON.';
     const userPrompt = `Analyze this trading setup:
 Instrument: ${alert.symbol} (${alert.name})
@@ -482,7 +497,7 @@ Session Levels:
 London High: ${alert.sweep_direction === 'low' ? alert.target_price : alert.sweep_level}
 London Low: ${alert.sweep_direction === 'high' ? alert.target_price : alert.sweep_level}
 Setup:
-Sweep: Price broke London ${alert.sweep_direction} at ${alert.sweep_level}
+Sweep: Price broke London ${alert.sweep_direction} at ${alert.sweep_level}${bosContext}
 Fair Value Gap: ${alert.fvg_low} - ${alert.fvg_high}
 Inverse FVG: ${alert.ifvg_low && alert.ifvg_high ? alert.ifvg_low + ' - ' + alert.ifvg_high : 'none'}
 Proposed Entry: ${alert.entry_price}
@@ -523,7 +538,7 @@ Respond in this exact JSON format:
     const result = await env.DB.prepare(
       `INSERT INTO setup_alerts (instrument_id, alert_type, phase, message, sweep_direction, sweep_level,
        fvg_high, fvg_low, entry_price, target_price, stop_price, risk_reward)
-       VALUES (2, 'ready', 3, 'NQ Setup: London high swept, FVG formed on 5m, waiting for entry',
+       VALUES (2, 'ready', 4, 'NQ Setup: London high swept, BOS confirmed, FVG formed on 5m, waiting for entry',
        'high', 21850.00, 21835.00, 21820.00, 21830.00, 21870.00, 21810.00, 3.0)`
     ).run();
     const newId = result.meta.last_row_id;
@@ -593,6 +608,19 @@ Respond in this exact JSON format:
 
     const metrics = await computeDashboardMetrics(env, user.sub);
 
+    // Get BOS context from setup metadata
+    let bosCtx = '';
+    const setupMeta = await env.DB.prepare('SELECT metadata_json FROM setups WHERE id = ?').bind(setupId).first<{ metadata_json: string | null }>();
+    if (setupMeta?.metadata_json) {
+      try {
+        const meta = JSON.parse(setupMeta.metadata_json);
+        if (meta.bos_level) {
+          const bosDir = alert.sweep_direction === 'low' ? 'bullish' : 'bearish';
+          bosCtx = `\nBreak of Structure: Confirmed at ${meta.bos_level} — market structure shifted ${bosDir}`;
+        }
+      } catch { /* ignore */ }
+    }
+
     const systemPrompt = 'You are an ICT (Inner Circle Trader) strategy analyst. You analyze futures trading setups using ICT methodology — fair value gaps, inverse fair value gaps, liquidity sweeps, and London/NY session levels. Respond ONLY with valid JSON, no markdown, no backticks, no explanation outside the JSON.';
     const userPrompt = `Analyze this trading setup:
 Instrument: ${alert.symbol} (${alert.name})
@@ -601,7 +629,7 @@ Session Levels:
 London High: ${alert.sweep_direction === 'low' ? alert.target_price : alert.sweep_level}
 London Low: ${alert.sweep_direction === 'high' ? alert.target_price : alert.sweep_level}
 Setup:
-Sweep: Price broke London ${alert.sweep_direction} at ${alert.sweep_level}
+Sweep: Price broke London ${alert.sweep_direction} at ${alert.sweep_level}${bosCtx}
 Fair Value Gap: ${alert.fvg_low} - ${alert.fvg_high}
 Inverse FVG: ${alert.ifvg_low && alert.ifvg_high ? alert.ifvg_low + ' - ' + alert.ifvg_high : 'none'}
 Proposed Entry: ${alert.entry_price}
@@ -779,7 +807,14 @@ Respond in this exact JSON format:
         'SELECT * FROM setup_alerts WHERE setup_id = ? ORDER BY created_at DESC'
       ).bind((setup as Record<string, unknown>).id).all();
 
-      enriched.push({ ...setup, fvg_data: fvg, ifvg_data: ifvg, alerts });
+      // Parse metadata_json for BOS data
+      let metadata = null;
+      const metaStr = (setup as Record<string, unknown>).metadata_json;
+      if (metaStr && typeof metaStr === 'string') {
+        try { metadata = JSON.parse(metaStr); } catch { /* ignore */ }
+      }
+
+      enriched.push({ ...setup, fvg_data: fvg, ifvg_data: ifvg, alerts, metadata });
     }
 
     // Get today's session levels

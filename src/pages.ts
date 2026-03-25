@@ -2885,7 +2885,7 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
       return candles;
     }
 
-    function drawSvgChart(candles, d, entry, target, stop) {
+    function drawSvgChart(candles, d, entry, target, stop, bosLevel) {
       var allPrices = [];
       candles.forEach(function(c) { allPrices.push(c.high, c.low); });
       if (d.londonHigh != null) allPrices.push(d.londonHigh);
@@ -2895,6 +2895,7 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
       if (entry != null) allPrices.push(entry);
       if (target != null) allPrices.push(target);
       if (stop != null) allPrices.push(stop);
+      if (bosLevel != null) allPrices.push(bosLevel);
 
       var filtered = allPrices.filter(function(p) { return p != null && isFinite(p); });
       if (filtered.length === 0) return '<div style="color:var(--muted);text-align:center;padding:40px">No candle data yet</div>';
@@ -2980,6 +2981,31 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
         var ldnLY = priceY(d.londonLow);
         svg += '<line x1="' + padL + '" y1="' + ldnLY + '" x2="' + (padL + chartW) + '" y2="' + ldnLY + '" stroke="var(--muted)" stroke-width="0.8" stroke-dasharray="6,4" opacity="0.6"/>';
         svg += '<text x="' + (svgW - padR - 2) + '" y="' + (ldnLY - 3) + '" fill="var(--muted)" font-family="JetBrains Mono,monospace" font-size="9" text-anchor="end">LDN L</text>';
+      }
+
+      // BOS level line
+      if (bosLevel != null) {
+        var bosY = priceY(bosLevel);
+        svg += '<line x1="' + padL + '" y1="' + bosY + '" x2="' + (padL + chartW) + '" y2="' + bosY + '" stroke="var(--amber)" stroke-width="1" opacity="0.6"/>';
+        svg += '<text x="' + (padL + 4) + '" y="' + (bosY - 3) + '" fill="var(--amber)" font-family="JetBrains Mono,monospace" font-size="8" opacity="0.8">BOS</text>';
+        // Diamond marker at BOS level (find the candle nearest to BOS level)
+        var bestBosIdx = -1, bestBosDist = Infinity;
+        candles.forEach(function(c, i) {
+          if (c.high >= bosLevel && c.low <= bosLevel) {
+            var dist = Math.abs(c.close - bosLevel);
+            if (dist < bestBosDist) { bestBosDist = dist; bestBosIdx = i; }
+          }
+        });
+        if (bestBosIdx === -1) {
+          candles.forEach(function(c, i) {
+            var dist = Math.min(Math.abs(c.high - bosLevel), Math.abs(c.low - bosLevel));
+            if (dist < bestBosDist) { bestBosDist = dist; bestBosIdx = i; }
+          });
+        }
+        if (bestBosIdx >= 0) {
+          var diamondX = padL + bestBosIdx * candleW + candleW / 2;
+          svg += '<rect x="' + (diamondX - 3) + '" y="' + (bosY - 3) + '" width="6" height="6" fill="var(--amber)" transform="rotate(45,' + diamondX + ',' + bosY + ')"/>';
+        }
       }
 
       // Target/stop/entry lines
@@ -3169,7 +3195,12 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
         if (!entry) { entry = d.ifvg.high; target = d.londonHigh; stop = d.ifvg.low - 2; }
       }
 
-      var svgHtml = drawSvgChart(candles, d, entry, target, stop);
+      // Get BOS level from active setup metadata
+      var bosLevel = null;
+      if (window.__activeSetupMeta && window.__activeSetupMeta.bos_level && (window.__activeSetupPhase || 0) >= 2) {
+        bosLevel = Number(window.__activeSetupMeta.bos_level);
+      }
+      var svgHtml = drawSvgChart(candles, d, entry, target, stop, bosLevel);
 
       // LIVE / DELAYED tag
       var ageMs = Date.now() - lastFetchTime;
@@ -3260,6 +3291,7 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
     var phases = [
       { name: 'London Range', desc: 'Session high & low forming' },
       { name: 'Liquidity Sweep', desc: 'Price breaks London H/L' },
+      { name: 'Break of Structure', desc: 'Price confirms reversal direction' },
       { name: 'FVG Retracement', desc: 'Retrace into 1H/4H FVG' },
       { name: 'Continuation', desc: 'FVG or IFVG confirms direction' },
       { name: 'Entry', desc: 'Execute on gap, target opposite level' }
@@ -3281,13 +3313,19 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
             if (match) {
               activeSetup = match;
               currentPhase = match.phase || 0;
+              window.__activeSetupMeta = match.metadata || null;
+              window.__activeSetupPhase = currentPhase;
             } else {
               activeSetup = null;
               currentPhase = 0;
+              window.__activeSetupMeta = null;
+              window.__activeSetupPhase = 0;
             }
           } else {
             activeSetup = null;
             currentPhase = 0;
+            window.__activeSetupMeta = null;
+            window.__activeSetupPhase = 0;
           }
           renderTracker();
         }).catch(function() {});
@@ -3314,8 +3352,8 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
 
       // Tag
       var tagText, tagColor;
-      if (currentPhase >= 4) { tagText = 'ACCORD'; tagColor = 'var(--red)'; }
-      else if (currentPhase >= 3) { tagText = 'BASE NOTE'; tagColor = 'var(--amber)'; }
+      if (currentPhase >= 5) { tagText = 'ACCORD'; tagColor = 'var(--red)'; }
+      else if (currentPhase >= 4) { tagText = 'BASE NOTE'; tagColor = 'var(--amber)'; }
       else if (currentPhase >= 2) { tagText = 'HEART NOTE'; tagColor = 'var(--amber)'; }
       else { tagText = 'TOP NOTE'; tagColor = 'var(--muted)'; }
 
@@ -3350,13 +3388,17 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
       });
 
       // Status box
-      var borderColor = currentPhase >= 3 ? 'var(--red)' : 'var(--amber)';
-      var statusLabelColor = currentPhase >= 3 ? 'var(--red)' : 'var(--amber)';
+      var borderColor = currentPhase >= 4 ? 'var(--red)' : 'var(--amber)';
+      var statusLabelColor = currentPhase >= 4 ? 'var(--red)' : 'var(--amber)';
       var statusLabel = 'PHASE ' + currentPhase + ' \u2014 ' + phases[currentPhase].name.toUpperCase();
+
+      // Get BOS level from metadata if available
+      var bosLevel = (activeSetup && activeSetup.metadata && activeSetup.metadata.bos_level) ? activeSetup.metadata.bos_level : null;
 
       var messages = [
         activeSetup ? 'London session forming. Like a top note \u2014 the opening impression.' : 'Waiting for London session to complete...',
         'Sweep confirmed \u2014 London Low at ' + (d.londonLow || 0).toFixed(2) + ' broken. Sillage trail detected.',
+        'Structure broken at ' + (bosLevel ? Number(bosLevel).toFixed(2) : '?') + '. Heart note developing \u2014 reversal confirmed.',
         'Heart note developing. Retracing into 4H FVG (' + (d.fvg ? d.fvg.low.toFixed(2) : '?') + ' \u2013 ' + (d.fvg ? d.fvg.high.toFixed(2) : '?') + ')',
         'Base note locked. IFVG at ' + (d.ifvg ? d.ifvg.low.toFixed(2) : '?') + ' \u2013 ' + (d.ifvg ? d.ifvg.high.toFixed(2) : '?') + ' confirms direction.',
         'ACCORD \u2014 all notes aligned. Buy ' + entry.toFixed(2) + ' \u2192 Target ' + target.toFixed(2)
@@ -3377,7 +3419,7 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
       if (e.detail && e.detail.phase != null) {
         currentPhase = e.detail.phase;
       } else {
-        currentPhase = 3;
+        currentPhase = 4;
       }
       renderTracker();
     });
@@ -3768,8 +3810,8 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
     }
 
     function getSignalName(phase) {
-      if (phase >= 4) return 'ACCORD';
-      if (phase >= 3) return 'BASE NOTE';
+      if (phase >= 5) return 'ACCORD';
+      if (phase >= 4) return 'BASE NOTE';
       if (phase >= 2) return 'HEART NOTE';
       return 'TOP NOTE';
     }
@@ -3785,10 +3827,26 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
 
     function renderOverlay(alert) {
       var dir = getDirection(alert);
-      var signalName = getSignalName(alert.phase || 0);
+      var phase = alert.phase || 0;
+      var signalName = getSignalName(phase);
       var rr = alert.risk_reward ? (Number(alert.risk_reward).toFixed(1) + ' : 1') : '--';
 
       var html = '<div class="alert-overlay">';
+
+      // Phase 2 (BOS) — informational only
+      if (phase === 2) {
+        html += '<div class="alert-signal-name">HEART NOTE \\u2014 Structure Confirmed</div>';
+        html += '<div class="alert-instrument-dir">' + (alert.symbol || 'NQ') + ' \\u2014 ' + dir + '</div>';
+        if (alert.message) {
+          html += '<div class="alert-message">' + alert.message + '</div>';
+        }
+        html += '<div class="alert-actions">';
+        html += '<button class="alert-btn-skip" data-alert-id="' + alert.id + '">DISMISS</button>';
+        html += '</div>';
+        html += '</div>';
+        return html;
+      }
+
       html += '<div class="alert-signal-name">' + signalName + '</div>';
       html += '<div class="alert-instrument-dir">' + (alert.symbol || 'NQ') + ' \\u2014 ' + dir + '</div>';
       html += '<div class="alert-levels-grid">';
@@ -3801,7 +3859,10 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
         html += '<div class="alert-message">' + alert.message + '</div>';
       }
       html += '<div class="alert-actions">';
-      html += '<button class="alert-btn-in" data-alert-id="' + alert.id + '">I\\u2019M IN</button>';
+      // Only show "I'M IN" button at phase 4 (BASE NOTE) and phase 5 (ACCORD)
+      if (phase >= 4) {
+        html += '<button class="alert-btn-in" data-alert-id="' + alert.id + '">I\\u2019M IN</button>';
+      }
       html += '<button class="alert-btn-skip" data-alert-id="' + alert.id + '">SKIP</button>';
       html += '</div>';
       html += '</div>';
@@ -3969,10 +4030,10 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
         alertDot.classList.remove('visible');
       }
 
-      // Find ready/execute alerts for overlay
+      // Find ready/execute/BOS alerts for overlay
       var overlayAlert = null;
       alerts.forEach(function(a) {
-        if ((a.alert_type === 'ready' || a.alert_type === 'execute') && !overlayAlert) {
+        if ((a.alert_type === 'ready' || a.alert_type === 'execute' || (a.alert_type === 'approaching' && a.phase === 2)) && !overlayAlert) {
           overlayAlert = a;
         }
       });
@@ -4395,7 +4456,7 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
       html += '</div>';
       html += '<div class="strat-toggle-row">';
       html += '<div><div class="strat-toggle-label">Require IFVG for continuation</div>';
-      html += '<div class="strat-toggle-help">Only fires BASE NOTE on Inverse FVGs</div></div>';
+      html += '<div class="strat-toggle-help">Only fires BASE NOTE (Phase 4) on Inverse FVGs</div></div>';
       html += toggleHtml('strat-ifvg', c.continuation_require_ifvg);
       html += '</div>';
 

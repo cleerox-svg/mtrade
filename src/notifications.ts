@@ -86,6 +86,7 @@ interface AlertData {
   target_price: number | null;
   stop_price: number | null;
   risk_reward: number | null;
+  message?: string | null;
 }
 
 interface SetupData {
@@ -115,7 +116,7 @@ function buildAlertEmbed(
   const direction = setup.sweep_direction === 'low' ? 'LONG' : 'SHORT';
   const sweepSide = setup.sweep_direction === 'low' ? 'Low' : 'High';
 
-  if (alert.alert_type === 'approaching') {
+  if (alert.alert_type === 'approaching' && (setup.phase === 1 || setup.phase === undefined)) {
     return {
       title: '\ud83d\udd38 TOP NOTE \u2014 Sweep Detected',
       description: `${symbol} broke London ${sweepSide} at ${fmt(alert.sweep_level)}`,
@@ -124,7 +125,42 @@ function buildAlertEmbed(
         { name: 'London High', value: fmt(sessionLevels?.london_high), inline: true },
         { name: 'London Low', value: fmt(sessionLevels?.london_low), inline: true },
         { name: 'Sweep', value: `${sweepSide} at ${fmt(alert.sweep_level)}`, inline: true },
+        { name: 'Status', value: 'Watching for Break of Structure...', inline: false },
+      ],
+      footer: FOOTER,
+      timestamp: new Date().toISOString(),
+    };
+  }
+
+  if (alert.alert_type === 'approaching' && setup.phase === 2) {
+    // Parse BOS level from message
+    const bosMatch = alert.message?.match(/at\s+([\d.]+)\.\s+Structure shifted\s+(\w+)/);
+    const bosLevel = bosMatch ? bosMatch[1] : '\u2014';
+    const bosDir = bosMatch ? bosMatch[2] : (setup.sweep_direction === 'low' ? 'bullish' : 'bearish');
+
+    return {
+      title: '\u25c6 HEART NOTE \u2014 Break of Structure',
+      description: `${symbol} structure shifted ${bosDir} at ${bosLevel}`,
+      color: 16763904,
+      fields: [
+        { name: 'Sweep', value: `London ${sweepSide} at ${fmt(alert.sweep_level)}`, inline: true },
+        { name: 'BOS Level', value: bosLevel, inline: true },
         { name: 'Status', value: 'Watching for FVG retracement...', inline: false },
+        { name: '', value: '**[Open Mtrade \u2192](https://mtrade.lrxradar.com/app)**', inline: false },
+      ],
+      footer: FOOTER,
+      timestamp: new Date().toISOString(),
+    };
+  }
+
+  if (alert.alert_type === 'approaching') {
+    return {
+      title: '\ud83d\udd38 TOP NOTE \u2014 Setup Approaching',
+      description: `${symbol} \u2014 ${direction} developing`,
+      color: 16763904,
+      fields: [
+        { name: 'Sweep', value: `${sweepSide} at ${fmt(alert.sweep_level)}`, inline: true },
+        { name: 'Status', value: alert.message || 'Watching...', inline: false },
       ],
       footer: FOOTER,
       timestamp: new Date().toISOString(),
