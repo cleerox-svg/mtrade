@@ -81,6 +81,12 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>MTRADE — Dashboard</title>
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#fb2c5a">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="apple-touch-icon" href="/icon-192.png">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Outfit:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
   <style>
     :root {
@@ -144,6 +150,127 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
     @keyframes spin {
       from { transform: rotate(0deg); }
       to { transform: rotate(360deg); }
+    }
+    @keyframes shimmer {
+      0% { background-position: 200% 0; }
+      100% { background-position: -200% 0; }
+    }
+    @keyframes toastIn {
+      from { opacity: 0; transform: translateX(-50%) translateY(-20px); }
+      to { opacity: 1; transform: translateX(-50%) translateY(0); }
+    }
+    @keyframes toastOut {
+      from { opacity: 1; transform: translateX(-50%) translateY(0); }
+      to { opacity: 0; transform: translateX(-50%) translateY(-20px); }
+    }
+
+    /* Shimmer skeleton */
+    .skeleton-shimmer {
+      background: linear-gradient(90deg, var(--card) 25%, #141420 50%, var(--card) 75%);
+      background-size: 200% 100%;
+      animation: shimmer 1.5s infinite;
+      border-radius: 6px;
+    }
+
+    /* Data fade-in */
+    .data-loaded { animation: fadeIn 0.3s ease forwards; }
+    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+    /* Stagger cascade delays */
+    .stagger-1 { animation-delay: 100ms; }
+    .stagger-2 { animation-delay: 200ms; }
+    .stagger-3 { animation-delay: 300ms; }
+    .stagger-4 { animation-delay: 400ms; }
+    .stagger-5 { animation-delay: 500ms; }
+
+    /* Toast container */
+    .toast-container {
+      position: fixed;
+      top: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 300;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      max-width: 400px;
+      width: calc(100vw - 40px);
+      pointer-events: none;
+    }
+    .toast {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 12px 20px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 13px;
+      color: var(--bright);
+      animation: toastIn 0.3s ease;
+      pointer-events: auto;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .toast.success { border-left: 3px solid var(--green); }
+    .toast.error { border-left: 3px solid var(--danger); }
+    .toast.warning { border-left: 3px solid var(--amber); }
+    .toast.dismissing { animation: toastOut 0.3s ease forwards; }
+
+    /* Pull-to-refresh indicator */
+    .ptr-indicator {
+      position: fixed;
+      top: -40px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      border: 2px solid transparent;
+      border-top-color: var(--red);
+      animation: spin 0.8s linear infinite;
+      transition: top 0.2s ease;
+      z-index: 250;
+    }
+    .ptr-indicator.visible { top: 12px; }
+
+    /* Logout dropdown */
+    .logout-dropdown {
+      position: absolute;
+      top: 100%;
+      right: 0;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 8px;
+      display: flex;
+      gap: 6px;
+      margin-top: 4px;
+      animation: slideUp 0.2s ease;
+      z-index: 50;
+    }
+    .logout-dropdown button {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px;
+      letter-spacing: 1px;
+      padding: 6px 14px;
+      border-radius: 6px;
+      cursor: pointer;
+      border: none;
+      min-height: 32px;
+    }
+    .logout-yes { background: var(--red); color: white; }
+    .logout-no { background: transparent; border: 1px solid var(--border); color: var(--muted); }
+
+    /* Active account dot */
+    .account-active-dot {
+      display: inline-block;
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--green);
+      box-shadow: 0 0 4px var(--green);
+      margin-left: 4px;
+      vertical-align: middle;
     }
 
     /* Header */
@@ -1571,7 +1698,9 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
   </style>
 </head>
 <body>
-  <div class="container">
+  <div class="toast-container" id="toast-container"></div>
+  <div class="ptr-indicator" id="ptr-indicator"></div>
+  <div class="container" id="main-container">
     <div class="header">
       <div class="header-brand">
         <h1 style="display:inline-flex;align-items:center">MTRADE<span class="alert-dot" id="alert-dot"></span></h1>
@@ -1585,9 +1714,10 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
             <span class="session-label inactive">--</span>
           </div>
         </div>
-        <div class="header-user">
+        <div class="header-user" style="position:relative">
           ${user.avatar_url ? `<img src="${user.avatar_url}" alt="${user.name}">` : ''}
-          <a href="/auth/logout">LOGOUT</a>
+          <a href="#" id="logout-btn" onclick="event.preventDefault();window.__showLogoutConfirm()">LOGOUT</a>
+          <div id="logout-dropdown" style="display:none"></div>
         </div>
       </div>
     </div>
@@ -1607,6 +1737,7 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
         <div id="ai-analysis"></div>
         <div id="signal-tracker"></div>
         <div id="dashboard-panel"></div>
+        <div id="performance-card"></div>
       </div>
     </div>
     <div id="pnl-log"></div>
@@ -1708,8 +1839,9 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
         }
 
         row.innerHTML = accounts.map(function(a) {
-          return '<button class="toggle-btn' + (window.selectedAccountId === a.id ? ' active' : '') +
-            '" data-account="' + a.id + '">' + (a.label || a.id) + '</button>';
+          var isActive = String(window.selectedAccountId) === String(a.id);
+          return '<button class="toggle-btn' + (isActive ? ' active' : '') +
+            '" data-account="' + a.id + '">' + (a.label || a.id) + (isActive ? '<span class="account-active-dot"></span>' : '') + '</button>';
         }).join('');
 
         row.addEventListener('click', function(e) {
@@ -1778,10 +1910,14 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(body)
           }).then(function(r) { return r.json(); })
-            .then(function() { loadAccounts(); })
+            .then(function() {
+              window.__showToast('\\u2713 Account created \\u2014 ' + (body.label || 'Apex Account'), 'success');
+              loadAccounts();
+            })
             .catch(function(err) {
               btn.disabled = false;
               btn.textContent = 'CREATE ACCOUNT';
+              window.__showToast('\\u2717 Something went wrong \\u2014 try again', 'error');
               console.error('Failed to create account', err);
             });
         });
@@ -1816,10 +1952,18 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
     }
 
     function showSkeleton() {
-      panel.innerHTML =
-        '<div class="skeleton-rect"></div>' +
-        '<div class="skeleton-rect"></div>' +
-        '<div class="skeleton-rect"></div>';
+      panel.innerHTML = '<div class="card">' +
+        '<div style="display:flex;justify-content:space-between;margin-bottom:14px">' +
+        '<div><div class="skeleton-shimmer" style="width:60px;height:10px;margin-bottom:6px"></div><div class="skeleton-shimmer" style="width:140px;height:26px"></div></div>' +
+        '<div style="text-align:right"><div class="skeleton-shimmer" style="width:40px;height:10px;margin-bottom:6px;margin-left:auto"></div><div class="skeleton-shimmer" style="width:120px;height:26px"></div></div>' +
+        '</div>' +
+        '<div class="skeleton-shimmer" style="width:100%;height:36px;margin-bottom:12px"></div>' +
+        '<div class="skeleton-shimmer" style="width:100%;height:5px;margin-bottom:12px"></div>' +
+        '<div class="skeleton-shimmer" style="width:100%;height:5px;margin-bottom:12px"></div>' +
+        '<div class="skeleton-shimmer" style="width:100%;height:5px;margin-bottom:16px"></div>' +
+        '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">' +
+        '<div class="skeleton-shimmer" style="height:48px;border-radius:8px"></div>'.repeat(6) +
+        '</div></div>';
     }
 
     function fmt(n) {
@@ -2083,7 +2227,12 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
       }).catch(function() {});
     }
 
-    renderPriceCard();
+    // Show shimmer skeleton initially
+    priceCard.innerHTML = '<div class="card"><div class="card-title">\\u25C8 LIVE PRICE</div>' +
+      '<div class="skeleton-shimmer" style="width:200px;height:36px;margin-bottom:8px"></div>' +
+      '<div class="skeleton-shimmer" style="width:60px;height:14px;margin-bottom:8px"></div>' +
+      '<div style="display:flex;gap:16px"><div class="skeleton-shimmer" style="width:80px;height:12px"></div><div class="skeleton-shimmer" style="width:80px;height:12px"></div></div>' +
+      '</div>';
     fetchPrices();
     fetchSessions();
     setInterval(fetchPrices, 15000);
@@ -2541,8 +2690,14 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
       if (wrap) setupCrosshair(wrap);
     }
 
+    function showChartSkeleton() {
+      chartEl.innerHTML = '<div class="card"><div class="card-title">\\u25C8 STRATEGY CHART</div>' +
+        '<div class="skeleton-shimmer" style="width:100%;height:240px;border-radius:10px"></div></div>';
+    }
+
     function loadAndRender() {
       var sym = window.selectedInstrument || 'NQ';
+      if (!cachedCandles[sym]) showChartSkeleton();
       Promise.all([fetchCandleData(sym), fetchSessionData(), fetchFvgData(sym)]).then(function() {
         renderChartWithData();
       });
@@ -2725,9 +2880,22 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
     }
 
     // ── P&L Log ──
+    function showPnlSkeleton() {
+      var html = '<div class="card"><div class="card-title">DAILY P&L</div><div class="pnl-list">';
+      for (var i = 0; i < 5; i++) {
+        html += '<div class="pnl-row"><div class="skeleton-shimmer" style="width:70px;height:12px"></div>' +
+          '<div class="skeleton-shimmer" style="width:30px;height:12px;margin:0 8px"></div>' +
+          '<div style="flex:1"></div>' +
+          '<div class="skeleton-shimmer" style="width:80px;height:14px"></div></div>';
+      }
+      html += '</div></div>';
+      pnlLog.innerHTML = html;
+    }
+
     function fetchPnlLog() {
       var accountId = getSelectedAccountId();
       if (!accountId) { pnlLog.innerHTML = ''; return; }
+      showPnlSkeleton();
       fetch('/api/apex/' + accountId + '/daily-pnl?days=30')
         .then(function(r) { return r.json(); })
         .then(function(rows) { renderPnlLog(rows); })
@@ -2746,8 +2914,9 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
         var prefix = positive ? '+$' : '-$';
         var instrument = r.instrument || '';
         var trades = r.trade_count || 0;
+        var displayDate = r.date ? window.__formatET(r.date + 'T12:00:00Z').replace(/, .*/, '') : r.date;
         html += '<div class="pnl-row">' +
-          '<span class="pnl-date">' + r.date + '</span>' +
+          '<span class="pnl-date">' + displayDate + '</span>' +
           (instrument ? '<span class="pnl-instrument">' + instrument + '</span>' : '') +
           '<span class="pnl-trades">' + trades + ' trade' + (trades !== 1 ? 's' : '') + '</span>' +
           '<span class="pnl-amount" style="color:' + color + '">' + prefix + fmt(r.pnl) + '</span>' +
@@ -2808,6 +2977,9 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
         '<button class="modal-toggle-btn active-long" id="tm-long" type="button">LONG</button>' +
         '<button class="modal-toggle-btn" id="tm-short" type="button">SHORT</button>' +
         '</div>' +
+
+        '<div class="modal-label">Date</div>' +
+        '<input class="modal-input" id="tm-date" type="date" value="' + (function() { var d = new Date(); return d.toLocaleDateString('en-CA', { timeZone: 'America/New_York' }); })() + '">' +
 
         '<div class="modal-label">Contracts</div>' +
         '<input class="modal-input" id="tm-contracts" type="number" value="1" min="1" inputmode="numeric">' +
@@ -2978,6 +3150,7 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
 
         // Show compliance results
         btn.style.display = 'none';
+        window.__showToast('\\u26A0 Check compliance results before confirming', 'warning');
         renderComplianceResults(result);
       })
       .catch(function() {
@@ -2996,7 +3169,8 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
 
       var pnl = calcPnl();
       var accountId = getSelectedAccountId();
-      var today = new Date().toISOString().slice(0, 10);
+      var dateEl = document.getElementById('tm-date');
+      var today = dateEl ? dateEl.value : new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
 
       var payload = {
         instrument_id: modalState.instrument_id,
@@ -3024,11 +3198,17 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
         });
       })
       .then(function() {
+        var inst = INSTRUMENTS[modalState.instrument_id];
+        var sym = inst ? inst.symbol : '';
+        var dir = modalState.direction;
+        var pnlStr = pnl != null ? (pnl >= 0 ? '+' : '') + '$' + Math.abs(pnl).toFixed(2) : '';
+        window.__showToast('\\u2713 Trade logged \\u2014 ' + sym + ' ' + dir + ' ' + pnlStr, 'success');
         closeModal();
         document.dispatchEvent(new Event('account-changed'));
         fetchPnlLog();
       })
       .catch(function() {
+        window.__showToast('\\u2717 Something went wrong \\u2014 try again', 'error');
         if (btn) {
           btn.disabled = false;
           btn.textContent = 'LOG TRADE';
@@ -3131,10 +3311,14 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
         return fetch('/api/alerts/' + alert.id + '/dismiss', { method: 'PUT' });
       })
       .then(function() {
+        window.__showToast('\\u2713 Trade entry logged', 'success');
         document.dispatchEvent(new Event('account-changed'));
         pollAlerts();
       })
-      .catch(function(err) { console.error('Failed to log trade from alert', err); });
+      .catch(function(err) {
+        window.__showToast('\\u2717 Something went wrong \\u2014 try again', 'error');
+        console.error('Failed to log trade from alert', err);
+      });
     }
 
     function handleImIn(alert) {
@@ -3235,7 +3419,10 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
 
     function handleSkip(alertId) {
       fetch('/api/alerts/' + alertId + '/dismiss', { method: 'PUT' })
-        .then(function() { pollAlerts(); })
+        .then(function() {
+          window.__showToast('Setup skipped', 'warning');
+          pollAlerts();
+        })
         .catch(function(err) { console.error('Failed to dismiss alert', err); });
     }
 
@@ -3415,7 +3602,7 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
             var diff = Math.floor((Date.now() - new Date(lastRun + 'Z').getTime()) / 1000);
             if (diff < 60) timeAgo = diff + 's ago';
             else if (diff < 3600) timeAgo = Math.floor(diff / 60) + 'm ago';
-            else timeAgo = Math.floor(diff / 3600) + 'h ago';
+            else timeAgo = window.__formatET(lastRun + 'Z');
           }
           var activeFvgs = data.fvg_counts ? data.fvg_counts.active : 0;
           var setups = data.active_setups || 0;
@@ -3495,8 +3682,14 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data)
       }).then(function(r) { return r.json(); })
-        .then(function(updated) { settings = updated; })
-        .catch(function(err) { console.error('Settings save error:', err); });
+        .then(function(updated) {
+          settings = updated;
+          window.__showToast('\\u2713 Settings saved', 'success');
+        })
+        .catch(function(err) {
+          console.error('Settings save error:', err);
+          window.__showToast('\\u2717 Something went wrong \\u2014 try again', 'error');
+        });
     }
 
     function bindEvents() {
@@ -3505,35 +3698,21 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
         var val = document.getElementById('notif-webhook-input').value.trim();
         saveField({ discord_webhook_url: val });
         settings.discord_webhook_url = val;
-        var statusEl = document.getElementById('notif-test-status');
-        statusEl.style.opacity = '1';
-        statusEl.textContent = '\\u2713 Saved';
-        statusEl.style.color = '#34d058';
-        setTimeout(function() { statusEl.style.opacity = '0'; }, 2000);
       };
 
       var testBtn = document.getElementById('notif-test-btn');
       if (testBtn) testBtn.onclick = function() {
-        var statusEl = document.getElementById('notif-test-status');
-        statusEl.style.opacity = '1';
-        statusEl.textContent = '...';
-        statusEl.style.color = 'var(--muted)';
         fetch('/api/settings/test-discord', { method: 'POST', credentials: 'same-origin' })
           .then(function(r) { return r.json(); })
           .then(function(data) {
             if (data.success) {
-              statusEl.textContent = '\\u2713 Sent';
-              statusEl.style.color = '#34d058';
+              window.__showToast('\\u2713 Discord notification sent', 'success');
             } else {
-              statusEl.textContent = '\\u2717 ' + (data.error || 'Failed');
-              statusEl.style.color = 'var(--red)';
+              window.__showToast('\\u2717 Discord webhook failed', 'error');
             }
-            setTimeout(function() { statusEl.style.opacity = '0'; }, 3000);
           })
           .catch(function() {
-            statusEl.textContent = '\\u2717 Failed';
-            statusEl.style.color = 'var(--red)';
-            setTimeout(function() { statusEl.style.opacity = '0'; }, 3000);
+            window.__showToast('\\u2717 Discord webhook failed', 'error');
           });
       };
 
@@ -3565,6 +3744,190 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
       })
       .catch(function(err) { console.error('Failed to load notification settings:', err); });
   })();
+  </script>
+
+  <script>
+  /* ── Toast System ── */
+  (function() {
+    var container = document.getElementById('toast-container');
+    window.__showToast = function(message, type) {
+      type = type || 'success';
+      var toast = document.createElement('div');
+      toast.className = 'toast ' + type;
+      toast.textContent = message;
+      container.appendChild(toast);
+      setTimeout(function() {
+        toast.classList.add('dismissing');
+        setTimeout(function() { toast.remove(); }, 300);
+      }, 3000);
+    };
+  })();
+  </script>
+
+  <script>
+  /* ── Format Eastern Time helper ── */
+  window.__formatET = function(isoString) {
+    if (!isoString) return '--';
+    try {
+      var d = new Date(isoString);
+      if (isNaN(d.getTime())) return isoString;
+      return d.toLocaleString('en-US', {
+        timeZone: 'America/New_York',
+        month: 'short', day: 'numeric',
+        hour: 'numeric', minute: '2-digit',
+        hour12: true
+      }) + ' ET';
+    } catch(e) { return isoString; }
+  };
+
+  /* ── Format dollar amounts ── */
+  window.__fmtDollar = function(n) {
+    if (n == null || isNaN(n)) return '--';
+    var prefix = n >= 0 ? '$' : '-$';
+    return prefix + Math.abs(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  };
+
+  /* ── Format price for instrument ── */
+  window.__fmtPrice = function(n) {
+    if (n == null || isNaN(n)) return '--';
+    return Number(n).toFixed(2);
+  };
+
+  /* ── Format percentage ── */
+  window.__fmtPct = function(n) {
+    if (n == null || isNaN(n)) return '--';
+    return Number(n).toFixed(1) + '%';
+  };
+  </script>
+
+  <script>
+  /* ── Logout Confirmation ── */
+  (function() {
+    var dropdown = document.getElementById('logout-dropdown');
+    window.__showLogoutConfirm = function() {
+      if (dropdown.style.display === 'block') {
+        dropdown.style.display = 'none';
+        return;
+      }
+      dropdown.className = 'logout-dropdown';
+      dropdown.style.display = 'block';
+      dropdown.innerHTML =
+        '<span style="font-family:JetBrains Mono,monospace;font-size:10px;color:var(--label);white-space:nowrap">Log out?</span>' +
+        '<button class="logout-yes" id="logout-yes">Yes</button>' +
+        '<button class="logout-no" id="logout-no">No</button>';
+      document.getElementById('logout-yes').onclick = function() { window.location.href = '/auth/logout'; };
+      document.getElementById('logout-no').onclick = function() { dropdown.style.display = 'none'; };
+    };
+    document.addEventListener('click', function(e) {
+      if (!e.target.closest('.header-user')) dropdown.style.display = 'none';
+    });
+  })();
+  </script>
+
+  <script>
+  /* ── Pull to Refresh (mobile) ── */
+  (function() {
+    var container = document.getElementById('main-container');
+    var indicator = document.getElementById('ptr-indicator');
+    var startY = 0;
+    var pulling = false;
+    var threshold = 60;
+
+    container.addEventListener('touchstart', function(e) {
+      if (container.scrollTop === 0 || window.scrollY === 0) {
+        startY = e.touches[0].clientY;
+        pulling = true;
+      }
+    }, { passive: true });
+
+    container.addEventListener('touchmove', function(e) {
+      if (!pulling) return;
+      var dy = e.touches[0].clientY - startY;
+      if (dy > 10 && (container.scrollTop === 0 || window.scrollY === 0)) {
+        if (dy > threshold) {
+          indicator.classList.add('visible');
+        }
+      } else {
+        pulling = false;
+        indicator.classList.remove('visible');
+      }
+    }, { passive: true });
+
+    container.addEventListener('touchend', function() {
+      if (indicator.classList.contains('visible')) {
+        // Refresh all data
+        document.dispatchEvent(new Event('account-changed'));
+        document.dispatchEvent(new CustomEvent('instrument-changed', { detail: { instrument: window.selectedInstrument } }));
+        setTimeout(function() { indicator.classList.remove('visible'); }, 800);
+      }
+      pulling = false;
+    }, { passive: true });
+  })();
+  </script>
+
+  <script>
+  /* ── Performance Stats Card ── */
+  (function() {
+    var perfEl = document.getElementById('performance-card');
+
+    function renderPerformance(data) {
+      if (!data || data.total_setups === 0) {
+        perfEl.innerHTML = '<div class="card" style="animation:slideUp 0.3s ease;animation-delay:450ms;animation-fill-mode:backwards">' +
+          '<div class="card-title">\\u25C8 SETUP PERFORMANCE</div>' +
+          '<div style="text-align:center;padding:20px;color:var(--muted);font-size:13px">No completed setups yet</div></div>';
+        return;
+      }
+
+      var d = data;
+      var streakStr = d.streak > 0 ? '+' + d.streak + 'W' : d.streak < 0 ? d.streak + 'L' : '0';
+      var streakColor = d.streak > 0 ? 'var(--green)' : d.streak < 0 ? 'var(--danger)' : 'var(--muted)';
+      var wrColor = d.setup_win_rate >= 50 ? 'var(--red)' : 'var(--muted)';
+      var confLabel = d.avg_confidence >= 75 ? 'Prestige' : d.avg_confidence >= 50 ? 'Armani' : 'YSL';
+
+      var html = '<div class="card" style="animation:slideUp 0.3s ease;animation-delay:450ms;animation-fill-mode:backwards">';
+      html += '<div class="card-title">\\u25C8 SETUP PERFORMANCE</div>';
+
+      // Row 1
+      html += '<div class="dash-stat-grid">';
+      html += '<div class="dash-stat-cell"><div class="dash-stat-label">Win Rate</div><div class="dash-stat-value" style="color:' + wrColor + '">' + d.setup_win_rate + '%</div></div>';
+      html += '<div class="dash-stat-cell"><div class="dash-stat-label">Setups</div><div class="dash-stat-value" style="color:var(--bright)">' + d.total_setups + '</div></div>';
+      html += '<div class="dash-stat-cell"><div class="dash-stat-label">Streak</div><div class="dash-stat-value" style="color:' + streakColor + '">' + streakStr + '</div></div>';
+      html += '</div>';
+
+      // Row 2
+      html += '<div class="dash-stat-grid">';
+      html += '<div class="dash-stat-cell"><div class="dash-stat-label">Avg R:R Target</div><div class="dash-stat-value" style="color:var(--bright)">' + (d.avg_rr_target || '\\u2014') + '</div></div>';
+      html += '<div class="dash-stat-cell"><div class="dash-stat-label">Avg R:R Achieved</div><div class="dash-stat-value" style="color:var(--bright)">' + (d.avg_rr_achieved || '\\u2014') + '</div></div>';
+      html += '<div class="dash-stat-cell"><div class="dash-stat-label">Best Instrument</div><div class="dash-stat-value" style="color:var(--red)">' + d.best_instrument.symbol + ' ' + d.best_instrument.win_rate + '%</div></div>';
+      html += '</div>';
+
+      // Row 3
+      html += '<div class="dash-stat-grid" style="grid-template-columns:1fr 1fr">';
+      html += '<div class="dash-stat-cell"><div class="dash-stat-label">Avg Confidence</div><div class="dash-stat-value" style="color:var(--bright)">' + d.avg_confidence + '%<span style="font-size:8px;color:var(--label);margin-left:4px">' + confLabel + '</span></div></div>';
+      html += '<div class="dash-stat-cell"><div class="dash-stat-label">Best Session</div><div class="dash-stat-value" style="color:var(--bright)">' + d.best_session.session + ' ' + d.best_session.win_rate + '%</div></div>';
+      html += '</div>';
+
+      html += '</div>';
+      perfEl.innerHTML = html;
+    }
+
+    function fetchPerformance() {
+      fetch('/api/stats/setups', { credentials: 'same-origin' })
+        .then(function(r) { return r.json(); })
+        .then(function(data) { renderPerformance(data); })
+        .catch(function() {});
+    }
+
+    fetchPerformance();
+    setInterval(fetchPerformance, 60000);
+  })();
+  </script>
+
+  <script>
+  /* ── Service Worker Registration ── */
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('/sw.js');
+  }
   </script>
 </body>
 </html>`;

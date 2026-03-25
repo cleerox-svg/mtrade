@@ -709,6 +709,121 @@ Respond in this exact JSON format:
     return json(results);
   }
 
+  // GET /api/stats/setups
+  if (path === '/api/stats/setups' && method === 'GET') {
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 86400000).toISOString().substring(0, 10);
+    const { results: setups } = await env.DB.prepare(
+      `SELECT s.*, i.symbol FROM setups s
+       JOIN instruments i ON s.instrument_id = i.id
+       WHERE s.status IN ('won', 'lost', 'expired', 'skipped') AND s.date >= ?
+       ORDER BY s.date DESC`
+    ).bind(thirtyDaysAgo).all<Record<string, unknown>>();
+
+    const won = setups.filter(s => s.status === 'won').length;
+    const lost = setups.filter(s => s.status === 'lost').length;
+    const expired = setups.filter(s => s.status === 'expired').length;
+    const skipped = setups.filter(s => s.status === 'skipped').length;
+    const totalSetups = setups.length;
+    const setupWinRate = (won + lost) > 0 ? Math.round((won / (won + lost)) * 100) : 0;
+
+    // Avg R:R target for setups that reached phase 4
+    const phase4Setups = setups.filter(s => (s.phase as number) >= 4 && s.risk_reward != null);
+    const avgRrTarget = phase4Setups.length > 0
+      ? Math.round((phase4Setups.reduce((sum, s) => sum + (s.risk_reward as number), 0) / phase4Setups.length) * 10) / 10
+      : 0;
+
+    // Avg R:R achieved for won setups from trade_log
+    let avgRrAchieved = 0;
+    const wonSetups = setups.filter(s => s.status === 'won');
+    if (wonSetups.length > 0) {
+      const wonIds = wonSetups.map(s => s.id);
+      let totalAchievedRr = 0;
+      let countAchieved = 0;
+      for (const sid of wonIds) {
+        const trade = await env.DB.prepare(
+          'SELECT entry_price, exit_price, direction FROM trade_log WHERE setup_id = ? LIMIT 1'
+        ).bind(sid).first<Record<string, unknown>>();
+        if (trade && trade.entry_price && trade.exit_price) {
+          const setup = wonSetups.find(s => s.id === sid);
+          if (setup && setup.stop_price) {
+            const risk = Math.abs((trade.entry_price as number) - (setup.stop_price as number));
+            const reward = Math.abs((trade.exit_price as number) - (trade.entry_price as number));
+            if (risk > 0) {
+              totalAchievedRr += reward / risk;
+              countAchieved++;
+            }
+          }
+        }
+      }
+      avgRrAchieved = countAchieved > 0 ? Math.round((totalAchievedRr / countAchieved) * 10) / 10 : 0;
+    }
+
+    // Best instrument
+    const esTrades = setups.filter(s => s.symbol === 'ES' && (s.status === 'won' || s.status === 'lost'));
+    const nqTrades = setups.filter(s => s.symbol === 'NQ' && (s.status === 'won' || s.status === 'lost'));
+    const esWinRate = esTrades.length > 0 ? Math.round((esTrades.filter(s => s.status === 'won').length / esTrades.length) * 100) : 0;
+    const nqWinRate = nqTrades.length > 0 ? Math.round((nqTrades.filter(s => s.status === 'won').length / nqTrades.length) * 100) : 0;
+    const bestInstrument = esWinRate > nqWinRate
+      ? { symbol: 'ES', win_rate: esWinRate }
+      : { symbol: 'NQ', win_rate: nqWinRate };
+
+    // Best session based on sweep times
+    const londonSetups = setups.filter(s => {
+      const ts = s.sweep_time || s.created_at;
+      if (!ts) return false;
+      const h = new Date(ts as string).getUTCHours();
+      return h >= 7 && h < 14; // London approx
+    });
+    const nySetups = setups.filter(s => {
+      const ts = s.sweep_time || s.created_at;
+      if (!ts) return false;
+      const h = new Date(ts as string).getUTCHours();
+      return h >= 14 && h < 21; // NY approx
+    });
+    const londonWins = londonSetups.filter(s => s.status === 'won').length;
+    const nyWins = nySetups.filter(s => s.status === 'won').length;
+    const londonWinPct = londonSetups.length > 0 ? Math.round((londonWins / londonSetups.length) * 100) : 0;
+    const nyWinPct = nySetups.length > 0 ? Math.round((nyWins / nySetups.length) * 100) : 0;
+    const bestSession = londonWinPct >= nyWinPct
+      ? { session: 'London', win_rate: londonWinPct }
+      : { session: 'NY', win_rate: nyWinPct };
+
+    // Avg confidence
+    const enteredSetups = setups.filter(s => s.confidence != null && (s.status === 'won' || s.status === 'lost'));
+    const avgConfidence = enteredSetups.length > 0
+      ? Math.round(enteredSetups.reduce((sum, s) => sum + (s.confidence as number), 0) / enteredSetups.length)
+      : 0;
+
+    // Current streak
+    const ordered = setups.filter(s => s.status === 'won' || s.status === 'lost').sort((a, b) => {
+      return (b.date as string).localeCompare(a.date as string);
+    });
+    let streak = 0;
+    if (ordered.length > 0) {
+      const firstStatus = ordered[0].status;
+      for (const s of ordered) {
+        if (s.status === firstStatus) streak++;
+        else break;
+      }
+      if (firstStatus === 'lost') streak = -streak;
+    }
+
+    return json({
+      total_setups: totalSetups,
+      won,
+      lost,
+      expired,
+      skipped,
+      setup_win_rate: setupWinRate,
+      avg_rr_target: avgRrTarget,
+      avg_rr_achieved: avgRrAchieved,
+      best_instrument: bestInstrument,
+      best_session: bestSession,
+      avg_confidence: avgConfidence,
+      streak,
+    });
+  }
+
   // GET /api/engine/status
   if (path === '/api/engine/status' && method === 'GET') {
     const todayET = new Date().toLocaleString('en-US', { timeZone: 'America/New_York' });
