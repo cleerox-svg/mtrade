@@ -947,6 +947,156 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
     }
     .demo-alert-link:hover { color: var(--muted); }
 
+    /* AI Analysis */
+    .ai-analysis-card { margin-bottom: 12px; }
+    .ai-analysis-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 12px;
+    }
+    .ai-analysis-title {
+      font-family: 'Outfit', sans-serif;
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 2.5px;
+      color: var(--red-soft);
+    }
+    .ai-analysis-tag {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 8px;
+      color: var(--label);
+      letter-spacing: 1px;
+    }
+    .ai-run-btn {
+      width: 100%;
+      padding: 12px;
+      border-radius: 10px;
+      border: 1px solid rgba(251,44,90,0.2);
+      background: linear-gradient(135deg, rgba(251,44,90,0.06), transparent);
+      color: var(--red);
+      font-family: 'Outfit', sans-serif;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+    }
+    .ai-run-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .ai-run-btn .ai-spinner {
+      width: 14px;
+      height: 14px;
+      border: 2px solid transparent;
+      border-top-color: var(--red);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      display: inline-block;
+    }
+    .ai-signal-row {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      margin-top: 14px;
+    }
+    .ai-signal-tag {
+      display: inline-block;
+      padding: 4px 10px;
+      border-radius: 6px;
+      font-family: 'Outfit', sans-serif;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 1px;
+    }
+    .ai-signal-tag.high { background: rgba(251,44,90,0.15); color: var(--red); }
+    .ai-signal-tag.mid { background: rgba(251,191,36,0.15); color: var(--amber); }
+    .ai-signal-tag.low { background: rgba(100,116,139,0.15); color: var(--label); }
+    .ai-fragrance {
+      font-size: 10px;
+      font-style: italic;
+      color: var(--label);
+      margin-top: 4px;
+    }
+    .ai-confidence-box { text-align: right; }
+    .ai-confidence-num {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 28px;
+      font-weight: 700;
+      line-height: 1;
+    }
+    .ai-confidence-label {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 8px;
+      color: var(--label);
+      letter-spacing: 1px;
+      margin-top: 2px;
+    }
+    .ai-summary {
+      font-size: 13px;
+      color: var(--bright);
+      line-height: 1.7;
+      margin: 14px 0;
+    }
+    .ai-levels-box {
+      background: #0a0a10;
+      border-radius: 10px;
+      padding: 12px;
+      border: 1px solid var(--border);
+      margin-bottom: 12px;
+    }
+    .ai-level-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 8px 0;
+    }
+    .ai-level-row + .ai-level-row { border-top: 1px solid var(--border); }
+    .ai-level-label {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px;
+      color: var(--label);
+      letter-spacing: 1px;
+    }
+    .ai-level-value {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      font-weight: 600;
+    }
+    .ai-warnings { margin-bottom: 12px; }
+    .ai-warning-item {
+      font-size: 12px;
+      color: var(--text);
+      line-height: 1.5;
+      padding: 2px 0;
+    }
+    .ai-warning-bullet { color: var(--red-soft); margin-right: 6px; }
+    .ai-redline-box {
+      background: rgba(251,44,90,0.04);
+      border: 1px solid rgba(251,44,90,0.08);
+      border-radius: 8px;
+      padding: 10px;
+    }
+    .ai-redline-label {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 9px;
+      color: var(--red-soft);
+      letter-spacing: 2px;
+      margin-bottom: 6px;
+    }
+    .ai-redline-text {
+      font-size: 12px;
+      color: var(--text);
+      line-height: 1.5;
+    }
+    .ai-contracts-text {
+      font-size: 11px;
+      color: var(--muted);
+      font-style: italic;
+      margin-top: 4px;
+    }
+
     @media (min-width: 768px) {
       .container { padding: 24px; }
       .card { padding: 20px; }
@@ -966,6 +1116,11 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
       .alert-signal-name { font-size: 28px; }
       .alert-levels-grid { gap: 16px; }
       .alert-btn-in, .alert-btn-skip { padding: 16px; font-size: 15px; }
+      .ai-signal-row { align-items: center; }
+      .ai-confidence-num { font-size: 32px; }
+      .ai-levels-box { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 0; }
+      .ai-level-row { flex-direction: column; text-align: center; padding: 8px 4px; }
+      .ai-level-row + .ai-level-row { border-top: none; border-left: 1px solid var(--border); }
     }
   </style>
 </head>
@@ -992,6 +1147,7 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
     </div>
 
     <div id="alert-overlay"></div>
+    <div id="ai-analysis"></div>
     <div id="instrument-selector"></div>
     <div id="apex-selector"></div>
     <div id="dashboard-panel"></div>
@@ -2172,6 +2328,97 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
         .then(function() { pollAlerts(); })
         .catch(function(err) { console.error('Failed to create demo alert', err); });
     };
+  })();
+  </script>
+
+  <script>
+  /* ── AI Analysis ── */
+  (function() {
+    var aiEl = document.getElementById('ai-analysis');
+    var currentAnalysis = null;
+    var hasRun = false;
+
+    function getActiveAlertId() {
+      var inBtn = document.querySelector('.alert-btn-in');
+      return inBtn ? inBtn.dataset.alertId : null;
+    }
+
+    function renderCard() {
+      var btnLabel = hasRun ? '\u21BB Re-analyze' : '\u25C7 Run Analysis';
+      var html = '<div class="card ai-analysis-card" style="animation:slideUp 0.3s ease">';
+      html += '<div class="ai-analysis-header">';
+      html += '<span class="ai-analysis-title">\u25C8 AI ANALYSIS</span>';
+      html += '<span class="ai-analysis-tag">HAIKU</span>';
+      html += '</div>';
+      html += '<button class="ai-run-btn" id="ai-run-btn">' + btnLabel + '</button>';
+
+      if (currentAnalysis) {
+        var a = currentAnalysis;
+        var confColor = a.confidence >= 70 ? 'var(--red)' : 'var(--amber)';
+        var sigClass = a.confidence >= 70 ? 'high' : a.confidence >= 50 ? 'mid' : 'low';
+
+        html += '<div class="ai-signal-row">';
+        html += '<div><span class="ai-signal-tag ' + sigClass + '">' + (a.signal || 'N/A') + '</span>';
+        html += '<div class="ai-fragrance">Projection: ' + (a.fragrance || '') + '</div></div>';
+        html += '<div class="ai-confidence-box">';
+        html += '<div class="ai-confidence-num" style="color:' + confColor + '">' + (a.confidence || 0) + '</div>';
+        html += '<div class="ai-confidence-label">CONFIDENCE</div>';
+        html += '</div></div>';
+
+        html += '<div class="ai-summary">' + (a.summary || '') + '</div>';
+
+        html += '<div class="ai-levels-box">';
+        html += '<div class="ai-level-row"><span class="ai-level-label">ENTRY</span><span class="ai-level-value" style="color:var(--red)">' + (a.entry_price != null ? a.entry_price.toFixed(2) : '--') + '</span></div>';
+        html += '<div class="ai-level-row"><span class="ai-level-label">TARGET</span><span class="ai-level-value" style="color:var(--green)">' + (a.target_price != null ? a.target_price.toFixed(2) : '--') + '</span></div>';
+        html += '<div class="ai-level-row"><span class="ai-level-label">STOP</span><span class="ai-level-value" style="color:var(--danger)">' + (a.stop_price != null ? a.stop_price.toFixed(2) : '--') + '</span></div>';
+        html += '<div class="ai-level-row"><span class="ai-level-label">R:R</span><span class="ai-level-value" style="color:var(--amber)">' + (a.risk_reward != null ? a.risk_reward.toFixed(1) + ' : 1' : '--') + '</span></div>';
+        html += '</div>';
+
+        if (a.warnings && a.warnings.length) {
+          html += '<div class="ai-warnings">';
+          a.warnings.forEach(function(w) {
+            html += '<div class="ai-warning-item"><span class="ai-warning-bullet">\u25B8</span>' + w + '</div>';
+          });
+          html += '</div>';
+        }
+
+        html += '<div class="ai-redline-box">';
+        html += '<div class="ai-redline-label">REDLINE CHECK</div>';
+        html += '<div class="ai-redline-text">' + (a.consistency_check || '') + '</div>';
+        html += '<div class="ai-contracts-text">' + (a.contracts_suggestion || '') + '</div>';
+        html += '</div>';
+      }
+
+      html += '</div>';
+      aiEl.innerHTML = html;
+
+      document.getElementById('ai-run-btn').onclick = runAnalysis;
+    }
+
+    function runAnalysis() {
+      var btn = document.getElementById('ai-run-btn');
+      btn.disabled = true;
+      btn.innerHTML = '<span class="ai-spinner"></span> Analyzing\u2026';
+
+      var alertId = getActiveAlertId();
+      var url = alertId ? '/api/analyze/alert/' + alertId : '/api/analyze/demo';
+
+      fetch(url, { method: 'POST', credentials: 'same-origin' })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+          var analysis = data.analysis || data;
+          currentAnalysis = analysis;
+          hasRun = true;
+          renderCard();
+        })
+        .catch(function(err) {
+          console.error('AI analysis failed', err);
+          btn.disabled = false;
+          btn.innerHTML = hasRun ? '\u21BB Re-analyze' : '\u25C7 Run Analysis';
+        });
+    }
+
+    renderCard();
   })();
   </script>
 </body>
