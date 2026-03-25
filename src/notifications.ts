@@ -1,12 +1,50 @@
 import { Env } from './types';
 
+// ── User Settings ──
+
+export interface UserSettings {
+  user_id: string;
+  discord_webhook_url: string | null;
+  discord_enabled: number;
+  notify_sweep: number;
+  notify_ready: number;
+  notify_execute: number;
+  notify_drawdown: number;
+  notify_consistency: number;
+  notify_setup_result: number;
+}
+
+const DEFAULT_SETTINGS: Omit<UserSettings, 'user_id'> = {
+  discord_webhook_url: null,
+  discord_enabled: 1,
+  notify_sweep: 1,
+  notify_ready: 1,
+  notify_execute: 1,
+  notify_drawdown: 1,
+  notify_consistency: 1,
+  notify_setup_result: 1,
+};
+
+export async function getUserSettings(env: Env, userId: string): Promise<UserSettings> {
+  const row = await env.DB.prepare(
+    'SELECT * FROM user_settings WHERE user_id = ?'
+  ).bind(userId).first<UserSettings>();
+  return row ?? { user_id: userId, ...DEFAULT_SETTINGS };
+}
+
+/** Get all users with Discord enabled and a webhook URL configured */
+export async function getEnabledWebhookUsers(env: Env): Promise<UserSettings[]> {
+  const { results } = await env.DB.prepare(
+    "SELECT * FROM user_settings WHERE discord_enabled = 1 AND discord_webhook_url IS NOT NULL AND discord_webhook_url != ''"
+  ).all<UserSettings>();
+  return results;
+}
+
 // ── Discord Webhook Helpers ──
 
-async function postDiscord(env: Env, payload: Record<string, unknown>, retry = true): Promise<boolean> {
-  if (!env.DISCORD_WEBHOOK_URL) return false;
-
+async function postDiscord(webhookUrl: string, payload: Record<string, unknown>, retry = true): Promise<boolean> {
   try {
-    const resp = await fetch(env.DISCORD_WEBHOOK_URL, {
+    const resp = await fetch(webhookUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
@@ -15,7 +53,7 @@ async function postDiscord(env: Env, payload: Record<string, unknown>, retry = t
     if (!resp.ok) {
       console.error(`Discord webhook failed: ${resp.status} ${resp.statusText}`);
       if (retry) {
-        return postDiscord(env, payload, false);
+        return postDiscord(webhookUrl, payload, false);
       }
       return false;
     }
@@ -23,7 +61,7 @@ async function postDiscord(env: Env, payload: Record<string, unknown>, retry = t
   } catch (err) {
     console.error('Discord webhook error:', err);
     if (retry) {
-      return postDiscord(env, payload, false);
+      return postDiscord(webhookUrl, payload, false);
     }
     return false;
   }
@@ -62,27 +100,21 @@ interface SessionLevels {
 }
 
 function fmt(n: number | null | undefined): string {
-  if (n == null) return '—';
+  if (n == null) return '\u2014';
   return n.toFixed(2);
 }
 
-export async function sendDiscordAlert(
-  env: Env,
+function buildAlertEmbed(
   alert: AlertData,
   setup: SetupData,
   symbol: string,
   sessionLevels: SessionLevels | null
-): Promise<boolean> {
-  if (!env.DISCORD_WEBHOOK_URL) return false;
-
+): Record<string, unknown> | null {
   const direction = setup.sweep_direction === 'low' ? 'LONG' : 'SHORT';
   const sweepSide = setup.sweep_direction === 'low' ? 'Low' : 'High';
 
-  let embed: Record<string, unknown>;
-
   if (alert.alert_type === 'approaching') {
-    // Phase 1 — Sweep detected
-    embed = {
+    return {
       title: '\ud83d\udd38 TOP NOTE \u2014 Sweep Detected',
       description: `${symbol} broke London ${sweepSide} at ${fmt(alert.sweep_level)}`,
       color: 16763904,
@@ -95,10 +127,10 @@ export async function sendDiscordAlert(
       footer: FOOTER,
       timestamp: new Date().toISOString(),
     };
-  } else if (alert.alert_type === 'ready') {
-    // Phase 3 — Continuation confirmed
-    const fvgTf = alert.fvg_high && alert.fvg_low ? '' : '';
-    embed = {
+  }
+
+  if (alert.alert_type === 'ready') {
+    return {
       title: '\ud83d\udd34 BASE NOTE \u2014 Setup Confirmed',
       description: `${symbol} \u2014 ${direction} setup forming`,
       color: 16525628,
@@ -114,8 +146,9 @@ export async function sendDiscordAlert(
       footer: FOOTER,
       timestamp: new Date().toISOString(),
     };
-  } else if (alert.alert_type === 'execute') {
-    // Phase 4 — ACCORD
+  }
+
+  if (alert.alert_type === 'execute') {
     const fields: Record<string, unknown>[] = [
       { name: 'Entry', value: `**${fmt(alert.entry_price)}**`, inline: true },
       { name: 'Target', value: `**${fmt(alert.target_price)}**`, inline: true },
@@ -124,7 +157,6 @@ export async function sendDiscordAlert(
       { name: 'Sweep', value: `London ${sweepSide} at ${fmt(alert.sweep_level)}`, inline: true },
     ];
 
-    // Parse Haiku analysis for confidence/fragrance
     let confidence = '';
     let fragrance = '';
     let aiSummary = '';
@@ -153,7 +185,7 @@ export async function sendDiscordAlert(
       inline: false,
     });
 
-    embed = {
+    return {
       title: '\ud83d\udea8 ACCORD \u2014 ALL NOTES ALIGNED',
       description: `**${symbol} \u2014 ${direction} NOW**\nEntry: ${fmt(alert.entry_price)} \u2192 Target: ${fmt(alert.target_price)}\nStop: ${fmt(alert.stop_price)} \u00b7 R:R ${fmt(alert.risk_reward)}:1`,
       color: 16396084,
@@ -161,11 +193,44 @@ export async function sendDiscordAlert(
       footer: FOOTER,
       timestamp: new Date().toISOString(),
     };
-  } else {
-    return false;
   }
 
-  return postDiscord(env, { embeds: [embed] });
+  return null;
+}
+
+/** Map alert_type to the notify_* toggle key */
+function getNotifyKey(alertType: string): keyof UserSettings | null {
+  switch (alertType) {
+    case 'approaching': return 'notify_sweep';
+    case 'ready': return 'notify_ready';
+    case 'execute': return 'notify_execute';
+    default: return null;
+  }
+}
+
+/** Send a setup alert to all enabled users */
+export async function sendDiscordAlertToAll(
+  env: Env,
+  alert: AlertData,
+  setup: SetupData,
+  symbol: string,
+  sessionLevels: SessionLevels | null
+): Promise<boolean> {
+  const embed = buildAlertEmbed(alert, setup, symbol, sessionLevels);
+  if (!embed) return false;
+
+  const notifyKey = getNotifyKey(alert.alert_type);
+  const users = await getEnabledWebhookUsers(env);
+  let anySent = false;
+
+  for (const u of users) {
+    if (notifyKey && !u[notifyKey]) continue;
+    if (!u.discord_webhook_url) continue;
+    const sent = await postDiscord(u.discord_webhook_url, { embeds: [embed] });
+    if (sent) anySent = true;
+  }
+
+  return anySent;
 }
 
 // ── Drawdown Warning ──
@@ -182,12 +247,10 @@ interface DrawdownMetrics {
 }
 
 export async function sendDrawdownWarning(
-  env: Env,
+  webhookUrl: string,
   account: AccountInfo,
   metrics: DrawdownMetrics
 ): Promise<boolean> {
-  if (!env.DISCORD_WEBHOOK_URL) return false;
-
   const isCritical = metrics.drawdown_pct >= 85;
   const remaining = metrics.drawdown_limit - metrics.drawdown_used;
 
@@ -205,7 +268,7 @@ export async function sendDrawdownWarning(
     footer: FOOTER,
   };
 
-  return postDiscord(env, { embeds: [embed] });
+  return postDiscord(webhookUrl, { embeds: [embed] });
 }
 
 // ── Consistency Warning ──
@@ -218,12 +281,10 @@ interface ConsistencyMetrics {
 }
 
 export async function sendConsistencyWarning(
-  env: Env,
+  webhookUrl: string,
   account: AccountInfo,
   metrics: ConsistencyMetrics
 ): Promise<boolean> {
-  if (!env.DISCORD_WEBHOOK_URL) return false;
-
   const headroom = metrics.consistency_limit - (100 - metrics.consistency_pct);
 
   const embed = {
@@ -238,7 +299,7 @@ export async function sendConsistencyWarning(
     footer: FOOTER,
   };
 
-  return postDiscord(env, { embeds: [embed] });
+  return postDiscord(webhookUrl, { embeds: [embed] });
 }
 
 // ── Setup Result ──
@@ -254,12 +315,10 @@ interface SetupResult {
   status: string; // 'won' | 'lost' | 'expired'
 }
 
-export async function sendSetupResult(
+export async function sendSetupResultToAll(
   env: Env,
   result: SetupResult
 ): Promise<boolean> {
-  if (!env.DISCORD_WEBHOOK_URL) return false;
-
   const isWon = result.status === 'won';
   const isLost = result.status === 'lost';
   const emoji = isWon ? '\u2705' : isLost ? '\u274c' : '\u23f0';
@@ -277,14 +336,19 @@ export async function sendSetupResult(
     footer: FOOTER,
   };
 
-  return postDiscord(env, { embeds: [embed] });
+  const users = await getEnabledWebhookUsers(env);
+  let anySent = false;
+  for (const u of users) {
+    if (!u.notify_setup_result || !u.discord_webhook_url) continue;
+    const sent = await postDiscord(u.discord_webhook_url, { embeds: [embed] });
+    if (sent) anySent = true;
+  }
+  return anySent;
 }
 
 // ── Test Notification ──
 
-export async function sendTestNotification(env: Env): Promise<boolean> {
-  if (!env.DISCORD_WEBHOOK_URL) return false;
-
+export async function sendTestNotification(webhookUrl: string): Promise<boolean> {
   const embed = {
     title: '\ud83d\udd14 Mtrade notifications are working!',
     description: `Connected at ${new Date().toISOString()}`,
@@ -293,7 +357,7 @@ export async function sendTestNotification(env: Env): Promise<boolean> {
     timestamp: new Date().toISOString(),
   };
 
-  return postDiscord(env, { embeds: [embed] });
+  return postDiscord(webhookUrl, { embeds: [embed] });
 }
 
 // ── Notification Dedup Helper ──

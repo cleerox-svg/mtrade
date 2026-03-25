@@ -1061,6 +1061,125 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
     }
     .demo-alert-link:hover { color: var(--muted); }
 
+    /* Notification Settings */
+    .notif-webhook-row {
+      display: flex;
+      gap: 8px;
+      align-items: flex-start;
+      margin-bottom: 4px;
+    }
+    .notif-webhook-row .modal-input {
+      flex: 1;
+      margin-bottom: 0;
+    }
+    .notif-btn {
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--red);
+      font-family: 'Outfit', sans-serif;
+      font-size: 11px;
+      font-weight: 700;
+      border-radius: 8px;
+      padding: 12px 14px;
+      cursor: pointer;
+      white-space: nowrap;
+      min-height: 44px;
+    }
+    .notif-btn:hover { border-color: var(--red); }
+    .notif-help {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 9px;
+      color: var(--muted);
+      margin-bottom: 16px;
+      line-height: 1.5;
+    }
+    .notif-test-status {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 9px;
+      margin-left: 6px;
+      transition: opacity 0.3s;
+    }
+    .notif-toggle-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 0;
+      border-bottom: 1px solid var(--border);
+    }
+    .notif-toggle-row:last-child { border-bottom: none; }
+    .notif-toggle-label {
+      font-family: 'Outfit', sans-serif;
+      font-size: 12px;
+      color: var(--text);
+    }
+    .notif-toggle-sub {
+      font-size: 10px;
+      color: var(--muted);
+      margin-top: 1px;
+    }
+    .toggle-switch {
+      position: relative;
+      width: 44px;
+      height: 24px;
+      flex-shrink: 0;
+      cursor: pointer;
+    }
+    .toggle-switch input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+      position: absolute;
+    }
+    .toggle-track {
+      position: absolute;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(255,255,255,0.08);
+      border-radius: 12px;
+      transition: background 0.25s, box-shadow 0.25s;
+    }
+    .toggle-track::after {
+      content: '';
+      position: absolute;
+      top: 2px;
+      left: 2px;
+      width: 20px;
+      height: 20px;
+      background: #fff;
+      border-radius: 50%;
+      transition: transform 0.25s;
+    }
+    .toggle-switch input:checked + .toggle-track {
+      background: var(--red);
+      box-shadow: 0 0 8px rgba(251,44,90,0.4);
+    }
+    .toggle-switch input:checked + .toggle-track::after {
+      transform: translateX(20px);
+    }
+    .notif-toggles-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+    }
+    @media (min-width: 768px) {
+      .notif-toggles-grid {
+        grid-template-columns: 1fr 1fr;
+        column-gap: 24px;
+      }
+    }
+    .notif-master-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 0;
+      margin-bottom: 4px;
+      border-bottom: 1px solid var(--border);
+    }
+    .notif-master-label {
+      font-family: 'Outfit', sans-serif;
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--bright);
+    }
+
     /* AI Analysis */
     .ai-analysis-card { margin-bottom: 12px; }
     .ai-analysis-header {
@@ -1362,13 +1481,12 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
       </div>
     </div>
     <div id="pnl-log"></div>
+    <div id="notifications-settings"></div>
     <div id="trade-modal-root"></div>
 
     <button class="fab-add" id="fab-add" aria-label="Log trade">+</button>
 
     <button class="demo-alert-link" id="demo-alert-btn">Create Demo Alert</button>
-    <button class="demo-alert-link" id="test-discord-btn" style="margin-left:12px">Test Discord</button>
-    <span id="discord-status" style="font-family:'JetBrains Mono',monospace;font-size:9px;margin-left:6px;opacity:0;transition:opacity 0.3s"></span>
 
     <div id="engine-status" style="text-align:center;padding:8px 0;font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--muted);letter-spacing:0.5px"></div>
 
@@ -2848,30 +2966,6 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
         .catch(function(err) { console.error('Failed to create demo alert', err); });
     };
 
-    // Test Discord button
-    document.getElementById('test-discord-btn').onclick = function() {
-      var statusEl = document.getElementById('discord-status');
-      statusEl.style.opacity = '1';
-      statusEl.textContent = '...';
-      statusEl.style.color = 'var(--muted)';
-      fetch('/api/notifications/test', { method: 'POST', credentials: 'same-origin' })
-        .then(function(r) { return r.json(); })
-        .then(function(data) {
-          if (data.success) {
-            statusEl.textContent = '\u2713 Sent';
-            statusEl.style.color = '#34d058';
-          } else {
-            statusEl.textContent = '\u2717 Failed';
-            statusEl.style.color = 'var(--red)';
-          }
-          setTimeout(function() { statusEl.style.opacity = '0'; }, 3000);
-        })
-        .catch(function() {
-          statusEl.textContent = '\u2717 Failed';
-          statusEl.style.color = 'var(--red)';
-          setTimeout(function() { statusEl.style.opacity = '0'; }, 3000);
-        });
-    };
   })();
   </script>
 
@@ -2991,6 +3085,144 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
     }
     fetchStatus();
     setInterval(fetchStatus, 30000);
+  })();
+  </script>
+
+  <script>
+  /* ── Notification Settings ── */
+  (function() {
+    var container = document.getElementById('notifications-settings');
+    var settings = null;
+
+    function toggleHtml(id, checked) {
+      return '<label class="toggle-switch"><input type="checkbox" id="' + id + '"' + (checked ? ' checked' : '') + '><span class="toggle-track"></span></label>';
+    }
+
+    function render() {
+      if (!settings) {
+        container.innerHTML = '';
+        return;
+      }
+      var s = settings;
+      var webhookVal = s.discord_webhook_url || '';
+      var html = '<div class="card" style="animation:slideUp 0.3s ease">';
+      html += '<div class="card-title">\\u25C8 NOTIFICATIONS</div>';
+
+      html += '<div style="font-family:\\'Outfit\\',sans-serif;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin-bottom:6px">DISCORD WEBHOOK</div>';
+      html += '<div class="notif-webhook-row">';
+      html += '<input class="modal-input" id="notif-webhook-input" type="text" value="' + webhookVal.replace(/"/g, '&quot;') + '" placeholder="https://discord.com/api/webhooks/...">';
+      html += '<button class="notif-btn" id="notif-save-btn">Save</button>';
+      html += '<button class="notif-btn" id="notif-test-btn">Test</button>';
+      html += '<span class="notif-test-status" id="notif-test-status" style="opacity:0"></span>';
+      html += '</div>';
+      html += '<div class="notif-help">Channel Settings \\u2192 Integrations \\u2192 Webhooks \\u2192 New Webhook \\u2192 Copy URL</div>';
+
+      html += '<div class="notif-master-row">';
+      html += '<span class="notif-master-label">Notifications enabled</span>';
+      html += toggleHtml('notif-master', s.discord_enabled);
+      html += '</div>';
+
+      var toggles = [
+        { id: 'notify_sweep', label: 'Sweep detected', sub: 'Top Note' },
+        { id: 'notify_ready', label: 'Setup confirmed', sub: 'Base Note' },
+        { id: 'notify_execute', label: 'Entry signal', sub: 'Accord' },
+        { id: 'notify_drawdown', label: 'Drawdown warning', sub: 'Redline' },
+        { id: 'notify_consistency', label: 'Consistency warning', sub: 'Rev Limit' },
+        { id: 'notify_setup_result', label: 'Setup results', sub: 'Win/Loss' },
+      ];
+
+      html += '<div class="notif-toggles-grid">';
+      for (var i = 0; i < toggles.length; i++) {
+        var t = toggles[i];
+        var isOn = s[t.id];
+        html += '<div class="notif-toggle-row">';
+        html += '<div><div class="notif-toggle-label">' + t.label + '</div><div class="notif-toggle-sub">' + t.sub + '</div></div>';
+        html += toggleHtml('notif-' + t.id, isOn);
+        html += '</div>';
+      }
+      html += '</div>';
+      html += '</div>';
+
+      container.innerHTML = html;
+      bindEvents();
+    }
+
+    function saveField(data) {
+      fetch('/api/settings', {
+        method: 'PUT',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      }).then(function(r) { return r.json(); })
+        .then(function(updated) { settings = updated; })
+        .catch(function(err) { console.error('Settings save error:', err); });
+    }
+
+    function bindEvents() {
+      var saveBtn = document.getElementById('notif-save-btn');
+      if (saveBtn) saveBtn.onclick = function() {
+        var val = document.getElementById('notif-webhook-input').value.trim();
+        saveField({ discord_webhook_url: val });
+        settings.discord_webhook_url = val;
+        var statusEl = document.getElementById('notif-test-status');
+        statusEl.style.opacity = '1';
+        statusEl.textContent = '\\u2713 Saved';
+        statusEl.style.color = '#34d058';
+        setTimeout(function() { statusEl.style.opacity = '0'; }, 2000);
+      };
+
+      var testBtn = document.getElementById('notif-test-btn');
+      if (testBtn) testBtn.onclick = function() {
+        var statusEl = document.getElementById('notif-test-status');
+        statusEl.style.opacity = '1';
+        statusEl.textContent = '...';
+        statusEl.style.color = 'var(--muted)';
+        fetch('/api/settings/test-discord', { method: 'POST', credentials: 'same-origin' })
+          .then(function(r) { return r.json(); })
+          .then(function(data) {
+            if (data.success) {
+              statusEl.textContent = '\\u2713 Sent';
+              statusEl.style.color = '#34d058';
+            } else {
+              statusEl.textContent = '\\u2717 ' + (data.error || 'Failed');
+              statusEl.style.color = 'var(--red)';
+            }
+            setTimeout(function() { statusEl.style.opacity = '0'; }, 3000);
+          })
+          .catch(function() {
+            statusEl.textContent = '\\u2717 Failed';
+            statusEl.style.color = 'var(--red)';
+            setTimeout(function() { statusEl.style.opacity = '0'; }, 3000);
+          });
+      };
+
+      var master = document.getElementById('notif-master');
+      if (master) master.onchange = function() {
+        settings.discord_enabled = this.checked ? 1 : 0;
+        saveField({ discord_enabled: settings.discord_enabled });
+      };
+
+      var toggleKeys = ['notify_sweep', 'notify_ready', 'notify_execute', 'notify_drawdown', 'notify_consistency', 'notify_setup_result'];
+      for (var i = 0; i < toggleKeys.length; i++) {
+        (function(key) {
+          var el = document.getElementById('notif-' + key);
+          if (el) el.onchange = function() {
+            settings[key] = this.checked ? 1 : 0;
+            var update = {};
+            update[key] = settings[key];
+            saveField(update);
+          };
+        })(toggleKeys[i]);
+      }
+    }
+
+    fetch('/api/settings', { credentials: 'same-origin' })
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        settings = data;
+        render();
+      })
+      .catch(function(err) { console.error('Failed to load notification settings:', err); });
   })();
   </script>
 </body>

@@ -1,5 +1,5 @@
 import { Env } from './types';
-import { sendDiscordAlert, sendSetupResult } from './notifications';
+import { sendDiscordAlertToAll, sendSetupResultToAll } from './notifications';
 
 // ── Timezone Helpers ──
 
@@ -305,7 +305,7 @@ async function sendAlertDiscord(
   sessionLevels: { london_high: number | null; london_low: number | null } | null
 ): Promise<void> {
   try {
-    const sent = await sendDiscordAlert(env, { id: alertId, ...alert }, setup, symbol, sessionLevels);
+    const sent = await sendDiscordAlertToAll(env, { id: alertId, ...alert }, setup, symbol, sessionLevels);
     if (sent) {
       await env.DB.prepare('UPDATE setup_alerts SET discord_sent = 1 WHERE id = ?').bind(alertId).run();
     }
@@ -389,7 +389,7 @@ export async function runSetupStateMachine(env: Env): Promise<void> {
             ).bind(setup.id).run();
             console.log(`Setup expired: ${inst.symbol} phase ${setup.phase} after 3PM ET`);
             try {
-              await sendSetupResult(env, {
+              await sendSetupResultToAll(env, {
                 symbol: inst.symbol,
                 direction: setup.sweep_direction === 'low' ? 'Long' : 'Short',
                 entry_price: setup.entry_price, exit_price: null,
@@ -409,7 +409,7 @@ export async function runSetupStateMachine(env: Env): Promise<void> {
               ).bind(setup.id).run();
               console.log(`Setup expired: ${inst.symbol} phase 2 stale for ${hoursElapsed.toFixed(1)}h`);
               try {
-                await sendSetupResult(env, {
+                await sendSetupResultToAll(env, {
                   symbol: inst.symbol,
                   direction: setup.sweep_direction === 'low' ? 'Long' : 'Short',
                   entry_price: setup.entry_price, exit_price: null,
