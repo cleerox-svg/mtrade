@@ -1142,6 +1142,333 @@ Respond in this exact JSON format:
     return json(results);
   }
 
+  // POST /api/kb/seed
+  if (path === '/api/kb/seed' && method === 'POST') {
+    const articles = [
+      {
+        category: 'ICT Concepts', sort_order: 1, slug: 'fair-value-gap',
+        title: 'Fair Value Gap (FVG)',
+        content: `## What Is a Fair Value Gap?
+
+A **Fair Value Gap** (FVG) is a three-candle price pattern where the middle candle moves so aggressively that the wicks of candle 1 and candle 3 fail to overlap. The gap zone — the space between candle 1's wick and candle 3's wick — represents an imbalance where one side of the market dominated.
+
+## Bullish vs Bearish FVG
+
+- **Bullish FVG** — forms during a strong up-move. The gap sits below the middle candle. Price often retraces down into this zone before continuing higher.
+- **Bearish FVG** — forms during a strong down-move. The gap sits above the middle candle. Price often retraces up into this zone before continuing lower.
+
+## How Mtrade Uses FVGs
+
+Mtrade scans the **1H and 4H timeframes** for fair value gaps that align with the current phase of Matthew's strategy. Valid FVGs are drawn as **red zones** on the strategy chart, marking areas where a retrace entry is expected during Phase 3.
+
+> **Tip:** Wider gaps tend to be stronger — they indicate more aggressive institutional activity and are more likely to act as reliable support or resistance on a retrace.`
+      },
+      {
+        category: 'ICT Concepts', sort_order: 2, slug: 'inverse-fvg',
+        title: 'Inverse Fair Value Gap (IFVG)',
+        content: `## What Is an Inverse Fair Value Gap?
+
+An **Inverse Fair Value Gap** (IFVG) is a previously valid FVG that has been violated — price traded through it, invalidating the original imbalance. When this happens, the zone flips its directional bias and becomes a continuation signal in the opposite direction.
+
+## How the Flip Works
+
+- A **bearish FVG** that gets violated (price closes above it) becomes a **bullish IFVG** — the zone now acts as support on a pullback.
+- A **bullish FVG** that gets violated (price closes below it) becomes a **bearish IFVG** — the zone now acts as resistance on a rally.
+
+## Role in Matthew's Strategy
+
+IFVGs are a key signal during **Phase 4 (Continuation)**. After the initial move off the FVG retrace, price may pull back into an IFVG zone and bounce, confirming the trend is still alive. Mtrade draws IFVGs as **amber zones** on the strategy chart to distinguish them from active FVGs.
+
+> **Tip:** IFVGs that form immediately after a liquidity sweep tend to be the most reliable — the sweep clears out weak hands and the IFVG confirms the new direction.`
+      },
+      {
+        category: 'ICT Concepts', sort_order: 3, slug: 'london-sweep',
+        title: 'London Session Liquidity Sweep',
+        content: `## What Is a London Sweep?
+
+The **London session** (2:00–5:00 AM ET) establishes the early trading range. A **liquidity sweep** occurs when price briefly pushes beyond the London high or low, triggering stop-loss orders clustered at those levels, before reversing. This is institutional activity — large players grabbing liquidity to fill their positions.
+
+## Directional Signals
+
+- **Low sweep** — price dips below the London low, sweeps buy-stops, then reverses upward. This is a **long setup** targeting the London high or higher.
+- **High sweep** — price pushes above the London high, sweeps sell-stops, then reverses downward. This is a **short setup** targeting the London low or lower.
+
+## How Mtrade Detects Sweeps
+
+When Mtrade identifies a London session sweep, it fires a **TOP NOTE** signal — the earliest alert in the strategy progression. This marks Phase 1 of Matthew's playbook and puts the system on watch for a Break of Structure to follow.
+
+> **Tip:** Sweeps that occur near the New York open (9:30 AM ET) carry extra weight — the additional volume from NY participants often accelerates the reversal move.`
+      },
+      {
+        category: 'ICT Concepts', sort_order: 4, slug: 'power-of-3',
+        title: 'Power of 3 (PO3)',
+        content: `## What Is Power of 3?
+
+**Power of 3** (PO3) is an ICT concept that describes how institutional price delivery unfolds in three distinct phases within a trading session: **Accumulation**, **Manipulation**, and **Distribution**.
+
+## The Three Phases
+
+- **Accumulation** — occurs during the Asia and early London sessions. Price consolidates in a tight range as institutions quietly build positions. This maps to **Phase 0** in Matthew's strategy.
+- **Manipulation** — the fake move. Price sweeps beyond the range to grab liquidity and trap retail traders on the wrong side. This is the **liquidity sweep** — **Phase 1** in the playbook.
+- **Distribution** — the real move. After the sweep, price reverses aggressively in the intended direction, delivering the actual institutional order flow. This maps to **Phases 2–5** (BOS through Entry).
+
+## Why PO3 Matters
+
+Understanding PO3 prevents you from chasing the manipulation move. When you see a tight Asia/London range get swept, you know the real move is about to begin — not end.
+
+> **Tip:** A tighter London range often predicts a bigger manipulation move — institutions need to sweep further to generate enough liquidity when the range is compressed.`
+      },
+      {
+        category: 'ICT Concepts', sort_order: 5, slug: 'market-structure',
+        title: 'Market Structure Shift (MSS)',
+        content: `## What Is a Market Structure Shift?
+
+A **Market Structure Shift** (MSS) is the first confirmed break in the prevailing trend — the moment higher highs and higher lows shift to lower highs and lower lows (or vice versa). It signals that the balance of power between buyers and sellers has changed.
+
+## How to Identify an MSS
+
+- **Bullish MSS** — in a downtrend (series of lower highs), price breaks above the most recent lower high. This confirms buyers have taken control.
+- **Bearish MSS** — in an uptrend (series of higher lows), price breaks below the most recent higher low. This confirms sellers have taken control.
+
+## MSS in Matthew's Strategy
+
+An MSS is the structural confirmation that follows a liquidity sweep. After the sweep (Phase 1), the Break of Structure in Phase 2 is essentially an MSS — it validates that the sweep was genuine and the reversal is underway. Without an MSS, the sweep may just be a deeper pullback within the existing trend.
+
+> **Tip:** An MSS without a preceding liquidity sweep is usually just a pullback — not a true reversal. Always look for the sweep first to confirm institutional intent behind the shift.`
+      },
+      {
+        category: "Matthew's Strategy", sort_order: 6, slug: 'the-playbook',
+        title: "Matthew's ICT Playbook",
+        content: `## The Six Phases
+
+Matthew's strategy follows a strict six-phase progression. Every valid trade must complete all phases in order.
+
+## Phase 0 — London Range (TOP NOTE)
+
+Mtrade identifies the London session high and low between 2:00–5:00 AM ET. A **TOP NOTE** fires to confirm the range is locked in and the system is watching for a sweep.
+
+## Phase 1 — Liquidity Sweep (TOP NOTE)
+
+Price sweeps beyond the London high or low, grabbing stop-loss liquidity. A second **TOP NOTE** confirms the sweep direction — this sets the trade bias (long after low sweep, short after high sweep).
+
+## Phase 2 — Break of Structure (HEART NOTE)
+
+Price breaks a key structural level in the sweep direction, confirming the move is real. A **HEART NOTE** fires — the setup is now developing.
+
+## Phase 3 — FVG Retrace (HEART NOTE)
+
+Price retraces into a Fair Value Gap on the 1H or 4H chart. A second **HEART NOTE** confirms the retrace zone is valid for entry.
+
+## Phase 4 — Continuation (BASE NOTE)
+
+Price bounces off the FVG and resumes the trend direction. A **BASE NOTE** confirms the setup is mature and holding.
+
+## Phase 5 — Entry (ACCORD)
+
+All phases align. An **ACCORD** signal fires — this is the entry trigger. Enter in the sweep direction, target the opposite London level, and place your stop beyond the sweep wick.
+
+> **Tip:** Skip the trade if Phase 1 sweep is shallow (less than 5 ticks beyond the range) — shallow sweeps often lack the institutional commitment needed for follow-through.`
+      },
+      {
+        category: 'Mtrade Platform', sort_order: 7, slug: 'signal-vocabulary',
+        title: 'Signal Names — The Cologne Code',
+        content: `## Why Cologne Names?
+
+Mtrade uses a fragrance-inspired naming system — the **Cologne Code** — to communicate signal strength and progression. The AI maps each phase's confidence level to a cologne that reflects its character.
+
+## TOP NOTE — YSL Y (First Detection)
+
+The **TOP NOTE** is the opening signal. Like a fragrance's top note — the first thing you notice — it marks the earliest phase of the setup. Fires during Phase 0 (range locked) and Phase 1 (sweep detected). Named after **YSL Y** for its sharp, immediate presence.
+
+## HEART NOTE — Armani Stronger With You Intensely (Developing)
+
+The **HEART NOTE** signals the setup is developing substance. Like a fragrance's heart — the core character that emerges after the opening fades — it fires during Phase 2 (BOS confirmed) and Phase 3 (FVG retrace). Named after **Armani SWYI** for its deep, evolving complexity.
+
+## BASE NOTE — Prestige Silver (Confirmed)
+
+The **BASE NOTE** signals the setup is confirmed and holding. Like a fragrance's base — the lasting foundation — it fires during Phase 4 (continuation). Named after **Prestige Silver** for its solid, enduring quality.
+
+## ACCORD — All Aligned
+
+The **ACCORD** is the final signal — all phases are complete and aligned. In perfumery, an accord is the harmonious blend of all notes. This is the entry trigger.
+
+> **Tip:** Pay attention to how quickly signals progress from TOP NOTE to ACCORD — faster progressions often indicate stronger institutional conviction behind the move.`
+      },
+      {
+        category: 'Mtrade Platform', sort_order: 8, slug: 'risk-vocabulary',
+        title: 'Risk Terms — The FRS Code',
+        content: `## The FRS Code
+
+Mtrade uses the **FRS (Financial Risk System) Code** — an automotive-inspired vocabulary to describe risk metrics on your dashboard. Each term maps to a specific risk concept.
+
+## REDLINE — Drawdown
+
+**REDLINE** represents your current drawdown level — how close your account is to the maximum loss limit. Like a tachometer's redline, crossing it means the engine (your account) is done. Displayed as a percentage of your maximum allowed drawdown.
+
+## REV LIMIT — Consistency Ceiling
+
+**REV LIMIT** is your consistency rule ceiling — the maximum profit any single day can represent as a percentage of total profits. Exceeding it triggers a consistency violation. Only applies to Standard and Zero accounts.
+
+## GRIP — Safety Net
+
+**GRIP** is your safety net buffer — the distance between your current balance and the drawdown limit. More grip means more room to operate. When grip gets low, Mtrade warns you to reduce position size.
+
+## BOOST — Profit Target
+
+**BOOST** is your profit target for the current evaluation or payout cycle. Reaching boost means you have hit the required profit threshold.
+
+## TACH — Dashboard Gauges
+
+**TACH** refers to the visual gauges on the dashboard that display all risk metrics at a glance — drawdown, consistency, daily loss, and profit progress.
+
+> **Tip:** Keep your GRIP above 50% of the REDLINE at all times — this gives you enough buffer to survive a normal losing streak without triggering the maximum loss limit.`
+      },
+      {
+        category: 'Alpha Futures Rules', sort_order: 9, slug: 'alpha-consistency',
+        title: 'Alpha Futures Consistency Rule',
+        content: `## What Is the Consistency Rule?
+
+The **consistency rule** ensures that no single trading day accounts for too large a share of your total profits. It prevents traders from passing evaluations on one lucky trade.
+
+## Which Accounts Have It?
+
+- **Standard accounts** — 40% consistency rule
+- **Zero accounts** — 40% consistency rule
+- **Advanced accounts** — no consistency rule
+
+## How the Math Works
+
+The formula is simple:
+
+- **Best single day P&L ÷ Total net profit × 100 = Consistency %**
+- If this percentage exceeds **40%**, you are out of compliance
+
+For example, if your total profit is $2,000 and your best day was $900, your consistency is 900 / 2000 × 100 = **45%** — you need to keep trading to bring it down.
+
+## Staying Compliant
+
+- Trade consistently sized positions every day rather than swinging for one big win
+- If one day runs hot, keep trading subsequent days to dilute that day's share
+- Mtrade tracks this automatically and shows your current consistency percentage on the dashboard
+
+## After Payout
+
+The consistency calculation **resets after each payout**. Your new cycle starts fresh, so a strong first day in a new cycle can temporarily spike your consistency until you accumulate more trading days.
+
+> **Tip:** Aim to keep every day below 20% of total profits — this gives you a comfortable buffer and avoids last-minute scrambling to dilute a big day.`
+      },
+      {
+        category: 'Alpha Futures Rules', sort_order: 10, slug: 'alpha-drawdown',
+        title: 'Alpha Futures Drawdown (MLL)',
+        content: `## Maximum Loss Limit (MLL)
+
+The **MLL** is the maximum amount your account can lose before it is terminated. Alpha Futures calculates this based on your **end-of-day balance**, not intraday equity.
+
+## MLL by Account Type
+
+- **Standard accounts** — 4% MLL on end-of-day balance
+- **Zero accounts** — 4% MLL on end-of-day balance
+- **Advanced accounts** — 3.5% MLL on end-of-day balance
+
+## How It Works
+
+At the end of each trading day, Alpha Futures records your closing balance. Your MLL threshold is set at the account's starting balance minus the MLL percentage. If your end-of-day balance drops to or below this threshold, the account is terminated.
+
+## Daily Loss Guard
+
+In addition to the overall MLL, there is a **2% Daily Loss Guard** across all account types. If you lose more than 2% of your starting balance in a single trading day, trading is halted for the rest of that day.
+
+## The Safety Net Concept
+
+Think of the MLL as a hard floor and the Daily Loss Guard as a speed bump. The daily guard prevents you from burning through your entire MLL in one bad session, giving you multiple days to recover from losses.
+
+> **Tip:** Mtrade shows your GRIP (distance to MLL) in real-time on the dashboard — if GRIP drops below 50%, consider reducing your position size or sitting out until the next session.`
+      },
+      {
+        category: 'Alpha Futures Rules', sort_order: 11, slug: 'alpha-payout',
+        title: 'Alpha Futures Payout Requirements',
+        content: `## Payout Structures by Account Type
+
+Each Alpha Futures account type has different payout rules, frequencies, and profit splits.
+
+## Standard Accounts
+
+- **Frequency** — bi-weekly (every two weeks)
+- **Profit split** — tiered: **70%** initially, increases to **80%** and then **90%** based on tenure and performance
+- **Consistency rule** — 40% applies (no single day can exceed 40% of total profits)
+- **Minimum payout** — $100
+- **Maximum payout** — varies by account size
+
+## Zero Accounts
+
+- **Frequency** — weekly
+- **Profit split** — **90%** from day one
+- **Consistency rule** — 40% applies
+- **Minimum payout** — $25
+- **Maximum payout** — varies by account size
+
+## Advanced Accounts
+
+- **Frequency** — weekly
+- **Profit split** — **90%** from day one
+- **Consistency rule** — none
+- **Minimum payout** — $25
+- **Maximum payout** — varies by account size
+
+## Key Differences
+
+- **Zero** gives you weekly payouts with a high split but still requires consistency
+- **Advanced** removes the consistency rule entirely — ideal for traders with an uneven edge
+- **Standard** has the lowest starting split but offers progression over time
+
+> **Tip:** If your strategy naturally produces uneven daily returns (e.g., you only trade 2-3 days per week), Advanced is likely your best fit since it has no consistency rule to worry about.`
+      },
+      {
+        category: 'Platform Guide', sort_order: 12, slug: 'reading-dashboard',
+        title: 'How to Read the Dashboard',
+        content: `## Dashboard Overview
+
+The Mtrade dashboard is your central command screen. Everything you need — price data, signals, risk metrics, and trade management — is visible in one place.
+
+## Header Bar
+
+The top bar shows the **MTRADE logo**, a **live UTC clock**, the **current session indicator** (London, Pre-Market, NY Open, NY PM, or Closed), and your **profile avatar** with a logout option.
+
+## Live Price & TradingView Chart
+
+The main chart area displays a **TradingView-powered chart** with the current instrument's live price. You can switch timeframes and overlay indicators directly on this chart.
+
+## Strategy Chart
+
+Below the main chart, the **strategy chart** shows Mtrade's proprietary overlays — **red zones** for FVGs, **amber zones** for IFVGs, sweep levels, and BOS markers. This is where the six-phase progression is visually tracked.
+
+## Signal Progression
+
+The signal panel displays the current **Cologne Code** progression — from TOP NOTE through ACCORD. Each signal lights up as its corresponding phase completes.
+
+## AI Analysis
+
+The **AI analysis section** provides a natural-language summary of the current setup, including phase status, confidence level, and key levels to watch.
+
+## Alpha Futures Dashboard
+
+If you have linked Alpha Futures accounts, this section shows your **TACH gauges** — REDLINE (drawdown), REV LIMIT (consistency), GRIP (safety net), and BOOST (profit target).
+
+> **Tip:** Check the strategy chart and signal progression together — if the chart shows a valid FVG retrace but signals have not progressed past HEART NOTE, the setup may not be ready yet.`
+      }
+    ];
+
+    let inserted = 0;
+    for (const a of articles) {
+      const result = await env.DB.prepare(
+        'INSERT OR IGNORE INTO kb_articles (category, slug, title, content, sort_order) VALUES (?, ?, ?, ?, ?)'
+      ).bind(a.category, a.slug, a.title, a.content, a.sort_order).run();
+      if (result.meta.changes > 0) inserted++;
+    }
+
+    return json({ inserted, total: articles.length });
+  }
+
   // GET /api/strategy/config
   if (path === '/api/strategy/config' && method === 'GET') {
     const row = await env.DB.prepare(
