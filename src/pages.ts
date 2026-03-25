@@ -1367,6 +1367,8 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
     <button class="fab-add" id="fab-add" aria-label="Log trade">+</button>
 
     <button class="demo-alert-link" id="demo-alert-btn">Create Demo Alert</button>
+    <button class="demo-alert-link" id="test-discord-btn" style="margin-left:12px">Test Discord</button>
+    <span id="discord-status" style="font-family:'JetBrains Mono',monospace;font-size:9px;margin-left:6px;opacity:0;transition:opacity 0.3s"></span>
 
     <div id="engine-status" style="text-align:center;padding:8px 0;font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--muted);letter-spacing:0.5px"></div>
 
@@ -2287,12 +2289,9 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
         });
       });
 
-      // Setup crosshair and resize observer
+      // Setup crosshair
       var wrap = chartEl.querySelector('.chart-wrap');
-      if (wrap) {
-        setupCrosshair(wrap);
-        if (typeof observeChartContainer === 'function') observeChartContainer();
-      }
+      if (wrap) setupCrosshair(wrap);
     }
 
     function loadAndRender() {
@@ -2302,19 +2301,20 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
       });
     }
 
-    /* Debounced resize handler for SVG chart */
+    /* Debounced resize handler for SVG chart — use window resize to avoid loop */
     var resizeTimer = null;
-    function onChartResize() {
+    var lastChartWidth = 0;
+    window.addEventListener('resize', function() {
       clearTimeout(resizeTimer);
       resizeTimer = setTimeout(function() {
-        renderChartWithData();
+        var wrap = chartEl.querySelector('.chart-wrap');
+        var newWidth = wrap ? wrap.offsetWidth : window.innerWidth;
+        if (newWidth !== lastChartWidth) {
+          lastChartWidth = newWidth;
+          renderChartWithData();
+        }
       }, 250);
-    }
-    var chartObserver = new ResizeObserver(function() { onChartResize(); });
-    function observeChartContainer() {
-      var wrap = chartEl.querySelector('.chart-wrap');
-      if (wrap) chartObserver.observe(wrap);
-    }
+    });
 
     loadAndRender();
     setInterval(loadAndRender, 60000);
@@ -2846,6 +2846,31 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
       fetch('/api/alerts/demo', { method: 'POST', credentials: 'same-origin' })
         .then(function() { pollAlerts(); })
         .catch(function(err) { console.error('Failed to create demo alert', err); });
+    };
+
+    // Test Discord button
+    document.getElementById('test-discord-btn').onclick = function() {
+      var statusEl = document.getElementById('discord-status');
+      statusEl.style.opacity = '1';
+      statusEl.textContent = '...';
+      statusEl.style.color = 'var(--muted)';
+      fetch('/api/notifications/test', { method: 'POST', credentials: 'same-origin' })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+          if (data.success) {
+            statusEl.textContent = '\u2713 Sent';
+            statusEl.style.color = '#34d058';
+          } else {
+            statusEl.textContent = '\u2717 Failed';
+            statusEl.style.color = 'var(--red)';
+          }
+          setTimeout(function() { statusEl.style.opacity = '0'; }, 3000);
+        })
+        .catch(function() {
+          statusEl.textContent = '\u2717 Failed';
+          statusEl.style.color = 'var(--red)';
+          setTimeout(function() { statusEl.style.opacity = '0'; }, 3000);
+        });
     };
   })();
   </script>
