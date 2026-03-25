@@ -111,15 +111,15 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
     .outfit { font-family: 'Outfit', sans-serif; }
     .container {
       width: 100%;
-      max-width: 960px;
-      padding: 14px;
+      max-width: 100%;
+      padding: 12px;
       margin: 0 auto;
     }
     .card {
       background: var(--card);
       border: 1px solid var(--border);
       border-radius: 14px;
-      padding: 16px;
+      padding: 14px;
       margin-bottom: 12px;
       position: relative;
     }
@@ -753,7 +753,7 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
     /* TradingView Chart */
     #tv-chart-wrap {
       width: 100%;
-      height: 280px;
+      height: 250px;
       border-radius: 10px;
       overflow: hidden;
       background: #0a0a10;
@@ -762,8 +762,7 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
     #tv-chart-wrap iframe { border: none !important; }
 
     /* Candlestick Chart */
-    .chart-svg { width: 100%; height: 260px; display: block; background: #0a0a10; border-radius: 10px; }
-    @media (min-width: 600px) { .chart-svg { height: 400px; } }
+    .chart-svg { width: 100%; height: 240px; display: block; background: #0a0a10; border-radius: 10px; }
     .chart-wrap { position: relative; }
     .chart-legend {
       display: flex;
@@ -1212,31 +1211,114 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
       margin-top: 4px;
     }
 
+    /* Dashboard grid layout */
+    .dashboard-grid {
+      display: block;
+    }
+    .grid-left, .grid-right {
+      width: 100%;
+    }
+    .selectors-row {
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+    }
+    .selectors-row > div { width: 100%; }
+
+    /* Mobile form inputs: 16px min to prevent iOS zoom */
+    .modal-input { font-size: 16px; }
+    .form-input, .form-select { font-size: 16px; }
+
+    /* ─── Tablet (768px – 1024px) ─── */
     @media (min-width: 768px) {
-      .container { padding: 24px; }
-      .card { padding: 20px; }
+      .container { padding: 20px; max-width: 768px; }
+      .card { padding: 18px; }
+      .header-brand h1 { font-size: 28px; }
+      .header-clock .time { font-size: 18px; }
       .toggle-row { flex-wrap: nowrap; }
+      .toggle-btn { min-height: 40px; }
+      .selectors-row { flex-direction: row; gap: 12px; }
+      .selectors-row > div { flex: 1; }
+      .selectors-row .card { margin-bottom: 12px; }
       .form-grid { grid-template-columns: 1fr 1fr; }
-      .dash-stat-grid { grid-template-columns: repeat(6, 1fr); }
-      .dash-gauge { padding: 0 8px; }
-      .modal-overlay { align-items: center; }
-      .modal-sheet {
-        max-width: 480px;
-        border-radius: 14px;
-      }
-      .chart-svg { height: 300px; }
-      #tv-chart-wrap { height: 400px; }
-      .phase-label { font-size: 13px; }
-      .phase-desc { font-size: 11px; }
+      .chart-svg { height: 340px; }
+      #tv-chart-wrap { height: 350px; }
       .alert-overlay { padding: 20px; }
       .alert-signal-name { font-size: 28px; }
       .alert-levels-grid { gap: 16px; }
+      .alert-level-value { font-size: 24px; }
       .alert-btn-in, .alert-btn-skip { padding: 16px; font-size: 15px; }
+      .phase-label { font-size: 13px; }
+      .phase-desc { font-size: 11px; }
       .ai-signal-row { align-items: center; }
       .ai-confidence-num { font-size: 32px; }
       .ai-levels-box { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 0; }
       .ai-level-row { flex-direction: column; text-align: center; padding: 8px 4px; }
       .ai-level-row + .ai-level-row { border-top: none; border-left: 1px solid var(--border); }
+      .dash-balance-value { font-size: 26px; }
+      .dash-pnl-value { font-size: 26px; }
+      .modal-overlay { align-items: center; }
+      .modal-sheet {
+        max-width: 480px;
+        border-radius: 14px;
+      }
+      .modal-input { font-size: 14px; }
+      .form-input, .form-select { font-size: 14px; }
+      .pnl-list { max-height: 340px; }
+      .dashboard-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 12px;
+      }
+      .tf-btn { padding: 4px 12px; }
+      .dash-payout-row { gap: 16px; }
+      .footer { padding: 36px 0 28px; }
+    }
+
+    /* ─── Desktop (> 1024px) ─── */
+    @media (min-width: 1025px) {
+      .container { padding: 24px; max-width: 1200px; }
+      .card { padding: 22px; }
+      .header-brand h1 { font-size: 28px; }
+      .header-clock .time { font-size: 18px; }
+      .header-user img { width: 36px; height: 36px; }
+      .toggle-btn { min-height: 36px; padding: 8px 18px; font-size: 12px; }
+      .chart-svg { height: 420px; }
+      #tv-chart-wrap { height: 450px; }
+      .alert-overlay { padding: 24px; }
+      .alert-signal-name { font-size: 28px; }
+      .alert-level-value { font-size: 28px; }
+      .alert-btn-in, .alert-btn-skip { padding: 18px; font-size: 15px; }
+      .phase-label { font-size: 14px; }
+      .phase-desc { font-size: 10px; }
+      .signal-status-box { padding: 14px; }
+      .ai-confidence-num { font-size: 34px; }
+      .ai-warnings { columns: 2; column-gap: 16px; }
+      .ai-warning-item { break-inside: avoid; }
+      .dash-balance-value { font-size: 28px; }
+      .dash-pnl-value { font-size: 28px; }
+      .dash-sparkline svg { height: 48px; }
+      .dash-stat-grid { grid-template-columns: repeat(6, 1fr); }
+      .dash-payout-row { gap: 20px; }
+      .live-price-value { font-size: 38px; }
+      .pnl-list { max-height: 400px; }
+      .pnl-date { min-width: 100px; }
+      .pnl-amount { font-size: 15px; }
+      .fab-add { width: 56px; height: 56px; font-size: 26px; }
+      .modal-sheet { max-width: 520px; }
+      .tf-btn { padding: 5px 14px; }
+      .chart-crosshair-label { font-size: 10px; }
+      .dashboard-grid {
+        display: grid;
+        grid-template-columns: 3fr 2fr;
+        gap: 16px;
+      }
+      .footer { padding: 40px 0 32px; }
+    }
+
+    /* ─── Large Desktop (> 1440px) ─── */
+    @media (min-width: 1441px) {
+      .container { max-width: 1400px; }
     }
   </style>
 </head>
@@ -1262,15 +1344,23 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
       </div>
     </div>
 
-    <div id="alert-overlay"></div>
-    <div id="ai-analysis"></div>
-    <div id="instrument-selector"></div>
-    <div id="apex-selector"></div>
+    <div class="selectors-row">
+      <div id="instrument-selector"></div>
+      <div id="apex-selector"></div>
+    </div>
     <div id="live-price-card"></div>
-    <div id="dashboard-panel"></div>
-    <div id="tv-chart-container"></div>
-    <div id="price-chart"></div>
-    <div id="signal-tracker"></div>
+    <div id="alert-overlay"></div>
+    <div class="dashboard-grid">
+      <div class="grid-left">
+        <div id="tv-chart-container"></div>
+        <div id="price-chart"></div>
+      </div>
+      <div class="grid-right">
+        <div id="ai-analysis"></div>
+        <div id="signal-tracker"></div>
+        <div id="dashboard-panel"></div>
+      </div>
+    </div>
     <div id="pnl-log"></div>
     <div id="trade-modal-root"></div>
 
@@ -1794,7 +1884,7 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
         theme: 'dark',
         style: '1',
         width: '100%',
-        height: document.getElementById('tv-chart-wrap').offsetHeight || 280,
+        height: document.getElementById('tv-chart-wrap').offsetHeight || 250,
         hide_top_toolbar: false,
         hide_side_toolbar: true,
         allow_symbol_change: false,
@@ -1896,15 +1986,17 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
       maxP += range * 0.05;
       range = maxP - minP;
 
-      var isDesktop = window.innerWidth >= 600;
-      var svgW = 800, svgH = isDesktop ? 400 : 300, padR = 65, padL = 4, padT = 8, padB = 20;
+      var vw = window.innerWidth;
+      var isTablet = vw >= 768;
+      var isDesktop = vw >= 1025;
+      var svgW = 800, svgH = isDesktop ? 420 : isTablet ? 340 : 240, padR = 65, padL = 4, padT = 8, padB = 20;
       var chartW = svgW - padL - padR, chartH = svgH - padT - padB;
       function priceY(p) { return padT + chartH - ((p - minP) / range) * chartH; }
 
       var candleW = chartW / candles.length;
       var bodyW = isDesktop ? Math.max(candleW * 0.7, 2) : Math.max(candleW - 1, 1);
 
-      var svg = '<svg class="chart-svg" viewBox="0 0 ' + svgW + ' ' + svgH + '" preserveAspectRatio="none" style="height:' + (isDesktop ? 400 : 260) + 'px">';
+      var svg = '<svg class="chart-svg" viewBox="0 0 ' + svgW + ' ' + svgH + '" preserveAspectRatio="none">';
 
       // Gradient definition for area fill
       svg += '<defs><linearGradient id="areaGrad" x1="0" y1="0" x2="0" y2="1">';
@@ -1918,11 +2010,13 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
         svg += '<line x1="' + padL + '" y1="' + gy + '" x2="' + (svgW - padR) + '" y2="' + gy + '" stroke="rgba(255,255,255,0.04)" stroke-width="1"/>';
       }
 
-      // Y-axis price labels (5 evenly spaced)
-      for (var yi = 0; yi <= 4; yi++) {
-        var yPrice = minP + (range * yi / 4);
+      // Y-axis price labels (4 on mobile, 6 on desktop)
+      var yLabelCount = isDesktop ? 6 : 4;
+      for (var yi = 0; yi <= yLabelCount; yi++) {
+        var yPrice = minP + (range * yi / yLabelCount);
         var yPos = priceY(yPrice);
-        svg += '<text x="' + (svgW - padR + 6) + '" y="' + (yPos + 3) + '" fill="var(--muted)" font-family="JetBrains Mono,monospace" font-size="8">' + yPrice.toFixed(2) + '</text>';
+        var yFontSize = isDesktop ? '9' : '8';
+        svg += '<text x="' + (svgW - padR + 6) + '" y="' + (yPos + 3) + '" fill="var(--muted)" font-family="JetBrains Mono,monospace" font-size="' + yFontSize + '">' + yPrice.toFixed(2) + '</text>';
       }
 
       // Area fill below close prices
@@ -2193,9 +2287,12 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
         });
       });
 
-      // Setup crosshair
+      // Setup crosshair and resize observer
       var wrap = chartEl.querySelector('.chart-wrap');
-      if (wrap) setupCrosshair(wrap);
+      if (wrap) {
+        setupCrosshair(wrap);
+        if (typeof observeChartContainer === 'function') observeChartContainer();
+      }
     }
 
     function loadAndRender() {
@@ -2203,6 +2300,20 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
       Promise.all([fetchCandleData(sym), fetchSessionData(), fetchFvgData(sym)]).then(function() {
         renderChartWithData();
       });
+    }
+
+    /* Debounced resize handler for SVG chart */
+    var resizeTimer = null;
+    function onChartResize() {
+      clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(function() {
+        renderChartWithData();
+      }, 250);
+    }
+    var chartObserver = new ResizeObserver(function() { onChartResize(); });
+    function observeChartContainer() {
+      var wrap = chartEl.querySelector('.chart-wrap');
+      if (wrap) chartObserver.observe(wrap);
     }
 
     loadAndRender();
