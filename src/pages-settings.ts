@@ -36,6 +36,9 @@ export function getSettingsPage(user: { name: string; email: string; avatar_url:
       font-family: 'Outfit', sans-serif;
       margin: 0;
       padding: 0;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+      text-rendering: optimizeLegibility;
     }
     .jb { font-family: 'JetBrains Mono', monospace; }
     .container {
@@ -78,7 +81,7 @@ export function getSettingsPage(user: { name: string; email: string; avatar_url:
     }
     .header-brand .tagline {
       font-family: 'JetBrains Mono', monospace;
-      font-size: 8px;
+      font-size: 11px;
       color: var(--label);
       letter-spacing: 2px;
       margin-top: 4px;
@@ -120,7 +123,7 @@ export function getSettingsPage(user: { name: string; email: string; avatar_url:
     }
     .session-label {
       font-family: 'JetBrains Mono', monospace;
-      font-size: 8px;
+      font-size: 11px;
       letter-spacing: 1px;
       text-transform: uppercase;
     }
@@ -139,7 +142,7 @@ export function getSettingsPage(user: { name: string; email: string; avatar_url:
     }
     .header-user a {
       font-family: 'JetBrains Mono', monospace;
-      font-size: 10px;
+      font-size: 11px;
       color: var(--muted);
       text-decoration: none;
       letter-spacing: 1px;
@@ -153,7 +156,7 @@ export function getSettingsPage(user: { name: string; email: string; avatar_url:
     }
     .tab-bar a {
       font-family: 'JetBrains Mono', monospace;
-      font-size: 10px;
+      font-size: 11px;
       text-transform: uppercase;
       letter-spacing: 2px;
       padding: 10px 20px;
@@ -247,7 +250,7 @@ export function getSettingsPage(user: { name: string; email: string; avatar_url:
     .preset-btn {
       flex: 1;
       font-family: 'JetBrains Mono', monospace;
-      font-size: 10px;
+      font-size: 11px;
       font-weight: 600;
       letter-spacing: 1px;
       padding: 8px 16px;
@@ -332,7 +335,7 @@ export function getSettingsPage(user: { name: string; email: string; avatar_url:
     }
     .kill-switch-hint {
       font-family: 'JetBrains Mono', monospace;
-      font-size: 9px;
+      font-size: 11px;
       color: var(--muted);
       margin-bottom: 16px;
     }
@@ -340,7 +343,7 @@ export function getSettingsPage(user: { name: string; email: string; avatar_url:
     /* Strategy toggles & inputs */
     .strat-divider {
       font-family: 'Outfit', sans-serif;
-      font-size: 9px;
+      font-size: 11px;
       font-weight: 700;
       text-transform: uppercase;
       letter-spacing: 1.5px;
@@ -362,7 +365,7 @@ export function getSettingsPage(user: { name: string; email: string; avatar_url:
     }
     .strat-toggle-help {
       font-family: 'JetBrains Mono', monospace;
-      font-size: 9px;
+      font-size: 11px;
       color: var(--muted);
       margin-top: 1px;
     }
@@ -388,7 +391,7 @@ export function getSettingsPage(user: { name: string; email: string; avatar_url:
     .strat-number-input:focus { border-color: var(--red); }
     .strat-number-display {
       font-family: 'JetBrains Mono', monospace;
-      font-size: 9px;
+      font-size: 11px;
       color: var(--muted);
       margin-top: 2px;
       text-align: right;
@@ -398,7 +401,7 @@ export function getSettingsPage(user: { name: string; email: string; avatar_url:
       border: 1px solid var(--border);
       color: var(--muted);
       font-family: 'JetBrains Mono', monospace;
-      font-size: 9px;
+      font-size: 11px;
       padding: 4px 8px;
       border-radius: 6px;
       cursor: pointer;
@@ -472,7 +475,7 @@ export function getSettingsPage(user: { name: string; email: string; avatar_url:
     .notif-btn:hover { border-color: var(--red); }
     .notif-help {
       font-family: 'JetBrains Mono', monospace;
-      font-size: 9px;
+      font-size: 11px;
       color: var(--muted);
       margin-bottom: 16px;
       line-height: 1.5;
@@ -515,7 +518,7 @@ export function getSettingsPage(user: { name: string; email: string; avatar_url:
       color: var(--text);
     }
     .notif-toggle-sub {
-      font-size: 10px;
+      font-size: 11px;
       color: var(--muted);
       margin-top: 1px;
     }
@@ -556,13 +559,13 @@ export function getSettingsPage(user: { name: string; email: string; avatar_url:
     }
     .account-list-meta {
       font-family: 'JetBrains Mono', monospace;
-      font-size: 9px;
+      font-size: 11px;
       color: var(--muted);
       margin-top: 2px;
     }
     .account-list-status {
       font-family: 'JetBrains Mono', monospace;
-      font-size: 9px;
+      font-size: 11px;
       font-weight: 600;
       letter-spacing: 0.5px;
     }
@@ -599,7 +602,7 @@ export function getSettingsPage(user: { name: string; email: string; avatar_url:
     }
     .template-card .tpl-details {
       font-family: 'JetBrains Mono', monospace;
-      font-size: 9px;
+      font-size: 11px;
       color: var(--muted);
       margin-top: 4px;
       line-height: 1.4;
@@ -607,7 +610,7 @@ export function getSettingsPage(user: { name: string; email: string; avatar_url:
     .template-card .tpl-tag {
       display: inline-block;
       font-family: 'JetBrains Mono', monospace;
-      font-size: 8px;
+      font-size: 11px;
       font-weight: 600;
       letter-spacing: 0.5px;
       color: var(--amber);
@@ -634,7 +637,7 @@ export function getSettingsPage(user: { name: string; email: string; avatar_url:
     .tpl-type-btn {
       flex: 1;
       font-family: 'JetBrains Mono', monospace;
-      font-size: 10px;
+      font-size: 11px;
       font-weight: 600;
       letter-spacing: 0.5px;
       padding: 8px;
@@ -653,7 +656,7 @@ export function getSettingsPage(user: { name: string; email: string; avatar_url:
     }
     .form-label {
       font-family: 'JetBrains Mono', monospace;
-      font-size: 10px;
+      font-size: 11px;
       color: var(--label);
       letter-spacing: 1px;
       text-transform: uppercase;
@@ -681,7 +684,7 @@ export function getSettingsPage(user: { name: string; email: string; avatar_url:
     /* Section label */
     .section-label {
       font-family: 'JetBrains Mono', monospace;
-      font-size: 10px;
+      font-size: 11px;
       color: var(--label);
       letter-spacing: 1px;
       text-transform: uppercase;

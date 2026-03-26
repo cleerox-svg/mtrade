@@ -10,6 +10,9 @@ const SHARED_STYLES = `
       align-items: center;
       justify-content: center;
       min-height: 100vh;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+      text-rendering: optimizeLegibility;
     }
     .container {
       text-align: center;
@@ -112,6 +115,9 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
       font-family: 'Outfit', sans-serif;
       margin: 0;
       padding: 0;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+      text-rendering: optimizeLegibility;
     }
     .jb { font-family: 'JetBrains Mono', monospace; }
     .outfit { font-family: 'Outfit', sans-serif; }
@@ -279,7 +285,7 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
     }
     .logout-dropdown button {
       font-family: 'JetBrains Mono', monospace;
-      font-size: 10px;
+      font-size: 11px;
       letter-spacing: 1px;
       padding: 6px 14px;
       border-radius: 6px;
@@ -319,7 +325,7 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
     }
     .header-brand .tagline {
       font-family: 'JetBrains Mono', monospace;
-      font-size: 8px;
+      font-size: 11px;
       color: var(--label);
       letter-spacing: 2px;
       margin-top: 4px;
@@ -361,7 +367,7 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
     }
     .session-label {
       font-family: 'JetBrains Mono', monospace;
-      font-size: 8px;
+      font-size: 11px;
       letter-spacing: 1px;
       text-transform: uppercase;
     }
@@ -380,7 +386,7 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
     }
     .header-user a {
       font-family: 'JetBrains Mono', monospace;
-      font-size: 10px;
+      font-size: 11px;
       color: var(--muted);
       text-decoration: none;
       letter-spacing: 1px;
@@ -394,7 +400,7 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
     }
     .tab-bar a {
       font-family: 'JetBrains Mono', monospace;
-      font-size: 10px;
+      font-size: 11px;
       text-transform: uppercase;
       letter-spacing: 2px;
       padding: 10px 20px;
@@ -475,7 +481,7 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
     }
     .form-label {
       font-family: 'JetBrains Mono', monospace;
-      font-size: 10px;
+      font-size: 11px;
       color: var(--label);
       letter-spacing: 1px;
       text-transform: uppercase;
@@ -531,7 +537,7 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
     .dash-balance-label,
     .dash-pnl-label {
       font-family: 'JetBrains Mono', monospace;
-      font-size: 9px;
+      font-size: 11px;
       color: var(--label);
       letter-spacing: 1.5px;
       text-transform: uppercase;
@@ -567,14 +573,14 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
     }
     .dash-gauge-label {
       font-family: 'JetBrains Mono', monospace;
-      font-size: 10px;
+      font-size: 11px;
       color: var(--label);
       text-transform: uppercase;
       letter-spacing: 0.8px;
     }
     .dash-gauge-value {
       font-family: 'JetBrains Mono', monospace;
-      font-size: 10px;
+      font-size: 11px;
       font-weight: 700;
     }
     .dash-gauge-track {
@@ -617,7 +623,7 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
     }
     .dash-stat-label {
       font-family: 'JetBrains Mono', monospace;
-      font-size: 8px;
+      font-size: 11px;
       color: var(--label);
       text-transform: uppercase;
       letter-spacing: 0.5px;
@@ -632,7 +638,7 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
     /* Payout status */
     .dash-payout-label {
       font-family: 'JetBrains Mono', monospace;
-      font-size: 9px;
+      font-size: 11px;
       color: var(--label);
       letter-spacing: 1.5px;
       text-transform: uppercase;
@@ -663,7 +669,7 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
     }
     .dash-payout-text {
       font-family: 'JetBrains Mono', monospace;
-      font-size: 10px;
+      font-size: 11px;
       color: var(--label);
     }
 
@@ -679,7 +685,7 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
     /* P&L Log */
     .card-title {
       font-family: 'Outfit', sans-serif;
-      font-size: 10px;
+      font-size: 11px;
       font-weight: 700;
       text-transform: uppercase;
       letter-spacing: 2.5px;
@@ -707,14 +713,14 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
       background: rgba(255,255,255,0.04);
       color: var(--label);
       font-family: 'JetBrains Mono', monospace;
-      font-size: 8px;
+      font-size: 11px;
       padding: 2px 6px;
       border-radius: 4px;
       margin: 0 8px;
     }
     .pnl-trades {
       font-family: 'JetBrains Mono', monospace;
-      font-size: 10px;
+      font-size: 11px;
       color: var(--muted);
       margin-right: auto;
     }
@@ -902,7 +908,7 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
     .live-price-change.flat { background: rgba(148,163,184,0.15); color: var(--label); }
     .live-price-indicator {
       font-family: 'JetBrains Mono', monospace;
-      font-size: 8px;
+      font-size: 11px;
       color: var(--label);
       letter-spacing: 1px;
     }
@@ -921,7 +927,7 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
       gap: 16px;
       margin-top: 8px;
       font-family: 'JetBrains Mono', monospace;
-      font-size: 10px;
+      font-size: 11px;
     }
     .live-session-levels .level-label { color: var(--muted); margin-right: 4px; }
     .live-session-levels .level-value { color: var(--label); }
@@ -951,7 +957,7 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
       align-items: center;
       gap: 5px;
       font-family: 'JetBrains Mono', monospace;
-      font-size: 9px;
+      font-size: 11px;
       color: var(--muted);
     }
     .chart-legend-swatch {
@@ -968,7 +974,7 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
     }
     .tf-btn {
       font-family: 'JetBrains Mono', monospace;
-      font-size: 10px;
+      font-size: 11px;
       letter-spacing: 1px;
       background: transparent;
       border: 1px solid rgba(255,255,255,0.1);
@@ -988,7 +994,7 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
       position: absolute;
       pointer-events: none;
       font-family: 'JetBrains Mono', monospace;
-      font-size: 8px;
+      font-size: 11px;
       background: var(--white);
       color: #0a0a10;
       padding: 1px 4px;
@@ -1005,7 +1011,7 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
       align-items: center;
       gap: 4px;
       font-family: 'JetBrains Mono', monospace;
-      font-size: 8px;
+      font-size: 11px;
       letter-spacing: 0.5px;
       z-index: 5;
       pointer-events: none;
@@ -1030,7 +1036,7 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
     }
     .signal-tag {
       font-family: 'JetBrains Mono', monospace;
-      font-size: 8px;
+      font-size: 11px;
       letter-spacing: 1.5px;
       text-transform: uppercase;
       padding: 3px 8px;
@@ -1071,12 +1077,12 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
     }
     .phase-desc {
       font-family: 'JetBrains Mono', monospace;
-      font-size: 10px;
+      font-size: 11px;
       color: var(--label);
       flex: 1;
     }
     .phase-check {
-      font-size: 10px;
+      font-size: 11px;
       margin-left: auto;
       flex-shrink: 0;
     }
@@ -1092,7 +1098,7 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
     }
     .signal-status-label {
       font-family: 'JetBrains Mono', monospace;
-      font-size: 9px;
+      font-size: 11px;
       letter-spacing: 1.5px;
       text-transform: uppercase;
       margin-bottom: 6px;
@@ -1168,7 +1174,7 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
     }
     .alert-level-label {
       font-family: 'JetBrains Mono', monospace;
-      font-size: 8px;
+      font-size: 11px;
       color: var(--label);
       letter-spacing: 1px;
       text-transform: uppercase;
@@ -1227,7 +1233,7 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
       display: block;
       text-align: center;
       font-family: 'JetBrains Mono', monospace;
-      font-size: 10px;
+      font-size: 11px;
       color: var(--subtle);
       cursor: pointer;
       background: none;
@@ -1264,14 +1270,14 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
     .notif-btn:hover { border-color: var(--red); }
     .notif-help {
       font-family: 'JetBrains Mono', monospace;
-      font-size: 9px;
+      font-size: 11px;
       color: var(--muted);
       margin-bottom: 16px;
       line-height: 1.5;
     }
     .notif-test-status {
       font-family: 'JetBrains Mono', monospace;
-      font-size: 9px;
+      font-size: 11px;
       margin-left: 6px;
       transition: opacity 0.3s;
     }
@@ -1289,7 +1295,7 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
       color: var(--text);
     }
     .notif-toggle-sub {
-      font-size: 10px;
+      font-size: 11px;
       color: var(--muted);
       margin-top: 1px;
     }
@@ -1383,7 +1389,7 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
     .preset-btn {
       flex: 1;
       font-family: 'JetBrains Mono', monospace;
-      font-size: 10px;
+      font-size: 11px;
       font-weight: 600;
       letter-spacing: 1px;
       padding: 8px 16px;
@@ -1467,14 +1473,14 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
     }
     .kill-switch-hint {
       font-family: 'JetBrains Mono', monospace;
-      font-size: 9px;
+      font-size: 11px;
       color: var(--muted);
       margin-bottom: 16px;
     }
 
     .strat-divider {
       font-family: 'Outfit', sans-serif;
-      font-size: 9px;
+      font-size: 11px;
       font-weight: 700;
       text-transform: uppercase;
       letter-spacing: 1.5px;
@@ -1496,7 +1502,7 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
     }
     .strat-toggle-help {
       font-family: 'JetBrains Mono', monospace;
-      font-size: 9px;
+      font-size: 11px;
       color: var(--muted);
       margin-top: 1px;
     }
@@ -1522,7 +1528,7 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
     .strat-number-input:focus { border-color: var(--red); }
     .strat-number-display {
       font-family: 'JetBrains Mono', monospace;
-      font-size: 9px;
+      font-size: 11px;
       color: var(--muted);
       margin-top: 2px;
       text-align: right;
@@ -1532,7 +1538,7 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
       border: 1px solid var(--border);
       color: var(--muted);
       font-family: 'JetBrains Mono', monospace;
-      font-size: 9px;
+      font-size: 11px;
       padding: 4px 8px;
       border-radius: 6px;
       cursor: pointer;
@@ -1543,7 +1549,7 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
     /* Instrument micro labels */
     .instrument-micro {
       font-family: 'JetBrains Mono', monospace;
-      font-size: 7px;
+      font-size: 11px;
       color: var(--muted);
       display: block;
       margin-top: 1px;
@@ -1589,7 +1595,7 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
     }
     .template-card .tpl-details {
       font-family: 'JetBrains Mono', monospace;
-      font-size: 9px;
+      font-size: 11px;
       color: var(--muted);
       margin-top: 4px;
       line-height: 1.4;
@@ -1597,7 +1603,7 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
     .template-card .tpl-tag {
       display: inline-block;
       font-family: 'JetBrains Mono', monospace;
-      font-size: 8px;
+      font-size: 11px;
       font-weight: 600;
       letter-spacing: 0.5px;
       color: var(--amber);
@@ -1626,7 +1632,7 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
     .tpl-type-btn {
       flex: 1;
       font-family: 'JetBrains Mono', monospace;
-      font-size: 10px;
+      font-size: 11px;
       font-weight: 600;
       letter-spacing: 0.5px;
       padding: 8px;
@@ -1662,7 +1668,7 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
     }
     .portfolio-stat-label {
       font-family: 'JetBrains Mono', monospace;
-      font-size: 9px;
+      font-size: 11px;
       color: var(--label);
       letter-spacing: 1px;
       text-transform: uppercase;
@@ -1694,7 +1700,7 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
       display: flex;
       gap: 16px;
       font-family: 'JetBrains Mono', monospace;
-      font-size: 10px;
+      font-size: 11px;
     }
     .portfolio-flag {
       color: var(--danger);
@@ -1726,7 +1732,7 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
     .compliance-dot.fail { background: var(--danger); box-shadow: 0 0 4px var(--danger); }
     .compliance-label {
       font-family: 'JetBrains Mono', monospace;
-      font-size: 10px;
+      font-size: 11px;
       color: var(--label);
       text-transform: uppercase;
       letter-spacing: 0.5px;
@@ -1790,7 +1796,7 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
     }
     .alert-compliance-summary {
       font-family: 'JetBrains Mono', monospace;
-      font-size: 10px;
+      font-size: 11px;
       padding: 6px 10px;
       border-radius: 6px;
       margin-top: 8px;
@@ -1840,7 +1846,7 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
     }
     .ai-analysis-title {
       font-family: 'Outfit', sans-serif;
-      font-size: 10px;
+      font-size: 11px;
       font-weight: 700;
       text-transform: uppercase;
       letter-spacing: 2.5px;
@@ -1848,7 +1854,7 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
     }
     .ai-analysis-tag {
       font-family: 'JetBrains Mono', monospace;
-      font-size: 8px;
+      font-size: 11px;
       color: var(--label);
       letter-spacing: 1px;
     }
@@ -1897,7 +1903,7 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
     .ai-signal-tag.mid { background: rgba(251,191,36,0.15); color: var(--amber); }
     .ai-signal-tag.low { background: rgba(100,116,139,0.15); color: var(--label); }
     .ai-fragrance {
-      font-size: 10px;
+      font-size: 11px;
       font-style: italic;
       color: var(--label);
       margin-top: 4px;
@@ -1911,7 +1917,7 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
     }
     .ai-confidence-label {
       font-family: 'JetBrains Mono', monospace;
-      font-size: 8px;
+      font-size: 11px;
       color: var(--label);
       letter-spacing: 1px;
       margin-top: 2px;
@@ -1938,7 +1944,7 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
     .ai-level-row + .ai-level-row { border-top: 1px solid var(--border); }
     .ai-level-label {
       font-family: 'JetBrains Mono', monospace;
-      font-size: 10px;
+      font-size: 11px;
       color: var(--label);
       letter-spacing: 1px;
     }
@@ -1963,7 +1969,7 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
     }
     .ai-redline-label {
       font-family: 'JetBrains Mono', monospace;
-      font-size: 9px;
+      font-size: 11px;
       color: var(--red-soft);
       letter-spacing: 2px;
       margin-bottom: 6px;
@@ -2065,7 +2071,7 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
       .alert-level-value { font-size: 28px; }
       .alert-btn-in, .alert-btn-skip { padding: 18px; font-size: 15px; }
       .phase-label { font-size: 14px; }
-      .phase-desc { font-size: 10px; }
+      .phase-desc { font-size: 11px; }
       .signal-status-box { padding: 14px; }
       .ai-confidence-num { font-size: 34px; }
       .ai-warnings { columns: 2; column-gap: 16px; }
@@ -2082,7 +2088,7 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
       .fab-add { width: 56px; height: 56px; font-size: 26px; }
       .modal-sheet { max-width: 520px; }
       .tf-btn { padding: 5px 14px; }
-      .chart-crosshair-label { font-size: 10px; }
+      .chart-crosshair-label { font-size: 11px; }
       .dashboard-grid {
         display: grid;
         grid-template-columns: 3fr 2fr;
@@ -2157,7 +2163,7 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
 
     <button class="demo-alert-link" id="demo-alert-btn">Create Demo Alert</button>
 
-    <div id="engine-status" style="text-align:center;padding:8px 0;font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--muted);letter-spacing:0.5px"></div>
+    <div id="engine-status" style="text-align:center;padding:8px 0;font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--muted);letter-spacing:0.5px"></div>
 
     <div style="text-align:center;padding:8px 0"><a href="/app/settings" style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--muted);text-decoration:none;letter-spacing:0.5px">\u2699 Settings</a></div>
 
@@ -4221,7 +4227,7 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
       dropdown.className = 'logout-dropdown';
       dropdown.style.display = 'block';
       dropdown.innerHTML =
-        '<span style="font-family:JetBrains Mono,monospace;font-size:10px;color:var(--label);white-space:nowrap">Log out?</span>' +
+        '<span style="font-family:JetBrains Mono,monospace;font-size:11px;color:var(--label);white-space:nowrap">Log out?</span>' +
         '<button class="logout-yes" id="logout-yes">Yes</button>' +
         '<button class="logout-no" id="logout-no">No</button>';
       document.getElementById('logout-yes').onclick = function() { window.location.href = '/auth/logout'; };
@@ -4312,7 +4318,7 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
 
       // Row 3
       html += '<div class="dash-stat-grid" style="grid-template-columns:1fr 1fr">';
-      html += '<div class="dash-stat-cell"><div class="dash-stat-label">Avg Confidence</div><div class="dash-stat-value" style="color:var(--bright)">' + d.avg_confidence + '%<span style="font-size:8px;color:var(--label);margin-left:4px">' + confLabel + '</span></div></div>';
+      html += '<div class="dash-stat-cell"><div class="dash-stat-label">Avg Confidence</div><div class="dash-stat-value" style="color:var(--bright)">' + d.avg_confidence + '%<span style="font-size:11px;color:var(--label);margin-left:4px">' + confLabel + '</span></div></div>';
       html += '<div class="dash-stat-cell"><div class="dash-stat-label">Best Session</div><div class="dash-stat-value" style="color:var(--bright)">' + d.best_session.session + ' ' + d.best_session.win_rate + '%</div></div>';
       html += '</div>';
 
