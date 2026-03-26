@@ -183,7 +183,7 @@ export function getSettingsPage(user: { name: string; email: string; avatar_url:
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 20px;
+      padding: 16px;
       cursor: pointer;
       user-select: none;
     }
@@ -204,7 +204,7 @@ export function getSettingsPage(user: { name: string; email: string; avatar_url:
       transform: rotate(-90deg);
     }
     .settings-card-body {
-      padding: 0 20px 20px;
+      padding: 0 16px 16px;
       overflow: hidden;
       transition: max-height 0.3s ease, padding 0.3s ease;
     }
@@ -242,11 +242,32 @@ export function getSettingsPage(user: { name: string; email: string; avatar_url:
     .toast.warning { background: rgba(251,191,36,0.15); color: var(--amber); border: 1px solid rgba(251,191,36,0.3); }
     .toast.dismissing { opacity: 0; }
 
+    /* Settings inner card */
+    .settings-inner-card {
+      background: var(--card);
+      border: 1px solid rgba(251,44,90,0.08);
+      border-radius: 14px;
+      padding: 16px;
+      margin-bottom: 10px;
+    }
+
+    /* Group title */
+    .settings-group-title {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+      color: var(--red-soft);
+      margin-bottom: 14px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid rgba(251,44,90,0.1);
+    }
+
     /* Preset buttons */
     .preset-row {
       display: flex;
-      gap: 8px;
-      margin: 14px 0;
+      gap: 10px;
     }
     .preset-btn {
       flex: 1;
@@ -254,52 +275,72 @@ export function getSettingsPage(user: { name: string; email: string; avatar_url:
       font-size: 11px;
       font-weight: 600;
       letter-spacing: 1px;
-      padding: 8px 16px;
-      border-radius: 8px;
-      height: 44px;
+      padding: 6px 10px;
+      border-radius: 10px;
+      height: 48px;
       cursor: pointer;
       border: 1px solid var(--border);
       background: transparent;
       color: var(--muted);
       transition: all 0.2s;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 2px;
+    }
+    .preset-btn .preset-desc {
+      font-size: 9px;
+      font-weight: 400;
+      letter-spacing: 0.5px;
+      opacity: 0.7;
     }
     .preset-btn.preset-conservative.active {
-      background: rgba(52,211,153,0.08);
-      border-color: var(--green);
+      background: rgba(52,211,153,0.1);
+      border: 2px solid var(--green);
       color: var(--green);
     }
     .preset-btn.preset-normal.active {
-      background: rgba(251,44,90,0.08);
-      border-color: var(--red);
+      background: rgba(251,44,90,0.1);
+      border: 2px solid var(--red);
       color: var(--red);
     }
     .preset-btn.preset-aggressive.active {
-      background: rgba(239,68,68,0.08);
-      border-color: var(--danger);
+      background: rgba(239,68,68,0.1);
+      border: 2px solid var(--danger);
       color: var(--danger);
     }
 
-    /* Kill switch */
+    /* Kill switch card */
+    .kill-switch-card {
+      background: var(--card);
+      border: 1px solid rgba(251,44,90,0.08);
+      border-radius: 14px;
+      padding: 16px;
+      margin-bottom: 10px;
+      transition: all 0.25s;
+    }
+    .kill-switch-card.active {
+      background: rgba(239,68,68,0.06);
+      border-color: rgba(239,68,68,0.2);
+      box-shadow: 0 0 20px rgba(239,68,68,0.05);
+    }
     .kill-switch-row {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 14px;
-      border-radius: 10px;
-      border: 1px solid var(--border);
-      background: transparent;
-      margin-bottom: 16px;
-      transition: all 0.25s;
-    }
-    .kill-switch-row.active {
-      background: rgba(239,68,68,0.04);
-      border-color: rgba(239,68,68,0.15);
     }
     .kill-switch-label {
       font-family: 'Outfit', sans-serif;
       font-size: 14px;
-      font-weight: 600;
+      font-weight: 700;
       color: var(--bright);
+    }
+    .kill-switch-sub {
+      font-family: 'Outfit', sans-serif;
+      font-size: 12px;
+      color: var(--muted);
+      margin-top: 2px;
     }
     .kill-switch-toggle {
       position: relative;
@@ -338,61 +379,52 @@ export function getSettingsPage(user: { name: string; email: string; avatar_url:
       font-family: 'JetBrains Mono', monospace;
       font-size: 11px;
       color: var(--muted);
-      margin-top: -12px;
-      margin-bottom: 16px;
+      margin-top: 8px;
     }
 
     /* Strategy toggles & inputs */
-    .strat-divider {
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 10px;
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 2px;
-      color: var(--muted);
-      padding-bottom: 8px;
-      border-top: 1px solid rgba(255,255,255,0.03);
-      margin-top: 16px;
-      padding-top: 16px;
-    }
     .strat-toggle-row {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 10px 0;
+      padding: 12px 0;
       border-bottom: 1px solid rgba(255,255,255,0.03);
     }
+    .strat-toggle-row:last-child { border-bottom: none; }
     .strat-toggle-label {
       font-family: 'Outfit', sans-serif;
       font-size: 13px;
-      color: var(--text);
+      font-weight: 500;
+      color: var(--bright);
     }
     .strat-toggle-help {
-      font-family: 'JetBrains Mono', monospace;
       font-size: 11px;
       color: var(--muted);
-      margin-top: 1px;
+      margin-top: 2px;
+      display: block;
       max-width: 80%;
     }
     .strat-number-row {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 10px 0;
+      padding: 12px 0;
       border-bottom: 1px solid rgba(255,255,255,0.03);
     }
+    .strat-number-row:last-child { border-bottom: none; }
     .strat-number-input {
-      width: 70px;
+      width: 80px;
       background: #0a0a10;
       border: 1px solid var(--border);
       border-radius: 8px;
-      padding: 12px 10px;
-      color: var(--text);
+      padding: 10px;
+      color: var(--white);
       font-family: 'JetBrains Mono', monospace;
-      font-size: 14px;
+      font-size: 15px;
       text-align: center;
       outline: none;
       min-height: 44px;
+      box-shadow: inset 0 1px 3px rgba(0,0,0,0.3);
     }
     .strat-number-input:focus { border-color: var(--red); outline: none; }
     .strat-number-display {
@@ -432,24 +464,24 @@ export function getSettingsPage(user: { name: string; email: string; avatar_url:
     .toggle-track {
       position: absolute;
       top: 0; left: 0; right: 0; bottom: 0;
-      background: rgba(255,255,255,0.08);
+      background: rgba(255,255,255,0.1);
       border-radius: 12px;
       transition: background 0.25s, box-shadow 0.25s;
     }
     .toggle-track::after {
       content: '';
       position: absolute;
-      top: 2px;
-      left: 2px;
-      width: 20px;
-      height: 20px;
+      top: 3px;
+      left: 3px;
+      width: 18px;
+      height: 18px;
       background: #fff;
       border-radius: 50%;
       transition: transform 0.2s;
     }
     .toggle-switch input:checked + .toggle-track {
       background: var(--red);
-      box-shadow: 0 0 8px rgba(251,44,90,0.3);
+      box-shadow: 0 0 10px rgba(251,44,90,0.3);
     }
     .toggle-switch input:checked + .toggle-track::after {
       transform: translateX(20px);
@@ -473,17 +505,22 @@ export function getSettingsPage(user: { name: string; email: string; avatar_url:
       border: 1px solid var(--border);
       color: var(--muted);
       font-family: 'Outfit', sans-serif;
-      font-size: 11px;
-      font-weight: 700;
-      border-radius: 6px;
-      padding: 8px 16px;
+      font-size: 12px;
+      font-weight: 600;
+      border-radius: 8px;
+      padding: 10px 20px;
       cursor: pointer;
       white-space: nowrap;
+      transition: all 0.2s;
     }
     .notif-btn:hover { border-color: var(--red); color: var(--red); }
     .notif-btn-save {
+      background: var(--red);
       border-color: var(--red);
-      color: var(--red);
+      color: #fff;
+    }
+    .notif-btn-save:hover {
+      background: #d9204a;
     }
     .notif-help {
       font-family: 'JetBrains Mono', monospace;
@@ -503,7 +540,7 @@ export function getSettingsPage(user: { name: string; email: string; avatar_url:
     .notif-master-label {
       font-family: 'Outfit', sans-serif;
       font-size: 13px;
-      font-weight: 700;
+      font-weight: 600;
       color: var(--bright);
     }
     .notif-toggles-grid {
@@ -520,19 +557,25 @@ export function getSettingsPage(user: { name: string; email: string; avatar_url:
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 10px 0;
+      padding: 12px 0;
       border-bottom: 1px solid rgba(255,255,255,0.03);
     }
     .notif-toggle-row:last-child { border-bottom: none; }
     .notif-toggle-label {
       font-family: 'Outfit', sans-serif;
       font-size: 13px;
-      color: var(--text);
+      font-weight: 500;
+      color: var(--bright);
     }
     .notif-toggle-sub {
       font-size: 11px;
       color: var(--muted);
-      margin-top: 1px;
+      margin-top: 2px;
+    }
+    .notif-section-sep {
+      border: none;
+      border-top: 1px solid rgba(251,44,90,0.1);
+      margin: 14px 0;
     }
 
     /* Settings input */
@@ -610,12 +653,12 @@ export function getSettingsPage(user: { name: string; email: string; avatar_url:
       padding: 14px;
       text-align: center;
       cursor: pointer;
-      min-height: 80px;
+      min-height: 90px;
       transition: all 0.2s;
     }
     .template-card:hover { border-color: rgba(251,44,90,0.15); }
     .template-card.selected {
-      border-color: var(--red);
+      border: 2px solid var(--red);
       background: rgba(251,44,90,0.04);
     }
     .template-card .tpl-size {
@@ -950,53 +993,65 @@ export function getSettingsPage(user: { name: string; email: string; avatar_url:
 
       var html = '';
 
-      // Preset buttons
+      // Preset buttons in card
+      html += '<div class="settings-inner-card">';
       html += '<div class="preset-row">';
-      html += '<button class="preset-btn preset-conservative' + (preset === 'conservative' ? ' active' : '') + '" data-preset="conservative">CONSERVATIVE</button>';
-      html += '<button class="preset-btn preset-normal' + (preset === 'normal' ? ' active' : '') + '" data-preset="normal">NORMAL</button>';
-      html += '<button class="preset-btn preset-aggressive' + (preset === 'aggressive' ? ' active' : '') + '" data-preset="aggressive">AGGRESSIVE</button>';
+      html += '<button class="preset-btn preset-conservative' + (preset === 'conservative' ? ' active' : '') + '" data-preset="conservative"><span>CONSERVATIVE</span><span class="preset-desc">Higher R:R, IFVG only</span></button>';
+      html += '<button class="preset-btn preset-normal' + (preset === 'normal' ? ' active' : '') + '" data-preset="normal"><span>NORMAL</span><span class="preset-desc">Balanced defaults</span></button>';
+      html += '<button class="preset-btn preset-aggressive' + (preset === 'aggressive' ? ' active' : '') + '" data-preset="aggressive"><span>AGGRESSIVE</span><span class="preset-desc">Lower R:R, any continuation</span></button>';
+      html += '</div>';
       html += '</div>';
 
-      // Kill switch
-      html += '<div class="kill-switch-row' + (ksActive ? ' active' : '') + '">';
+      // Kill switch in card
+      html += '<div class="kill-switch-card' + (ksActive ? ' active' : '') + '">';
+      html += '<div class="kill-switch-row">';
       if (ksActive) {
-        html += '<div><div class="kill-switch-label" style="color:var(--danger)">KILL SWITCH ACTIVE</div></div>';
+        html += '<div><div class="kill-switch-label" style="color:var(--danger)">KILL SWITCH ACTIVE</div><div class="kill-switch-sub" style="color:var(--danger);opacity:0.7">No more trades today</div></div>';
       } else {
-        html += '<div><div class="kill-switch-label">KILL SWITCH</div></div>';
+        html += '<div><div class="kill-switch-label">KILL SWITCH</div><div class="kill-switch-sub">No more trades today</div></div>';
       }
       html += '<label class="kill-switch-toggle"><input type="checkbox" id="kill-switch-toggle"' + (ksActive ? ' checked' : '') + '><span class="kill-switch-track"></span></label>';
       html += '</div>';
       html += '<div class="kill-switch-hint">Resets at midnight ET</div>';
+      html += '</div>';
 
-      // Session toggles
-      html += '<div class="strat-divider">SESSION FILTERS</div>';
+      // Session Filters card
+      html += '<div class="settings-inner-card">';
+      html += '<div class="settings-group-title">SESSION FILTERS</div>';
       html += '<div class="strat-toggle-row"><div class="strat-toggle-label">Trade London sweeps</div>' + toggleHtml('strat-london', c.trade_london_sweep) + '</div>';
       html += '<div class="strat-toggle-row"><div class="strat-toggle-label">Trade NY sweeps</div>' + toggleHtml('strat-ny', c.trade_ny_sweep) + '</div>';
+      html += '</div>';
 
-      // FVG toggles
-      html += '<div class="strat-divider">FVG SETTINGS</div>';
+      // FVG Settings card
+      html += '<div class="settings-inner-card">';
+      html += '<div class="settings-group-title">FVG SETTINGS</div>';
       html += '<div class="strat-toggle-row"><div class="strat-toggle-label">Scan 1H FVGs</div>' + toggleHtml('strat-fvg1h', c.fvg_scan_1h) + '</div>';
       html += '<div class="strat-toggle-row"><div class="strat-toggle-label">Scan 4H FVGs</div>' + toggleHtml('strat-fvg4h', c.fvg_scan_4h) + '</div>';
       html += '<div class="strat-toggle-row"><div><div class="strat-toggle-label">Require IFVG for continuation</div><div class="strat-toggle-help">Only fires BASE NOTE on Inverse FVGs</div></div>' + toggleHtml('strat-ifvg', c.continuation_require_ifvg) + '</div>';
+      html += '</div>';
 
-      // Entry settings
-      html += '<div class="strat-divider">ENTRY FILTERS</div>';
+      // Entry Filters card
+      html += '<div class="settings-inner-card">';
+      html += '<div class="settings-group-title">ENTRY FILTERS</div>';
       html += '<div class="strat-number-row"><div class="strat-toggle-label">Min R:R</div>';
       html += '<div style="text-align:right"><input type="number" class="strat-number-input" id="strat-minrr" value="' + (c.min_rr || 2.0) + '" min="1.0" max="5.0" step="0.5">';
-      html += '<div class="strat-number-display" id="strat-minrr-display">' + (c.min_rr || 2.0).toFixed(1) + ':1</div></div></div>';
+      html += '<div class="strat-number-display" id="strat-minrr-display">1:' + (c.min_rr || 2.0).toFixed(1) + '</div></div></div>';
 
       html += '<div class="strat-number-row"><div class="strat-toggle-label">Min AI confidence</div>';
       html += '<div style="text-align:right"><input type="number" class="strat-number-input" id="strat-confidence" value="' + (c.min_confidence || 60) + '" min="0" max="100" step="5">';
       html += '<div class="strat-number-display" id="strat-confidence-display">' + getFragrance(c.min_confidence || 60) + '</div></div></div>';
+      html += '</div>';
 
-      // Position settings
-      html += '<div class="strat-divider">POSITION SIZING</div>';
+      // Position Sizing card
+      html += '<div class="settings-inner-card">';
+      html += '<div class="settings-group-title">POSITION SIZING</div>';
       html += '<div class="strat-number-row"><div class="strat-toggle-label">Default contracts</div>';
       html += '<input type="number" class="strat-number-input" id="strat-contracts" value="' + (c.default_contracts || 1) + '" min="1" max="10" step="1"></div>';
 
       html += '<div class="strat-number-row"><div class="strat-toggle-label">Max contracts override</div>';
       html += '<div style="display:flex;align-items:center"><input type="number" class="strat-number-input" id="strat-max-contracts" value="' + (c.max_contracts_override || '') + '" min="1" max="20" step="1" placeholder="\\u2014">';
       html += '<button class="strat-clear-btn" id="strat-clear-max">\\u2715</button></div></div>';
+      html += '</div>';
 
       container.innerHTML = html;
       bindEvents();
@@ -1037,7 +1092,7 @@ export function getSettingsPage(user: { name: string; email: string; avatar_url:
       if (minRr) minRr.oninput = function() {
         var v = parseFloat(this.value);
         if (!isNaN(v) && v >= 1.0 && v <= 5.0) {
-          document.getElementById('strat-minrr-display').textContent = v.toFixed(1) + ':1';
+          document.getElementById('strat-minrr-display').textContent = '1:' + v.toFixed(1);
           debouncedSave({ min_rr: v });
         }
       };
@@ -1093,8 +1148,10 @@ export function getSettingsPage(user: { name: string; email: string; avatar_url:
       var webhookVal = s.discord_webhook_url || '';
       var html = '';
 
-      html += '<div class="section-label">DISCORD WEBHOOK</div>';
+      html += '<div class="settings-inner-card">';
+      html += '<div class="settings-group-title">DISCORD SETUP</div>';
       html += '<div class="notif-webhook-row">';
+      html += '<label class="input-label" style="margin-bottom:6px">WEBHOOK URL</label>';
       html += '<input class="settings-input" id="notif-webhook-input" type="text" value="' + webhookVal.replace(/"/g, '&quot;') + '" placeholder="https://discord.com/api/webhooks/...">';
       html += '<div class="notif-btn-row">';
       html += '<button class="notif-btn notif-btn-save" id="notif-save-btn">Save</button>';
@@ -1102,6 +1159,10 @@ export function getSettingsPage(user: { name: string; email: string; avatar_url:
       html += '</div>';
       html += '</div>';
       html += '<div class="notif-help">Channel Settings \\u2192 Integrations \\u2192 Webhooks \\u2192 New Webhook \\u2192 Copy URL</div>';
+      html += '</div>';
+
+      html += '<div class="settings-inner-card">';
+      html += '<div class="settings-group-title">ALERT TYPES</div>';
 
       html += '<div class="notif-master-row">';
       html += '<span class="notif-master-label">Notifications enabled</span>';
@@ -1126,6 +1187,7 @@ export function getSettingsPage(user: { name: string; email: string; avatar_url:
         html += toggleHtml('notif-' + t.id, isOn);
         html += '</div>';
       }
+      html += '</div>';
       html += '</div>';
 
       container.innerHTML = html;
@@ -1204,7 +1266,8 @@ export function getSettingsPage(user: { name: string; email: string; avatar_url:
       var html = '';
 
       if (accounts.length) {
-        html += '<div class="section-label">YOUR ACCOUNTS</div>';
+        html += '<div class="settings-inner-card">';
+        html += '<div class="settings-group-title">YOUR ACCOUNTS</div>';
         for (var i = 0; i < accounts.length; i++) {
           var a = accounts[i];
           var statusColor = a.is_active ? 'var(--green)' : 'var(--muted)';
@@ -1214,9 +1277,11 @@ export function getSettingsPage(user: { name: string; email: string; avatar_url:
           html += '<div class="account-list-meta">$' + Number(a.account_size).toLocaleString() + ' \\u00B7 ' + (a.account_type || '').toUpperCase() + ' \\u00B7 DD $' + Number(a.drawdown_limit).toLocaleString() + ' \\u00B7 ' + statusText + '</div></div>';
           html += '</div>';
         }
+        html += '</div>';
       }
 
-      html += '<div style="margin-top:16px"><div class="section-label">CREATE NEW ACCOUNT</div>';
+      html += '<div class="settings-inner-card">';
+      html += '<div class="settings-group-title">CREATE NEW ACCOUNT</div>';
       html += '<div class="template-grid" id="acct-template-grid"></div>';
       html += '<div id="acct-step2"></div>';
       html += '</div>';
