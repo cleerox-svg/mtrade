@@ -503,7 +503,7 @@ export function getLearnPage(user: { name: string; email: string; avatar_url: st
               }
               if (text[i] === '\x60') {
                 var end2 = text.indexOf('\x60', i + 1);
-                if (end2 !== -1) { out += '<span style="font-family:JetBrains Mono,monospace;background:rgba(255,255,255,0.04);padding:1px 5px;border-radius:3px;font-size:11px;">' + text.substring(i+1, end2) + '</span>'; i = end2 + 1; continue; }
+                if (end2 !== -1) { out += '<span style="font-family:JetBrains Mono,monospace;font-size:12px;background:rgba(251,44,90,0.06);color:var(--red-soft);padding:2px 8px;border-radius:4px;border:1px solid rgba(251,44,90,0.08);">' + text.substring(i+1, end2) + '</span>'; i = end2 + 1; continue; }
               }
               out += text[i]; i++;
             }
@@ -603,34 +603,41 @@ export function getLearnPage(user: { name: string; email: string; avatar_url: st
                     lines.forEach(function(line) {
                       if (line.indexOf('## ') === 0) {
                         var h = document.createElement('h3');
-                        h.innerHTML = parseLine(line.substring(3));
-                        h.style.cssText = 'font-family:Outfit,sans-serif;font-size:13px;font-weight:700;color:var(--red-soft);margin-top:16px;margin-bottom:6px;';
+                        h.innerHTML = '<span style="color:var(--red);font-size:10px;margin-right:6px;">\u25C6</span>' + parseLine(line.substring(3));
+                        h.style.cssText = 'font-family:Outfit,sans-serif;font-size:15px;font-weight:700;color:var(--red-soft);margin-top:24px;margin-bottom:8px;display:flex;align-items:center;';
                         contentArea.appendChild(h);
                       } else if (line.indexOf('- ') === 0) {
                         var bullet = document.createElement('div');
-                        bullet.style.cssText = 'display:flex;flex-direction:row;margin-bottom:4px;';
+                        bullet.style.cssText = 'display:flex;flex-direction:row;padding:4px 0;';
                         var arrow = document.createElement('span');
                         arrow.textContent = '\u25B8';
                         arrow.style.cssText = 'color:var(--red-soft);font-size:11px;flex-shrink:0;margin-top:3px;';
                         var btext = document.createElement('span');
                         btext.innerHTML = parseLine(line.substring(2));
-                        btext.style.cssText = 'font-size:12px;color:var(--text);padding-left:4px;';
+                        btext.style.cssText = 'font-size:13px;color:var(--text);padding-left:4px;line-height:1.7;';
                         bullet.appendChild(arrow);
                         bullet.appendChild(btext);
                         contentArea.appendChild(bullet);
                       } else if (line.indexOf('> ') === 0) {
                         var callout = document.createElement('div');
-                        callout.innerHTML = parseLine(line.substring(2));
-                        callout.style.cssText = 'background:rgba(251,44,90,0.03);border-left:2px solid var(--red);padding:10px 14px;border-radius:0 8px 8px 0;font-size:11px;color:var(--label);margin-top:8px;';
+                        callout.style.cssText = 'background:rgba(251,44,90,0.03);border-left:3px solid var(--red);padding:14px 18px;border-radius:0 10px 10px 0;margin:16px 0;';
+                        var tipLabel = document.createElement('div');
+                        tipLabel.textContent = 'TIP';
+                        tipLabel.style.cssText = 'font-family:JetBrains Mono,monospace;font-size:10px;color:var(--red);letter-spacing:2px;margin-bottom:6px;';
+                        var tipText = document.createElement('div');
+                        tipText.innerHTML = parseLine(line.substring(2));
+                        tipText.style.cssText = 'font-size:13px;color:var(--label);line-height:1.6;';
+                        callout.appendChild(tipLabel);
+                        callout.appendChild(tipText);
                         contentArea.appendChild(callout);
                       } else if (line.trim() === '') {
                         var spacer = document.createElement('div');
-                        spacer.style.cssText = 'margin-bottom:10px;';
+                        spacer.style.cssText = 'margin-bottom:12px;';
                         contentArea.appendChild(spacer);
                       } else {
                         var p = document.createElement('p');
                         p.innerHTML = parseLine(line);
-                        p.style.cssText = 'font-size:13px;color:var(--text);line-height:1.7;';
+                        p.style.cssText = 'font-size:14px;color:var(--text);line-height:1.8;margin-bottom:12px;';
                         contentArea.appendChild(p);
                       }
                     });
