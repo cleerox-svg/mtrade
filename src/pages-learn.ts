@@ -415,22 +415,34 @@ export function getLearnPage(user: { name: string; email: string; avatar_url: st
             .then(function(r) { return r.json(); })
             .then(function(data) {
               resultsBox.innerHTML = '';
-              if (!data.length) { resultsBox.style.display = 'none'; return; }
+              if (!data.length) {
+                resultsBox.style.display = 'block';
+                var noRes = document.createElement('div');
+                noRes.textContent = 'No results found';
+                noRes.style.cssText = 'color:var(--muted);font-style:italic;font-size:13px;padding:16px;';
+                resultsBox.appendChild(noRes);
+                return;
+              }
               resultsBox.style.display = 'block';
-              data.forEach(function(item, i) {
+              data.forEach(function(item) {
                 var row = document.createElement('div');
-                row.style.cssText = 'padding:10px 0;cursor:pointer;' + (i < data.length - 1 ? 'border-bottom:1px solid var(--border);' : '');
-                var title = document.createElement('div');
-                title.textContent = item.title;
-                title.style.cssText = 'font-size:13px;color:var(--bright);font-weight:600;font-family:Outfit,sans-serif;';
+                row.style.cssText = 'background:var(--card);border-bottom:1px solid var(--border);padding:12px 16px;cursor:pointer;transition:background 0.15s;';
+                row.addEventListener('mouseenter', function() { row.style.background = 'rgba(255,255,255,0.02)'; });
+                row.addEventListener('mouseleave', function() { row.style.background = 'var(--card)'; });
+                var titleRow = document.createElement('div');
+                titleRow.style.cssText = 'display:flex;align-items:center;';
                 var tag = document.createElement('span');
                 tag.textContent = item.category;
-                tag.style.cssText = 'font-size:11px;background:rgba(255,255,255,0.04);color:var(--label);padding:2px 6px;border-radius:4px;margin-left:8px;font-family:JetBrains Mono,monospace;text-transform:uppercase;letter-spacing:1px;vertical-align:middle;';
-                title.appendChild(tag);
+                tag.style.cssText = 'font-size:10px;background:rgba(251,44,90,0.06);color:var(--red-soft);padding:2px 8px;border-radius:4px;margin-right:8px;font-family:JetBrains Mono,monospace;text-transform:uppercase;letter-spacing:1px;flex-shrink:0;';
+                var title = document.createElement('span');
+                title.textContent = item.title;
+                title.style.cssText = 'font-size:14px;color:var(--bright);font-weight:600;font-family:Outfit,sans-serif;';
+                titleRow.appendChild(tag);
+                titleRow.appendChild(title);
                 var snippet = document.createElement('div');
                 snippet.textContent = item.snippet || '';
-                snippet.style.cssText = 'font-size:11px;color:var(--muted);margin-top:4px;font-family:JetBrains Mono,monospace;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;';
-                row.appendChild(title);
+                snippet.style.cssText = 'font-size:12px;color:var(--muted);margin-top:4px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;';
+                row.appendChild(titleRow);
                 row.appendChild(snippet);
                 row.addEventListener('click', function() {
                   searchInput.value = '';
@@ -644,12 +656,14 @@ export function getLearnPage(user: { name: string; email: string; avatar_url: st
 
                     // --- Ask AI Feature ---
                     var askSection = document.createElement('div');
-                    askSection.style.cssText = 'margin-top:4px;';
+                    askSection.style.cssText = 'margin-top:20px;padding-top:16px;border-top:1px solid var(--border);';
                     askSection.addEventListener('click', function(e) { e.stopPropagation(); });
 
                     var askToggle = document.createElement('div');
-                    askToggle.className = 'ask-ai-toggle';
-                    askToggle.textContent = 'Ask about this \u2192';
+                    askToggle.style.cssText = 'background:rgba(251,44,90,0.04);border:1px solid rgba(251,44,90,0.1);border-radius:8px;padding:10px 16px;width:100%;text-align:center;cursor:pointer;transition:background 0.15s;';
+                    askToggle.innerHTML = '<span style="font-size:12px;color:var(--red);">Ask AI about this topic</span>';
+                    askToggle.addEventListener('mouseenter', function() { askToggle.style.background = 'rgba(251,44,90,0.08)'; });
+                    askToggle.addEventListener('mouseleave', function() { askToggle.style.background = 'rgba(251,44,90,0.04)'; });
                     askSection.appendChild(askToggle);
 
                     var askForm = document.createElement('div');
@@ -657,17 +671,19 @@ export function getLearnPage(user: { name: string; email: string; avatar_url: st
 
                     var askInput = document.createElement('input');
                     askInput.type = 'text';
-                    askInput.className = 'ask-ai-input';
                     askInput.placeholder = 'Ask a question about ' + article.title + '...';
+                    askInput.style.cssText = 'width:100%;background:#0a0a10;color:var(--text);border:1px solid var(--border);border-radius:10px;padding:10px;font-size:13px;font-family:JetBrains Mono,monospace;outline:none;';
+                    askInput.addEventListener('focus', function() { askInput.style.borderColor = 'var(--red)'; });
+                    askInput.addEventListener('blur', function() { askInput.style.borderColor = 'var(--border)'; });
                     askForm.appendChild(askInput);
 
                     var btnRow = document.createElement('div');
-                    btnRow.className = 'ask-ai-btn-row';
+                    btnRow.style.cssText = 'display:flex;justify-content:flex-end;align-items:center;gap:8px;margin-top:8px;';
                     var spinner = document.createElement('div');
                     spinner.className = 'ask-ai-spinner';
                     var askBtn = document.createElement('button');
-                    askBtn.className = 'ask-ai-btn';
                     askBtn.textContent = 'Ask';
+                    askBtn.style.cssText = 'background:var(--red);color:#fff;font-family:Outfit,sans-serif;font-size:11px;font-weight:600;padding:6px 16px;border-radius:6px;border:none;cursor:pointer;';
                     btnRow.appendChild(spinner);
                     btnRow.appendChild(askBtn);
                     askForm.appendChild(btnRow);
@@ -681,6 +697,7 @@ export function getLearnPage(user: { name: string; email: string; avatar_url: st
                     askToggle.addEventListener('click', function() {
                       askForm.classList.toggle('open');
                       if (askForm.classList.contains('open')) {
+                        askToggle.style.display = 'none';
                         setTimeout(function() { askInput.focus(); }, 100);
                       }
                       expandDiv.style.maxHeight = expandDiv.scrollHeight + 2000 + 'px';
@@ -691,8 +708,9 @@ export function getLearnPage(user: { name: string; email: string; avatar_url: st
                       if (!q) return;
                       askInput.disabled = true;
                       askBtn.disabled = true;
+                      askBtn.style.opacity = '0.5';
+                      askBtn.style.cursor = 'not-allowed';
                       spinner.style.display = 'block';
-                      // Remove previous error
                       var prevErr = askForm.querySelector('.ask-ai-error');
                       if (prevErr) prevErr.remove();
 
@@ -708,13 +726,13 @@ export function getLearnPage(user: { name: string; email: string; avatar_url: st
                       })
                       .then(function(res) {
                         var box = document.createElement('div');
-                        box.className = 'ask-ai-answer';
+                        box.style.cssText = 'background:rgba(251,44,90,0.02);border:1px solid var(--border);border-radius:8px;padding:12px;margin-top:8px;';
                         var label = document.createElement('div');
-                        label.className = 'ask-ai-answer-label';
                         label.textContent = 'AI ANSWER';
+                        label.style.cssText = 'font-family:JetBrains Mono,monospace;font-size:10px;color:var(--red);letter-spacing:1.5px;margin-bottom:6px;text-transform:uppercase;';
                         var txt = document.createElement('div');
-                        txt.className = 'ask-ai-answer-text';
                         txt.innerHTML = parseLine(res.answer || '');
+                        txt.style.cssText = 'font-size:13px;color:var(--text);line-height:1.6;';
                         box.appendChild(label);
                         box.appendChild(txt);
                         answersContainer.appendChild(box);
@@ -730,6 +748,8 @@ export function getLearnPage(user: { name: string; email: string; avatar_url: st
                       .finally(function() {
                         askInput.disabled = false;
                         askBtn.disabled = false;
+                        askBtn.style.opacity = '1';
+                        askBtn.style.cursor = 'pointer';
                         spinner.style.display = 'none';
                         askInput.focus();
                       });
