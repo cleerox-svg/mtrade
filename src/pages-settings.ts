@@ -172,8 +172,8 @@ export function getSettingsPage(user: { name: string; email: string; avatar_url:
     /* Settings cards */
     .settings-card {
       background: var(--card);
-      border: 1px solid var(--border);
-      border-radius: 12px;
+      border: 1px solid rgba(251,44,90,0.08);
+      border-radius: 14px;
       margin-bottom: 12px;
       animation: slideUp 0.3s ease both;
     }
@@ -183,16 +183,17 @@ export function getSettingsPage(user: { name: string; email: string; avatar_url:
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 14px 16px;
+      padding: 20px;
       cursor: pointer;
       user-select: none;
     }
     .settings-card-title {
       font-family: 'Outfit', sans-serif;
-      font-size: 13px;
+      font-size: 12px;
       font-weight: 700;
-      color: var(--bright);
-      letter-spacing: 1px;
+      text-transform: uppercase;
+      letter-spacing: 2.5px;
+      color: var(--red-soft);
     }
     .settings-card-chevron {
       color: var(--muted);
@@ -203,7 +204,7 @@ export function getSettingsPage(user: { name: string; email: string; avatar_url:
       transform: rotate(-90deg);
     }
     .settings-card-body {
-      padding: 0 16px 14px;
+      padding: 0 20px 20px;
       overflow: hidden;
       transition: max-height 0.3s ease, padding 0.3s ease;
     }
@@ -255,11 +256,11 @@ export function getSettingsPage(user: { name: string; email: string; avatar_url:
       letter-spacing: 1px;
       padding: 8px 16px;
       border-radius: 8px;
-      min-height: 44px;
+      height: 44px;
       cursor: pointer;
-      border: 1px solid rgba(255,255,255,0.1);
+      border: 1px solid var(--border);
       background: transparent;
-      color: var(--label);
+      color: var(--muted);
       transition: all 0.2s;
     }
     .preset-btn.preset-conservative.active {
@@ -283,20 +284,20 @@ export function getSettingsPage(user: { name: string; email: string; avatar_url:
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 12px 14px;
+      padding: 14px;
       border-radius: 10px;
       border: 1px solid var(--border);
       background: transparent;
-      margin-bottom: 6px;
+      margin-bottom: 16px;
       transition: all 0.25s;
     }
     .kill-switch-row.active {
-      background: rgba(239,68,68,0.06);
-      border-color: var(--danger);
+      background: rgba(239,68,68,0.04);
+      border-color: rgba(239,68,68,0.15);
     }
     .kill-switch-label {
       font-family: 'Outfit', sans-serif;
-      font-size: 13px;
+      font-size: 14px;
       font-weight: 600;
       color: var(--bright);
     }
@@ -337,30 +338,33 @@ export function getSettingsPage(user: { name: string; email: string; avatar_url:
       font-family: 'JetBrains Mono', monospace;
       font-size: 11px;
       color: var(--muted);
+      margin-top: -12px;
       margin-bottom: 16px;
     }
 
     /* Strategy toggles & inputs */
     .strat-divider {
-      font-family: 'Outfit', sans-serif;
-      font-size: 11px;
-      font-weight: 700;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px;
+      font-weight: 600;
       text-transform: uppercase;
-      letter-spacing: 1.5px;
+      letter-spacing: 2px;
       color: var(--muted);
-      padding: 12px 0 6px;
-      border-top: 1px solid var(--border);
-      margin-top: 4px;
+      padding-bottom: 8px;
+      border-top: 1px solid rgba(255,255,255,0.03);
+      margin-top: 16px;
+      padding-top: 16px;
     }
     .strat-toggle-row {
       display: flex;
       align-items: center;
       justify-content: space-between;
       padding: 10px 0;
+      border-bottom: 1px solid rgba(255,255,255,0.03);
     }
     .strat-toggle-label {
       font-family: 'Outfit', sans-serif;
-      font-size: 12px;
+      font-size: 13px;
       color: var(--text);
     }
     .strat-toggle-help {
@@ -368,27 +372,29 @@ export function getSettingsPage(user: { name: string; email: string; avatar_url:
       font-size: 11px;
       color: var(--muted);
       margin-top: 1px;
+      max-width: 80%;
     }
     .strat-number-row {
       display: flex;
       align-items: center;
       justify-content: space-between;
       padding: 10px 0;
+      border-bottom: 1px solid rgba(255,255,255,0.03);
     }
     .strat-number-input {
       width: 70px;
       background: #0a0a10;
       border: 1px solid var(--border);
       border-radius: 8px;
-      padding: 8px 10px;
+      padding: 12px 10px;
       color: var(--text);
       font-family: 'JetBrains Mono', monospace;
-      font-size: 12px;
+      font-size: 14px;
       text-align: center;
       outline: none;
-      min-height: 36px;
+      min-height: 44px;
     }
-    .strat-number-input:focus { border-color: var(--red); }
+    .strat-number-input:focus { border-color: var(--red); outline: none; }
     .strat-number-display {
       font-family: 'JetBrains Mono', monospace;
       font-size: 11px;
@@ -439,11 +445,11 @@ export function getSettingsPage(user: { name: string; email: string; avatar_url:
       height: 20px;
       background: #fff;
       border-radius: 50%;
-      transition: transform 0.25s;
+      transition: transform 0.2s;
     }
     .toggle-switch input:checked + .toggle-track {
       background: var(--red);
-      box-shadow: 0 0 8px rgba(251,44,90,0.4);
+      box-shadow: 0 0 8px rgba(251,44,90,0.3);
     }
     .toggle-switch input:checked + .toggle-track::after {
       transform: translateX(20px);
@@ -451,28 +457,34 @@ export function getSettingsPage(user: { name: string; email: string; avatar_url:
 
     /* Notification styles */
     .notif-webhook-row {
-      display: flex;
-      gap: 8px;
-      align-items: flex-start;
       margin-bottom: 4px;
     }
     .notif-webhook-row .settings-input {
-      flex: 1;
+      width: 100%;
       margin-bottom: 0;
+    }
+    .notif-btn-row {
+      display: flex;
+      gap: 8px;
+      margin-top: 8px;
     }
     .notif-btn {
       background: transparent;
       border: 1px solid var(--border);
-      color: var(--red);
+      color: var(--muted);
       font-family: 'Outfit', sans-serif;
       font-size: 11px;
       font-weight: 700;
-      border-radius: 8px;
-      padding: 10px 14px;
+      border-radius: 6px;
+      padding: 8px 16px;
       cursor: pointer;
       white-space: nowrap;
     }
-    .notif-btn:hover { border-color: var(--red); }
+    .notif-btn:hover { border-color: var(--red); color: var(--red); }
+    .notif-btn-save {
+      border-color: var(--red);
+      color: var(--red);
+    }
     .notif-help {
       font-family: 'JetBrains Mono', monospace;
       font-size: 11px;
@@ -486,7 +498,7 @@ export function getSettingsPage(user: { name: string; email: string; avatar_url:
       justify-content: space-between;
       padding: 12px 0;
       margin-bottom: 4px;
-      border-bottom: 1px solid var(--border);
+      border-bottom: 1px solid rgba(255,255,255,0.03);
     }
     .notif-master-label {
       font-family: 'Outfit', sans-serif;
@@ -509,12 +521,12 @@ export function getSettingsPage(user: { name: string; email: string; avatar_url:
       align-items: center;
       justify-content: space-between;
       padding: 10px 0;
-      border-bottom: 1px solid var(--border);
+      border-bottom: 1px solid rgba(255,255,255,0.03);
     }
     .notif-toggle-row:last-child { border-bottom: none; }
     .notif-toggle-label {
       font-family: 'Outfit', sans-serif;
-      font-size: 12px;
+      font-size: 13px;
       color: var(--text);
     }
     .notif-toggle-sub {
@@ -531,13 +543,14 @@ export function getSettingsPage(user: { name: string; email: string; avatar_url:
       color: var(--text);
       border: 1px solid var(--border);
       border-radius: 8px;
-      padding: 10px;
+      padding: 12px;
       font-family: 'JetBrains Mono', monospace;
-      font-size: 12px;
+      font-size: 14px;
       outline: none;
+      min-height: 44px;
       transition: border-color 0.2s;
     }
-    .settings-input:focus { border-color: var(--red); }
+    .settings-input:focus { border-color: var(--red); outline: none; }
     .settings-input::placeholder { color: var(--subtle); }
 
     /* Accounts */
@@ -545,7 +558,7 @@ export function getSettingsPage(user: { name: string; email: string; avatar_url:
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 10px 12px;
+      padding: 14px;
       background: rgba(255,255,255,0.02);
       border: 1px solid var(--border);
       border-radius: 10px;
@@ -553,9 +566,19 @@ export function getSettingsPage(user: { name: string; email: string; avatar_url:
     }
     .account-list-label {
       font-family: 'Outfit', sans-serif;
-      font-size: 13px;
-      font-weight: 700;
+      font-size: 14px;
+      font-weight: 600;
       color: var(--bright);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .account-active-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--green);
+      display: inline-block;
     }
     .account-list-meta {
       font-family: 'JetBrains Mono', monospace;
@@ -578,31 +601,32 @@ export function getSettingsPage(user: { name: string; email: string; avatar_url:
       margin-bottom: 16px;
     }
     @media (min-width: 768px) {
-      .template-grid { grid-template-columns: repeat(6, 1fr); }
+      .template-grid { grid-template-columns: repeat(4, 1fr); }
     }
     .template-card {
-      background: rgba(255,255,255,0.02);
+      background: var(--card);
       border: 1px solid var(--border);
       border-radius: 10px;
-      padding: 10px 8px;
+      padding: 14px;
       text-align: center;
       cursor: pointer;
+      min-height: 80px;
       transition: all 0.2s;
     }
-    .template-card:hover { border-color: rgba(255,255,255,0.15); }
+    .template-card:hover { border-color: rgba(251,44,90,0.15); }
     .template-card.selected {
       border-color: var(--red);
-      background: rgba(251,44,90,0.05);
+      background: rgba(251,44,90,0.04);
     }
     .template-card .tpl-size {
       font-family: 'Outfit', sans-serif;
-      font-size: 16px;
+      font-size: 18px;
       font-weight: 700;
       color: var(--bright);
     }
     .template-card .tpl-details {
       font-family: 'JetBrains Mono', monospace;
-      font-size: 11px;
+      font-size: 10px;
       color: var(--muted);
       margin-top: 4px;
       line-height: 1.4;
@@ -660,7 +684,7 @@ export function getSettingsPage(user: { name: string; email: string; avatar_url:
       color: var(--label);
       letter-spacing: 1px;
       text-transform: uppercase;
-      margin-bottom: 6px;
+      margin-bottom: 4px;
       display: block;
     }
     .form-group { margin-bottom: 12px; }
@@ -689,6 +713,14 @@ export function getSettingsPage(user: { name: string; email: string; avatar_url:
       letter-spacing: 1px;
       text-transform: uppercase;
       margin-bottom: 10px;
+    }
+    .input-label {
+      font-size: 11px;
+      color: var(--label);
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      margin-bottom: 4px;
+      display: block;
     }
 
     /* Footer */
@@ -742,7 +774,7 @@ export function getSettingsPage(user: { name: string; email: string; avatar_url:
 
     <div class="settings-card">
       <div class="settings-card-header" onclick="toggleCard(this)">
-        <span class="settings-card-title">\u25C8 STRATEGY CONFIG</span>
+        <span class="settings-card-title">STRATEGY CONFIG</span>
         <span class="settings-card-chevron">\u25BE</span>
       </div>
       <div class="settings-card-body">
@@ -752,7 +784,7 @@ export function getSettingsPage(user: { name: string; email: string; avatar_url:
 
     <div class="settings-card">
       <div class="settings-card-header" onclick="toggleCard(this)">
-        <span class="settings-card-title">\u25C8 NOTIFICATIONS</span>
+        <span class="settings-card-title">NOTIFICATIONS</span>
         <span class="settings-card-chevron">\u25BE</span>
       </div>
       <div class="settings-card-body">
@@ -762,7 +794,7 @@ export function getSettingsPage(user: { name: string; email: string; avatar_url:
 
     <div class="settings-card">
       <div class="settings-card-header" onclick="toggleCard(this)">
-        <span class="settings-card-title">\u25C8 ACCOUNTS</span>
+        <span class="settings-card-title">ACCOUNTS</span>
         <span class="settings-card-chevron">\u25BE</span>
       </div>
       <div class="settings-card-body">
@@ -928,27 +960,27 @@ export function getSettingsPage(user: { name: string; email: string; avatar_url:
       // Kill switch
       html += '<div class="kill-switch-row' + (ksActive ? ' active' : '') + '">';
       if (ksActive) {
-        html += '<div><div class="kill-switch-label" style="color:var(--danger)">ACTIVE \\u2014 engine paused</div></div>';
+        html += '<div><div class="kill-switch-label" style="color:var(--danger)">KILL SWITCH ACTIVE</div></div>';
       } else {
-        html += '<div><div class="kill-switch-label">KILL SWITCH \\u2014 No more trades today</div></div>';
+        html += '<div><div class="kill-switch-label">KILL SWITCH</div></div>';
       }
       html += '<label class="kill-switch-toggle"><input type="checkbox" id="kill-switch-toggle"' + (ksActive ? ' checked' : '') + '><span class="kill-switch-track"></span></label>';
       html += '</div>';
       html += '<div class="kill-switch-hint">Resets at midnight ET</div>';
 
       // Session toggles
-      html += '<div class="strat-divider">SESSION</div>';
+      html += '<div class="strat-divider">SESSION FILTERS</div>';
       html += '<div class="strat-toggle-row"><div class="strat-toggle-label">Trade London sweeps</div>' + toggleHtml('strat-london', c.trade_london_sweep) + '</div>';
       html += '<div class="strat-toggle-row"><div class="strat-toggle-label">Trade NY sweeps</div>' + toggleHtml('strat-ny', c.trade_ny_sweep) + '</div>';
 
       // FVG toggles
-      html += '<div class="strat-divider">FVG</div>';
+      html += '<div class="strat-divider">FVG SETTINGS</div>';
       html += '<div class="strat-toggle-row"><div class="strat-toggle-label">Scan 1H FVGs</div>' + toggleHtml('strat-fvg1h', c.fvg_scan_1h) + '</div>';
       html += '<div class="strat-toggle-row"><div class="strat-toggle-label">Scan 4H FVGs</div>' + toggleHtml('strat-fvg4h', c.fvg_scan_4h) + '</div>';
       html += '<div class="strat-toggle-row"><div><div class="strat-toggle-label">Require IFVG for continuation</div><div class="strat-toggle-help">Only fires BASE NOTE on Inverse FVGs</div></div>' + toggleHtml('strat-ifvg', c.continuation_require_ifvg) + '</div>';
 
       // Entry settings
-      html += '<div class="strat-divider">ENTRY</div>';
+      html += '<div class="strat-divider">ENTRY FILTERS</div>';
       html += '<div class="strat-number-row"><div class="strat-toggle-label">Min R:R</div>';
       html += '<div style="text-align:right"><input type="number" class="strat-number-input" id="strat-minrr" value="' + (c.min_rr || 2.0) + '" min="1.0" max="5.0" step="0.5">';
       html += '<div class="strat-number-display" id="strat-minrr-display">' + (c.min_rr || 2.0).toFixed(1) + ':1</div></div></div>';
@@ -958,7 +990,7 @@ export function getSettingsPage(user: { name: string; email: string; avatar_url:
       html += '<div class="strat-number-display" id="strat-confidence-display">' + getFragrance(c.min_confidence || 60) + '</div></div></div>';
 
       // Position settings
-      html += '<div class="strat-divider">POSITION</div>';
+      html += '<div class="strat-divider">POSITION SIZING</div>';
       html += '<div class="strat-number-row"><div class="strat-toggle-label">Default contracts</div>';
       html += '<input type="number" class="strat-number-input" id="strat-contracts" value="' + (c.default_contracts || 1) + '" min="1" max="10" step="1"></div>';
 
@@ -1064,8 +1096,10 @@ export function getSettingsPage(user: { name: string; email: string; avatar_url:
       html += '<div class="section-label">DISCORD WEBHOOK</div>';
       html += '<div class="notif-webhook-row">';
       html += '<input class="settings-input" id="notif-webhook-input" type="text" value="' + webhookVal.replace(/"/g, '&quot;') + '" placeholder="https://discord.com/api/webhooks/...">';
-      html += '<button class="notif-btn" id="notif-save-btn">Save</button>';
+      html += '<div class="notif-btn-row">';
+      html += '<button class="notif-btn notif-btn-save" id="notif-save-btn">Save</button>';
       html += '<button class="notif-btn" id="notif-test-btn">Test</button>';
+      html += '</div>';
       html += '</div>';
       html += '<div class="notif-help">Channel Settings \\u2192 Integrations \\u2192 Webhooks \\u2192 New Webhook \\u2192 Copy URL</div>';
 
@@ -1176,9 +1210,8 @@ export function getSettingsPage(user: { name: string; email: string; avatar_url:
           var statusColor = a.is_active ? 'var(--green)' : 'var(--muted)';
           var statusText = a.is_active ? 'ACTIVE' : 'INACTIVE';
           html += '<div class="account-list-item">';
-          html += '<div><div class="account-list-label">' + (a.label || 'Account #' + a.id) + '</div>';
-          html += '<div class="account-list-meta">$' + Number(a.account_size).toLocaleString() + ' \\u00B7 ' + (a.account_type || '').toUpperCase() + ' \\u00B7 ' + (a.drawdown_type || '').toUpperCase() + ' \\u00B7 DD $' + Number(a.drawdown_limit).toLocaleString() + '</div></div>';
-          html += '<div class="account-list-status" style="color:' + statusColor + '">' + statusText + '</div>';
+          html += '<div><div class="account-list-label">' + (a.is_active ? '<span class="account-active-dot"></span>' : '') + (a.label || 'Account #' + a.id) + '</div>';
+          html += '<div class="account-list-meta">$' + Number(a.account_size).toLocaleString() + ' \\u00B7 ' + (a.account_type || '').toUpperCase() + ' \\u00B7 DD $' + Number(a.drawdown_limit).toLocaleString() + ' \\u00B7 ' + statusText + '</div></div>';
           html += '</div>';
         }
       }
@@ -1214,7 +1247,7 @@ export function getSettingsPage(user: { name: string; email: string; avatar_url:
         var sizeLabel = t.label || ('$' + Number(t.account_size).toLocaleString());
         return '<div class="template-card' + (isSelected ? ' selected' : '') + '" data-tpl-id="' + t.id + '">' +
           '<div class="tpl-size">' + sizeLabel + '</div>' +
-          '<div class="tpl-details">DD $' + Number(t.drawdown_limit).toLocaleString() + '<br>Target $' + Number(t.profit_target).toLocaleString() + '</div>' +
+          '<div class="tpl-details">DD $' + Number(t.drawdown_limit).toLocaleString() + ' \\u00B7 Target $' + Number(t.profit_target).toLocaleString() + '</div>' +
           (isStatic ? '<div class="tpl-tag">STATIC</div>' : '') +
           '</div>';
       }).join('');
