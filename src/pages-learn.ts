@@ -186,6 +186,7 @@ export function getLearnPage(user: { name: string; email: string; avatar_url: st
       }
       .kb-sidebar a {
         display: block;
+        position: relative;
         font-family: 'JetBrains Mono', monospace;
         font-size: 11px;
         letter-spacing: 1px;
@@ -197,12 +198,47 @@ export function getLearnPage(user: { name: string; email: string; avatar_url: st
         margin-bottom: 2px;
         transition: color 0.15s, background 0.15s;
       }
-      .kb-sidebar a:hover { color: var(--label); background: rgba(255,255,255,0.02); }
-      .kb-sidebar a.active { color: var(--red); background: rgba(251,44,90,0.06); }
+      .kb-sidebar a:hover { color: var(--red); background: rgba(251,44,90,0.04); }
+      .kb-sidebar a.active { color: var(--red); background: rgba(251,44,90,0.04); }
+      .kb-sidebar a.active::before {
+        content: '';
+        position: absolute;
+        left: 0;
+        top: 50%;
+        transform: translateY(-50%);
+        width: 4px;
+        height: 4px;
+        border-radius: 50%;
+        background: var(--red);
+      }
+    }
+    @media (min-width: 1025px) {
+      .kb-content-area { max-width: 800px; }
     }
     @media (max-width: 1024px) {
       .kb-sidebar { display: none; }
       .kb-layout { display: block; }
+    }
+
+    /* Article card styles */
+    .kb-article-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 16px 20px;
+      margin-bottom: 8px;
+      cursor: pointer;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      transition: border-color 0.2s;
+    }
+    .kb-article-card:hover {
+      border-color: rgba(251,44,90,0.15);
+    }
+    .kb-article-card.expanded {
+      border-left: 3px solid var(--red);
     }
 
     /* Ask AI */
@@ -474,25 +510,53 @@ export function getLearnPage(user: { name: string; email: string; avatar_url: st
             return out;
           }
 
-          catNames.forEach(function(cat) {
+          var categorySubtitles = {
+            'Alpha Futures Rules': 'Understanding your prop firm\\'s requirements',
+            'ICT Concepts': 'Core Inner Circle Trader methodology',
+            "Matthew's Strategy": 'Your complete trading playbook',
+            'Mtrade Platform': 'How to use the platform features',
+            'Platform Guide': 'Dashboard walkthrough and reference'
+          };
+
+          catNames.forEach(function(cat, catIdx) {
+            var section = document.createElement('div');
+            section.style.cssText = 'margin-top:' + (catIdx === 0 ? '0' : '40') + 'px;';
+
+            var hr = document.createElement('div');
+            hr.style.cssText = 'height:1px;background:rgba(251,44,90,0.1);margin-bottom:32px;' + (catIdx === 0 ? '' : '');
+            section.appendChild(hr);
+
             var header = document.createElement('div');
             header.textContent = cat;
             header.id = 'cat-' + cat.replace(/\\s+/g, '-').toLowerCase();
             header.dataset.catHeader = cat;
-            header.style.cssText = 'font-family:Outfit,sans-serif;font-size:14px;font-weight:700;color:var(--red-soft);text-transform:uppercase;letter-spacing:2px;margin-top:24px;margin-bottom:8px;';
-            contentContainer.appendChild(header);
+            header.style.cssText = 'font-family:Outfit,sans-serif;font-size:16px;font-weight:700;color:var(--red-soft);text-transform:uppercase;letter-spacing:3px;margin-bottom:0;';
+            section.appendChild(header);
+
+            var subtitle = document.createElement('div');
+            subtitle.textContent = categorySubtitles[cat] || '';
+            subtitle.style.cssText = 'font-size:12px;color:var(--muted);font-style:italic;margin-bottom:16px;margin-top:4px;';
+            section.appendChild(subtitle);
+
+            contentContainer.appendChild(section);
 
             categories[cat].forEach(function(article) {
               var card = document.createElement('div');
               card.className = 'kb-article-card';
-              card.style.cssText = 'background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px 16px;margin-bottom:6px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;';
+              var titleRow = document.createElement('div');
+              titleRow.style.cssText = 'display:flex;align-items:center;gap:8px;';
+              var dot = document.createElement('span');
+              dot.style.cssText = 'width:6px;height:6px;border-radius:50%;background:var(--red);flex-shrink:0;';
               var titleEl = document.createElement('span');
               titleEl.textContent = article.title;
-              titleEl.style.cssText = 'font-family:Outfit,sans-serif;font-size:13px;font-weight:600;color:var(--bright);';
+              titleEl.style.cssText = 'font-family:Outfit,sans-serif;font-size:14px;font-weight:600;color:var(--bright);';
+              titleRow.appendChild(dot);
+              titleRow.appendChild(titleEl);
               var chevron = document.createElement('span');
               chevron.textContent = '\u25B8';
-              chevron.style.cssText = 'color:var(--muted);font-size:12px;';
-              card.appendChild(titleEl);
+              chevron.className = 'kb-chevron';
+              chevron.style.cssText = 'color:var(--muted);font-size:14px;flex-shrink:0;';
+              card.appendChild(titleRow);
               card.appendChild(chevron);
 
               var expandDiv = document.createElement('div');
@@ -505,20 +569,23 @@ export function getLearnPage(user: { name: string; email: string; avatar_url: st
                 var currentlyExpanded = contentContainer.querySelector('.kb-article-card.expanded');
                 if (currentlyExpanded && currentlyExpanded !== card) {
                   var prevExpand = currentlyExpanded.querySelector('.kb-expand-area');
-                  var prevChevron = currentlyExpanded.querySelectorAll('span')[1];
+                  var prevChevron = currentlyExpanded.querySelector('.kb-chevron');
                   if (prevExpand) { prevExpand.style.maxHeight = '0px'; }
                   if (prevChevron) prevChevron.textContent = '\u25B8';
                   currentlyExpanded.classList.remove('expanded');
+                  currentlyExpanded.style.borderLeft = '';
                 }
 
                 if (card.classList.contains('expanded')) {
                   expandDiv.style.maxHeight = '0px';
                   chevron.textContent = '\u25B8';
                   card.classList.remove('expanded');
+                  card.style.borderLeft = '';
                   return;
                 }
 
                 card.classList.add('expanded');
+                card.style.borderLeft = '3px solid var(--red)';
                 chevron.textContent = '\u25BE';
                 expandDiv.innerHTML = '<div style="height:100px;border-radius:8px;background:linear-gradient(90deg,rgba(255,255,255,0.02) 25%,rgba(255,255,255,0.06) 50%,rgba(255,255,255,0.02) 75%);background-size:200% 100%;animation:shimmer 1.5s infinite;"></div>';
                 expandDiv.style.maxHeight = expandDiv.scrollHeight + 'px';
@@ -529,7 +596,8 @@ export function getLearnPage(user: { name: string; email: string; avatar_url: st
                     if (!data.content) { expandDiv.innerHTML = '<div style="font-size:12px;color:var(--muted);">No content available.</div>'; expandDiv.style.maxHeight = expandDiv.scrollHeight + 'px'; return; }
                     expandDiv.innerHTML = '';
                     var contentArea = document.createElement('div');
-                    contentArea.style.cssText = 'padding:12px 0 4px 0;border-top:1px solid var(--border);margin-top:10px;';
+                    contentArea.className = 'kb-content-area';
+                    contentArea.style.cssText = 'padding-top:16px;border-top:1px solid var(--border);margin-top:12px;';
 
                     var lines = data.content.split('\\n');
                     lines.forEach(function(line) {
