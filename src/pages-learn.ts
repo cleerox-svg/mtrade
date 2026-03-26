@@ -36,6 +36,9 @@ export function getLearnPage(user: { name: string; email: string; avatar_url: st
       font-family: 'Outfit', sans-serif;
       margin: 0;
       padding: 0;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+      text-rendering: optimizeLegibility;
     }
     .jb { font-family: 'JetBrains Mono', monospace; }
     .container {
@@ -78,7 +81,7 @@ export function getLearnPage(user: { name: string; email: string; avatar_url: st
     }
     .header-brand .tagline {
       font-family: 'JetBrains Mono', monospace;
-      font-size: 8px;
+      font-size: 11px;
       color: var(--label);
       letter-spacing: 2px;
       margin-top: 4px;
@@ -120,7 +123,7 @@ export function getLearnPage(user: { name: string; email: string; avatar_url: st
     }
     .session-label {
       font-family: 'JetBrains Mono', monospace;
-      font-size: 8px;
+      font-size: 11px;
       letter-spacing: 1px;
       text-transform: uppercase;
     }
@@ -139,7 +142,7 @@ export function getLearnPage(user: { name: string; email: string; avatar_url: st
     }
     .header-user a {
       font-family: 'JetBrains Mono', monospace;
-      font-size: 10px;
+      font-size: 11px;
       color: var(--muted);
       text-decoration: none;
       letter-spacing: 1px;
@@ -153,7 +156,7 @@ export function getLearnPage(user: { name: string; email: string; avatar_url: st
     }
     .tab-bar a {
       font-family: 'JetBrains Mono', monospace;
-      font-size: 10px;
+      font-size: 11px;
       text-transform: uppercase;
       letter-spacing: 2px;
       padding: 10px 20px;
@@ -184,7 +187,7 @@ export function getLearnPage(user: { name: string; email: string; avatar_url: st
       .kb-sidebar a {
         display: block;
         font-family: 'JetBrains Mono', monospace;
-        font-size: 9px;
+        font-size: 11px;
         letter-spacing: 1px;
         text-transform: uppercase;
         color: var(--muted);
@@ -268,7 +271,7 @@ export function getLearnPage(user: { name: string; email: string; avatar_url: st
     }
     .ask-ai-answer-label {
       font-family: 'JetBrains Mono', monospace;
-      font-size: 8px;
+      font-size: 11px;
       color: var(--red-soft);
       letter-spacing: 1.5px;
       margin-bottom: 6px;
@@ -386,7 +389,7 @@ export function getLearnPage(user: { name: string; email: string; avatar_url: st
                 title.style.cssText = 'font-size:13px;color:var(--bright);font-weight:600;font-family:Outfit,sans-serif;';
                 var tag = document.createElement('span');
                 tag.textContent = item.category;
-                tag.style.cssText = 'font-size:8px;background:rgba(255,255,255,0.04);color:var(--label);padding:2px 6px;border-radius:4px;margin-left:8px;font-family:JetBrains Mono,monospace;text-transform:uppercase;letter-spacing:1px;vertical-align:middle;';
+                tag.style.cssText = 'font-size:11px;background:rgba(255,255,255,0.04);color:var(--label);padding:2px 6px;border-radius:4px;margin-left:8px;font-family:JetBrains Mono,monospace;text-transform:uppercase;letter-spacing:1px;vertical-align:middle;';
                 title.appendChild(tag);
                 var snippet = document.createElement('div');
                 snippet.textContent = item.snippet || '';
@@ -540,7 +543,7 @@ export function getLearnPage(user: { name: string; email: string; avatar_url: st
                         bullet.style.cssText = 'display:flex;flex-direction:row;margin-bottom:4px;';
                         var arrow = document.createElement('span');
                         arrow.textContent = '\u25B8';
-                        arrow.style.cssText = 'color:var(--red-soft);font-size:8px;flex-shrink:0;margin-top:3px;';
+                        arrow.style.cssText = 'color:var(--red-soft);font-size:11px;flex-shrink:0;margin-top:3px;';
                         var btext = document.createElement('span');
                         btext.innerHTML = parseLine(line.substring(2));
                         btext.style.cssText = 'font-size:12px;color:var(--text);padding-left:4px;';
@@ -674,7 +677,7 @@ export function getLearnPage(user: { name: string; email: string; avatar_url: st
           // Add seed link at bottom
           var seedLink = document.createElement('div');
           seedLink.style.cssText = 'text-align:center;padding:24px 0 8px';
-          seedLink.innerHTML = '<a href="#" id="seed-kb" style="font-size:10px;color:var(--muted);text-decoration:none;font-family:var(--mono)">Seed Knowledge Base</a>';
+          seedLink.innerHTML = '<a href="#" id="seed-kb" style="font-size:11px;color:var(--muted);text-decoration:none;font-family:var(--mono)">Seed Knowledge Base</a>';
           contentContainer.appendChild(seedLink);
           document.getElementById('seed-kb').addEventListener('click', function(e) {
             e.preventDefault();
