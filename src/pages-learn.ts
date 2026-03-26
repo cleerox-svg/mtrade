@@ -330,6 +330,7 @@ export function getLearnPage(user: { name: string; email: string; avatar_url: st
     <div class="tab-bar">
       <a href="/app">DASHBOARD</a>
       <a href="/app/learn" class="active">LEARN</a>
+      <a href="/app/settings">SETTINGS</a>
     </div>
 
     <div id="kb-search"></div>

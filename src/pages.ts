@@ -2129,6 +2129,7 @@ export function appPage(user: { name: string; email: string; avatar_url: string 
     <div class="tab-bar">
       <a href="/app" class="active">DASHBOARD</a>
       <a href="/app/learn">LEARN</a>
+      <a href="/app/settings">SETTINGS</a>
     </div>
 
     <div class="selectors-row">
