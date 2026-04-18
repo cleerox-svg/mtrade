@@ -1,10 +1,12 @@
-import { CSSProperties, useState } from 'react';
+import { CSSProperties, ReactNode, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import GlassCard from '../components/ui/GlassCard';
 import StatCube from '../components/ui/StatCube';
 import Gauge from '../components/ui/Gauge';
 import Button from '../components/ui/Button';
-import { useDashboard, AlphaAccount, PriceEntry } from '../hooks/useDashboard';
+import TradingViewChart from '../components/charts/TradingViewChart';
+import StrategyChart, { StrategyAlertData } from '../components/charts/StrategyChart';
+import { useDashboard, AlphaAccount, Alert, PriceEntry } from '../hooks/useDashboard';
 
 type Instrument = 'ES' | 'NQ' | 'MES' | 'MNQ';
 const INSTRUMENTS: Instrument[] = ['ES', 'NQ', 'MES', 'MNQ'];
@@ -626,6 +628,100 @@ function PayoutStatus({
   );
 }
 
+function useViewport() {
+  const [width, setWidth] = useState(() =>
+    typeof window !== 'undefined' ? window.innerWidth : 1024,
+  );
+  useEffect(() => {
+    const onResize = () => setWidth(window.innerWidth);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+  return width;
+}
+
+function ChartCard({
+  title,
+  expanded,
+  onToggle,
+  children,
+}: {
+  title: string;
+  expanded: boolean;
+  onToggle: () => void;
+  children: ReactNode;
+}) {
+  const headerStyle: CSSProperties = {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+    marginBottom: 12,
+  };
+  const titleStyle: CSSProperties = {
+    fontFamily: 'Outfit, sans-serif',
+    fontSize: 11,
+    fontWeight: 700,
+    textTransform: 'uppercase',
+    letterSpacing: '0.08em',
+    color: 'var(--red-soft)',
+  };
+  const btnStyle: CSSProperties = {
+    background: 'transparent',
+    border: '1px solid var(--glass-border)',
+    color: 'var(--label)',
+    cursor: 'pointer',
+    padding: '4px 8px',
+    borderRadius: 6,
+    fontFamily: '"JetBrains Mono", monospace',
+    fontSize: 11,
+    lineHeight: 1,
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+  };
+  return (
+    <GlassCard>
+      <div style={headerStyle}>
+        <span style={titleStyle}>{title}</span>
+        <button
+          type="button"
+          onClick={onToggle}
+          aria-pressed={expanded}
+          aria-label={expanded ? 'Collapse chart' : 'Expand chart'}
+          style={btnStyle}
+        >
+          {expanded ? '\u2921' : '\u2922'}
+        </button>
+      </div>
+      {children}
+    </GlassCard>
+  );
+}
+
+function toStrategyAlert(alert: Alert | null): StrategyAlertData | null {
+  if (!alert) return null;
+  const numOrNull = (v: unknown): number | null =>
+    typeof v === 'number' && Number.isFinite(v) ? v : null;
+  return {
+    entry_price: numOrNull(alert.entry_price),
+    target_price: numOrNull(alert.target_price),
+    stop_price: numOrNull(alert.stop_price),
+    bos_level: numOrNull(alert.bos_level),
+    is_active: alert.is_active,
+  };
+}
+
+function findAlertForSymbol(
+  alerts: Alert[] | null,
+  symbol: string,
+): Alert | null {
+  if (!alerts) return null;
+  const active = alerts.filter((a) => a.is_active === 1);
+  const match = active.find((a) => a.symbol === symbol);
+  return match ?? active[0] ?? null;
+}
+
 export default function Dashboard() {
   const {
     price,
@@ -633,12 +729,23 @@ export default function Dashboard() {
     selectedAccount,
     setSelectedAccount,
     dashboard,
+    alerts,
     loading,
   } = useDashboard();
   const [instrument, setInstrument] = useState<Instrument>('NQ');
+  const [tvExpanded, setTvExpanded] = useState(false);
+  const [stratExpanded, setStratExpanded] = useState(false);
+  const viewportWidth = useViewport();
+  const isDesktop = viewportWidth >= 1024;
 
   const selectedAccountData = accounts?.find((a) => a.id === selectedAccount);
   const priceEntry = price ? price[priceSymbolFor(instrument)] ?? null : null;
+  const strategyAlert = toStrategyAlert(
+    findAlertForSymbol(alerts, priceSymbolFor(instrument)),
+  );
+
+  const tvHeight = tvExpanded ? 500 : isDesktop ? 400 : 320;
+  const stratHeight = stratExpanded ? 450 : isDesktop ? 360 : 260;
 
   const sectionStyle: CSSProperties = {
     display: 'flex',
@@ -654,17 +761,50 @@ export default function Dashboard() {
     justifyContent: 'space-between',
   };
 
-  return (
-    <div style={sectionStyle}>
-      <style>{`
-        @media (min-width: 640px) {
-          .dashboard-stats-grid { grid-template-columns: repeat(3, minmax(0, 1fr)) !important; }
-        }
-        @media (min-width: 1024px) {
-          .dashboard-stats-grid { grid-template-columns: repeat(6, minmax(0, 1fr)) !important; }
-        }
-      `}</style>
+  const gridStyle: CSSProperties = {
+    display: 'grid',
+    gridTemplateColumns: isDesktop ? '60fr 40fr' : '1fr',
+    gap: 16,
+    alignItems: 'start',
+  };
 
+  const columnStyle: CSSProperties = {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 16,
+    minWidth: 0,
+  };
+
+  const chartsColumn = (
+    <div style={columnStyle}>
+      <ChartCard
+        title="◆ TRADINGVIEW"
+        expanded={tvExpanded}
+        onToggle={() => setTvExpanded((v) => !v)}
+      >
+        <TradingViewChart
+          symbol={instrument}
+          height={tvHeight}
+          expanded={tvExpanded}
+        />
+      </ChartCard>
+      <ChartCard
+        title="◆ STRATEGY CHART"
+        expanded={stratExpanded}
+        onToggle={() => setStratExpanded((v) => !v)}
+      >
+        <StrategyChart
+          instrument={instrument}
+          height={stratHeight}
+          expanded={stratExpanded}
+          alertData={strategyAlert}
+        />
+      </ChartCard>
+    </div>
+  );
+
+  const sideColumn = (
+    <div style={columnStyle}>
       <LivePrice price={priceEntry} instrument={instrument} loading={loading} />
 
       <div style={controlRowStyle}>
@@ -686,6 +826,24 @@ export default function Dashboard() {
         account={selectedAccountData}
         loading={loading}
       />
+    </div>
+  );
+
+  return (
+    <div style={sectionStyle}>
+      <style>{`
+        @media (min-width: 640px) {
+          .dashboard-stats-grid { grid-template-columns: repeat(3, minmax(0, 1fr)) !important; }
+        }
+        @media (min-width: 1024px) {
+          .dashboard-stats-grid { grid-template-columns: repeat(3, minmax(0, 1fr)) !important; }
+        }
+      `}</style>
+
+      <div style={gridStyle}>
+        {chartsColumn}
+        {sideColumn}
+      </div>
     </div>
   );
 }
