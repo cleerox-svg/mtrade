@@ -130,3 +130,24 @@ body {
 .session-dot-inactive {
   background: var(--subtle);
 }
+
+@keyframes mtrade-shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+.skeleton-shimmer {
+  background: linear-gradient(
+    90deg,
+    rgba(14, 14, 20, 0.85) 25%,
+    rgba(30, 30, 42, 0.9) 50%,
+    rgba(14, 14, 20, 0.85) 75%
+  );
+  background-size: 200% 100%;
+  animation: mtrade-shimmer 1.5s infinite;
+  border-radius: 6px;
+}
