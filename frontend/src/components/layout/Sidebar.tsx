@@ -1,4 +1,5 @@
 import { NavLink } from 'react-router-dom';
+import { useEffect, useState } from 'react';
 import type { CSSProperties, ReactNode } from 'react';
 import type { AuthUser } from '../../hooks/useAuth';
 
@@ -138,6 +139,48 @@ const NAV_ITEMS: NavItem[] = [
   { to: '/app/settings', label: 'Settings', icon: <GearIcon /> },
 ];
 
+function useAlertIndicator() {
+  const [active, setActive] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function load() {
+      try {
+        const res = await fetch('/api/alerts/active', { credentials: 'same-origin' });
+        if (!res.ok) {
+          if (!cancelled) setActive(false);
+          return;
+        }
+        const data = (await res.json()) as Array<{
+          is_active?: number;
+          alert_type?: string;
+        }>;
+        if (cancelled) return;
+        const has = Array.isArray(data)
+          ? data.some(
+              (a) =>
+                a.is_active === 1 &&
+                (a.alert_type === 'ready' || a.alert_type === 'execute'),
+            )
+          : false;
+        setActive(has);
+      } catch {
+        if (!cancelled) setActive(false);
+      }
+    }
+
+    load();
+    const id = window.setInterval(load, 10_000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+    };
+  }, []);
+
+  return active;
+}
+
 export default function Sidebar({
   collapsed,
   onToggleCollapse,
@@ -146,6 +189,7 @@ export default function Sidebar({
   user,
 }: SidebarProps) {
   const width = collapsed ? 64 : 240;
+  const alertActive = useAlertIndicator();
 
   const asideStyle: CSSProperties = {
     width,
@@ -217,21 +261,46 @@ export default function Sidebar({
         </div>
 
         <nav className="flex-1 overflow-y-auto py-3" aria-label="Main">
-          {NAV_ITEMS.map((item) => (
-            <NavLink
-              key={item.to}
-              to={item.to}
-              end={item.end}
-              onClick={onCloseMobile}
-              className={({ isActive }) =>
-                `sidebar-nav-item${isActive ? ' is-active' : ''}${collapsed ? ' is-collapsed' : ''}`
-              }
-              title={collapsed ? item.label : undefined}
-            >
-              <span className="sidebar-nav-icon">{item.icon}</span>
-              {!collapsed && <span className="sidebar-nav-label">{item.label}</span>}
-            </NavLink>
-          ))}
+          {NAV_ITEMS.map((item) => {
+            const showDot = alertActive && item.label === 'Dashboard';
+            const dotStyle: CSSProperties = {
+              width: 8,
+              height: 8,
+              borderRadius: 9999,
+              background: 'var(--red)',
+              boxShadow: '0 0 8px var(--red), 0 0 14px rgba(251,44,90,0.6)',
+              animation: 'mtrade-pulse 1.4s ease-in-out infinite',
+              flexShrink: 0,
+            };
+            return (
+              <NavLink
+                key={item.to}
+                to={item.to}
+                end={item.end}
+                onClick={onCloseMobile}
+                className={({ isActive }) =>
+                  `sidebar-nav-item${isActive ? ' is-active' : ''}${collapsed ? ' is-collapsed' : ''}`
+                }
+                title={collapsed ? item.label : undefined}
+                style={{ position: 'relative' }}
+              >
+                <span className="sidebar-nav-icon">{item.icon}</span>
+                {!collapsed && <span className="sidebar-nav-label">{item.label}</span>}
+                {showDot && !collapsed && (
+                  <span
+                    aria-label="Alert active"
+                    style={{ ...dotStyle, marginLeft: 'auto' }}
+                  />
+                )}
+                {showDot && collapsed && (
+                  <span
+                    aria-label="Alert active"
+                    style={{ ...dotStyle, position: 'absolute', top: 8, right: 10 }}
+                  />
+                )}
+              </NavLink>
+            );
+          })}
         </nav>
 
         <div
