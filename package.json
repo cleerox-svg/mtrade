@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
+    "build:frontend": "cd frontend && npm install && npm run build",
     "db:create": "wrangler d1 create mtrade-db",
     "db:migrate:local": "wrangler d1 migrations apply mtrade-db --local",
     "db:migrate:remote": "wrangler d1 migrations apply mtrade-db --remote"
