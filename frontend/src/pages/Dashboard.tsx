@@ -6,6 +6,9 @@ import Gauge from '../components/ui/Gauge';
 import Button from '../components/ui/Button';
 import TradingViewChart from '../components/charts/TradingViewChart';
 import StrategyChart, { StrategyAlertData } from '../components/charts/StrategyChart';
+import PhaseTracker from '../components/signals/PhaseTracker';
+import AlertOverlay from '../components/signals/AlertOverlay';
+import AIAnalysis from '../components/ai/AIAnalysis';
 import { useDashboard, AlphaAccount, Alert, PriceEntry } from '../hooks/useDashboard';
 
 type Instrument = 'ES' | 'NQ' | 'MES' | 'MNQ';
@@ -803,29 +806,54 @@ export default function Dashboard() {
     </div>
   );
 
+  const priceBlock = (
+    <LivePrice price={priceEntry} instrument={instrument} loading={loading} />
+  );
+
+  const controlRow = (
+    <div style={controlRowStyle}>
+      <AccountSelector
+        accounts={accounts}
+        loading={loading}
+        selectedId={selectedAccount}
+        onSelect={setSelectedAccount}
+      />
+      <InstrumentSelector value={instrument} onChange={setInstrument} />
+    </div>
+  );
+
+  const statsBlock = <StatsSection dashboard={dashboard} loading={loading} />;
+  const gaugesBlock = <GaugesSection dashboard={dashboard} loading={loading} />;
+  const payoutBlock = (
+    <PayoutStatus
+      dashboard={dashboard}
+      account={selectedAccountData}
+      loading={loading}
+    />
+  );
+
   const sideColumn = (
     <div style={columnStyle}>
-      <LivePrice price={priceEntry} instrument={instrument} loading={loading} />
+      {priceBlock}
+      {controlRow}
+      <PhaseTracker />
+      <AIAnalysis />
+      {statsBlock}
+      {gaugesBlock}
+      {payoutBlock}
+    </div>
+  );
 
-      <div style={controlRowStyle}>
-        <AccountSelector
-          accounts={accounts}
-          loading={loading}
-          selectedId={selectedAccount}
-          onSelect={setSelectedAccount}
-        />
-        <InstrumentSelector value={instrument} onChange={setInstrument} />
-      </div>
-
-      <StatsSection dashboard={dashboard} loading={loading} />
-
-      <GaugesSection dashboard={dashboard} loading={loading} />
-
-      <PayoutStatus
-        dashboard={dashboard}
-        account={selectedAccountData}
-        loading={loading}
-      />
+  const mobileStack = (
+    <div style={columnStyle}>
+      {priceBlock}
+      {controlRow}
+      {chartsColumn}
+      <PhaseTracker />
+      <AIAnalysis />
+      {statsBlock}
+      {gaugesBlock}
+      {payoutBlock}
     </div>
   );
 
@@ -840,10 +868,16 @@ export default function Dashboard() {
         }
       `}</style>
 
-      <div style={gridStyle}>
-        {chartsColumn}
-        {sideColumn}
-      </div>
+      <AlertOverlay />
+
+      {isDesktop ? (
+        <div style={gridStyle}>
+          {chartsColumn}
+          {sideColumn}
+        </div>
+      ) : (
+        mobileStack
+      )}
     </div>
   );
 }
