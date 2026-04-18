@@ -1,0 +1,63 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg-primary: #08080c;
+  --bg-card: rgba(14, 14, 20, 0.85);
+  --bg-card-hover: rgba(20, 20, 28, 0.9);
+  --glass-border: rgba(255, 255, 255, 0.06);
+  --glass-border-hover: rgba(251, 44, 90, 0.15);
+  --red: #fb2c5a;
+  --red-soft: #fb7185;
+  --red-glow: rgba(251, 44, 90, 0.15);
+  --white: #ffffff;
+  --bright: #f1f5f9;
+  --text: #cbd5e1;
+  --label: #94a3b8;
+  --muted: #64748b;
+  --subtle: #475569;
+  --green: #34d399;
+  --amber: #fbbf24;
+  --danger: #ef4444;
+}
+
+html,
+body,
+#root {
+  min-height: 100vh;
+}
+
+body {
+  margin: 0;
+  background-color: var(--bg-primary);
+  color: var(--text);
+  font-family: 'Outfit', system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--red) rgba(8, 8, 12, 0.9);
+}
+
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+*::-webkit-scrollbar-track {
+  background: rgba(8, 8, 12, 0.9);
+  border-radius: 4px;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: var(--red);
+  border-radius: 4px;
+  box-shadow: 0 0 8px var(--red-glow);
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: var(--red-soft);
+}
