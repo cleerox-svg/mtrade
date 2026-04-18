@@ -61,3 +61,72 @@ body {
 *::-webkit-scrollbar-thumb:hover {
   background: var(--red-soft);
 }
+
+.sidebar-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  margin: 2px 8px;
+  border-radius: 10px;
+  border-left: 3px solid transparent;
+  color: var(--muted);
+  font-family: 'Outfit', system-ui, sans-serif;
+  font-size: 13px;
+  font-weight: 500;
+  text-decoration: none;
+  transition: background-color 140ms ease, color 140ms ease, border-color 140ms ease;
+}
+
+.sidebar-nav-item:hover {
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--bright);
+}
+
+.sidebar-nav-item.is-active {
+  background: rgba(251, 44, 90, 0.08);
+  color: var(--red);
+  border-left-color: var(--red);
+}
+
+.sidebar-nav-item.is-collapsed {
+  justify-content: center;
+  padding: 12px 0;
+}
+
+.sidebar-nav-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+}
+
+.sidebar-nav-label {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+@keyframes mtrade-pulse {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.55;
+    transform: scale(1.15);
+  }
+}
+
+.session-dot-active {
+  background: var(--red);
+  box-shadow: 0 0 8px var(--red), 0 0 14px var(--red-glow);
+  animation: mtrade-pulse 1.8s ease-in-out infinite;
+}
+
+.session-dot-inactive {
+  background: var(--subtle);
+}
