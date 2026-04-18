@@ -37,6 +37,106 @@ async function callHaiku(env: Env, systemPrompt: string, userPrompt: string): Pr
   }
 }
 
+async function buildChartSnapshot(
+  env: Env,
+  instrumentId: number | null,
+  dateStr: string
+): Promise<string | null> {
+  if (!instrumentId) return null;
+  const { results: candles } = await env.DB.prepare(
+    `SELECT timestamp, timeframe, open, high, low, close, volume FROM candles
+     WHERE instrument_id = ? AND timestamp <= ?
+     ORDER BY timestamp DESC LIMIT 60`
+  ).bind(instrumentId, `${dateStr}T23:59:59Z`).all();
+
+  const session = await env.DB.prepare(
+    `SELECT london_high, london_low, ny_high, ny_low, asia_high, asia_low
+     FROM sessions WHERE instrument_id = ? AND date = ?`
+  ).bind(instrumentId, dateStr).first();
+
+  return JSON.stringify({
+    candles: candles.reverse(),
+    session: session ?? null,
+    captured_at: new Date().toISOString(),
+  });
+}
+
+async function createJournalFromTradeLog(
+  env: Env,
+  userId: string,
+  tradeLogId: number,
+  opts: { setup_id?: number | null; notes?: string | null; tags?: string | null } = {}
+): Promise<number | null> {
+  const trade = await env.DB.prepare(
+    'SELECT * FROM trade_log WHERE id = ? AND user_id = ?'
+  ).bind(tradeLogId, userId).first<Record<string, unknown>>();
+  if (!trade) return null;
+
+  const existing = await env.DB.prepare(
+    'SELECT id FROM journal_entries WHERE trade_log_id = ? AND user_id = ?'
+  ).bind(tradeLogId, userId).first<{ id: number }>();
+  if (existing) return existing.id;
+
+  const setupId = (opts.setup_id ?? trade.setup_id ?? null) as number | null;
+  let setup: Record<string, unknown> | null = null;
+  if (setupId) {
+    setup = await env.DB.prepare('SELECT * FROM setups WHERE id = ?')
+      .bind(setupId).first<Record<string, unknown>>();
+  }
+
+  const entryPrice = trade.entry_price as number | null;
+  const exitPrice = trade.exit_price as number | null;
+  const stopPrice = (setup?.stop_price ?? null) as number | null;
+  const targetPrice = (setup?.target_price ?? null) as number | null;
+  const rrTarget = (setup?.risk_reward ?? null) as number | null;
+
+  let rrAchieved: number | null = null;
+  if (entryPrice != null && exitPrice != null && stopPrice != null) {
+    const risk = Math.abs(entryPrice - stopPrice);
+    if (risk > 0) {
+      const reward = (trade.direction === 'long')
+        ? exitPrice - entryPrice
+        : entryPrice - exitPrice;
+      rrAchieved = Math.round((reward / risk) * 100) / 100;
+    }
+  }
+
+  const snapshot = await buildChartSnapshot(
+    env,
+    trade.instrument_id as number | null,
+    trade.date as string
+  );
+
+  const result = await env.DB.prepare(
+    `INSERT INTO journal_entries
+      (user_id, trade_log_id, setup_id, instrument_id, date, direction, contracts,
+       entry_price, stop_price, target_price, exit_price, pnl,
+       rr_target, rr_achieved, setup_phase, chart_snapshot_svg, notes, tags)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  ).bind(
+    userId,
+    tradeLogId,
+    setupId,
+    trade.instrument_id ?? null,
+    trade.date,
+    trade.direction,
+    trade.contracts ?? null,
+    entryPrice,
+    stopPrice,
+    targetPrice,
+    exitPrice,
+    trade.pnl ?? null,
+    rrTarget,
+    rrAchieved,
+    (setup?.phase ?? null) as number | null,
+    snapshot,
+    opts.notes ?? (trade.notes as string | null) ?? null,
+    opts.tags ?? null
+  ).run();
+
+  return result.meta.last_row_id as number;
+}
+
 async function computeDashboardMetrics(
   env: Env,
   userId: string
@@ -390,7 +490,14 @@ export async function handleApiRoutes(
       body.direction, body.contracts ?? 1, body.entry_price,
       body.exit_price, body.pnl, body.notes ?? null
     ).run();
-    return json({ id: result.meta.last_row_id }, 201);
+    const tradeLogId = result.meta.last_row_id as number;
+    let journalId: number | null = null;
+    try {
+      journalId = await createJournalFromTradeLog(env, user.sub, tradeLogId);
+    } catch (e) {
+      console.error('journal auto-create failed', e);
+    }
+    return json({ id: tradeLogId, journal_id: journalId }, 201);
   }
 
   // GET /api/trade-log
@@ -1632,6 +1739,199 @@ If you have linked Alpha Futures accounts, this section shows your **TACH gauges
       'SELECT * FROM alpha_account_templates ORDER BY account_size ASC'
     ).all();
     return json(results);
+  }
+
+  // GET /api/journal
+  if (path === '/api/journal' && method === 'GET') {
+    const days = parseInt(url.searchParams.get('days') || '30', 10);
+    const instrument = url.searchParams.get('instrument');
+    const since = new Date(Date.now() - days * 86400000).toISOString().substring(0, 10);
+    const cols = `je.id, je.user_id, je.trade_log_id, je.setup_id, je.instrument_id, je.date,
+                  je.direction, je.contracts, je.entry_price, je.stop_price, je.target_price,
+                  je.exit_price, je.pnl, je.rr_target, je.rr_achieved, je.setup_phase,
+                  je.notes, je.tags, je.created_at,
+                  (je.ai_analysis IS NOT NULL) AS has_ai_analysis,
+                  (je.chart_snapshot_svg IS NOT NULL) AS has_chart_snapshot,
+                  i.symbol`;
+    if (instrument) {
+      const { results } = await env.DB.prepare(
+        `SELECT ${cols} FROM journal_entries je
+         LEFT JOIN instruments i ON je.instrument_id = i.id
+         WHERE je.user_id = ? AND je.date >= ? AND i.symbol = ?
+         ORDER BY je.date DESC, je.created_at DESC`
+      ).bind(user.sub, since, instrument).all();
+      return json(results);
+    }
+    const { results } = await env.DB.prepare(
+      `SELECT ${cols} FROM journal_entries je
+       LEFT JOIN instruments i ON je.instrument_id = i.id
+       WHERE je.user_id = ? AND je.date >= ?
+       ORDER BY je.date DESC, je.created_at DESC`
+    ).bind(user.sub, since).all();
+    return json(results);
+  }
+
+  // POST /api/journal
+  if (path === '/api/journal' && method === 'POST') {
+    const body = await request.json<Record<string, unknown>>();
+    const tradeLogId = body.trade_log_id as number | undefined;
+    if (!tradeLogId) return json({ error: 'trade_log_id required' }, 400);
+    const id = await createJournalFromTradeLog(env, user.sub, tradeLogId, {
+      setup_id: (body.setup_id as number | null | undefined) ?? null,
+      notes: (body.notes as string | null | undefined) ?? null,
+      tags: (body.tags as string | null | undefined) ?? null,
+    });
+    if (!id) return json({ error: 'trade not found' }, 404);
+    return json({ id }, 201);
+  }
+
+  // POST /api/journal/auto-create
+  if (path === '/api/journal/auto-create' && method === 'POST') {
+    const body = await request.json<{ trade_log_id?: number }>();
+    if (!body.trade_log_id) return json({ error: 'trade_log_id required' }, 400);
+    const id = await createJournalFromTradeLog(env, user.sub, body.trade_log_id);
+    if (!id) return json({ error: 'trade not found' }, 404);
+    return json({ id }, 201);
+  }
+
+  // /api/journal/:id/...
+  const journalIdMatch = path.match(/^\/api\/journal\/(\d+)(\/analyze|\/similar)?$/);
+  if (journalIdMatch) {
+    const id = parseInt(journalIdMatch[1], 10);
+    const sub = journalIdMatch[2];
+
+    // POST /api/journal/:id/analyze
+    if (sub === '/analyze' && method === 'POST') {
+      const entry = await env.DB.prepare(
+        `SELECT je.*, i.symbol FROM journal_entries je
+         LEFT JOIN instruments i ON je.instrument_id = i.id
+         WHERE je.id = ? AND je.user_id = ?`
+      ).bind(id, user.sub).first<Record<string, unknown>>();
+      if (!entry) return json({ error: 'not found' }, 404);
+
+      let setup: Record<string, unknown> | null = null;
+      if (entry.setup_id) {
+        setup = await env.DB.prepare('SELECT * FROM setups WHERE id = ?')
+          .bind(entry.setup_id).first<Record<string, unknown>>();
+      }
+
+      const outcome = (entry.pnl as number ?? 0) >= 0 ? 'win' : 'loss';
+      const tradeContext = {
+        instrument: entry.symbol,
+        date: entry.date,
+        direction: entry.direction,
+        contracts: entry.contracts,
+        entry_price: entry.entry_price,
+        stop_price: entry.stop_price,
+        target_price: entry.target_price,
+        exit_price: entry.exit_price,
+        pnl: entry.pnl,
+        rr_target: entry.rr_target,
+        rr_achieved: entry.rr_achieved,
+        outcome,
+        setup_phase: entry.setup_phase,
+        notes: entry.notes,
+        setup: setup ? {
+          sweep_direction: setup.sweep_direction,
+          sweep_level: setup.sweep_level,
+          phase: setup.phase,
+          status: setup.status,
+          confidence: setup.confidence,
+        } : null,
+      };
+
+      const systemPrompt = `You are analyzing a completed futures trade for Matthew's ICT strategy journal. Review the trade and provide:
+1. Entry reasoning: why this setup qualified based on ICT methodology
+2. What worked: aspects of the trade that played out as expected
+3. What didn't work: if it lost, what went wrong. If it won, any risks that were present
+4. Lessons: one key takeaway for future trades
+5. Rating: 1-5 stars for setup quality regardless of outcome
+Respond in JSON: { entry_reasoning, what_worked, what_didnt, lessons, rating }`;
+
+      let analysis: Record<string, unknown>;
+      try {
+        analysis = await callHaiku(env, systemPrompt, JSON.stringify(tradeContext)) as Record<string, unknown>;
+      } catch (e) {
+        return json({ error: 'analysis failed', detail: String(e) }, 502);
+      }
+
+      await env.DB.prepare(
+        `UPDATE journal_entries
+         SET ai_analysis = ?, ai_entry_reasoning = ?
+         WHERE id = ? AND user_id = ?`
+      ).bind(
+        JSON.stringify(analysis),
+        (analysis.entry_reasoning as string | undefined) ?? null,
+        id,
+        user.sub
+      ).run();
+
+      return json(analysis);
+    }
+
+    // GET /api/journal/:id/similar
+    if (sub === '/similar' && method === 'GET') {
+      const entry = await env.DB.prepare(
+        'SELECT * FROM journal_entries WHERE id = ? AND user_id = ?'
+      ).bind(id, user.sub).first<Record<string, unknown>>();
+      if (!entry) return json({ error: 'not found' }, 404);
+
+      let setup: Record<string, unknown> | null = null;
+      if (entry.setup_id) {
+        setup = await env.DB.prepare('SELECT * FROM setups WHERE id = ?')
+          .bind(entry.setup_id).first<Record<string, unknown>>();
+      }
+
+      let fvgTimeframe: string | null = null;
+      if (setup?.fvg_id) {
+        const fvg = await env.DB.prepare(
+          'SELECT timeframe FROM fair_value_gaps WHERE id = ?'
+        ).bind(setup.fvg_id).first<{ timeframe: string }>();
+        fvgTimeframe = fvg?.timeframe ?? null;
+      }
+
+      const sweepDir = setup?.sweep_direction ?? null;
+      const query = `
+        SELECT s.id, s.date, s.sweep_direction, s.phase, s.status, s.risk_reward,
+               s.entry_price, s.target_price, s.stop_price, s.confidence,
+               i.symbol, f.timeframe AS fvg_timeframe
+        FROM setups s
+        LEFT JOIN instruments i ON s.instrument_id = i.id
+        LEFT JOIN fair_value_gaps f ON s.fvg_id = f.id
+        WHERE s.user_id = ?
+          AND s.id != COALESCE(?, -1)
+          AND s.status IN ('won','lost','expired','skipped')
+          AND (? IS NULL OR s.sweep_direction = ?)
+          AND (? IS NULL OR s.instrument_id = ?)
+          AND (? IS NULL OR f.timeframe = ?)
+        ORDER BY s.date DESC
+        LIMIT 5`;
+
+      const { results: matches } = await env.DB.prepare(query).bind(
+        user.sub,
+        setup?.id ?? null,
+        sweepDir, sweepDir,
+        entry.instrument_id ?? null, entry.instrument_id ?? null,
+        fvgTimeframe, fvgTimeframe
+      ).all();
+
+      await env.DB.prepare(
+        'UPDATE journal_entries SET similar_setups_json = ? WHERE id = ? AND user_id = ?'
+      ).bind(JSON.stringify(matches), id, user.sub).run();
+
+      return json({ matches });
+    }
+
+    // GET /api/journal/:id
+    if (!sub && method === 'GET') {
+      const entry = await env.DB.prepare(
+        `SELECT je.*, i.symbol FROM journal_entries je
+         LEFT JOIN instruments i ON je.instrument_id = i.id
+         WHERE je.id = ? AND je.user_id = ?`
+      ).bind(id, user.sub).first();
+      if (!entry) return json({ error: 'not found' }, 404);
+      return json(entry);
+    }
   }
 
   return json({ error: 'Not found' }, 404);
