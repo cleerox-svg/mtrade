@@ -9,6 +9,8 @@ import StrategyChart, { StrategyAlertData } from '../components/charts/StrategyC
 import PhaseTracker from '../components/signals/PhaseTracker';
 import AlertOverlay from '../components/signals/AlertOverlay';
 import AIAnalysis from '../components/ai/AIAnalysis';
+import PnLLog from '../components/trading/PnLLog';
+import TradeEntryModal from '../components/trading/TradeEntryModal';
 import { useDashboard, AlphaAccount, Alert, PriceEntry } from '../hooks/useDashboard';
 
 type Instrument = 'ES' | 'NQ' | 'MES' | 'MNQ';
@@ -734,12 +736,18 @@ export default function Dashboard() {
     dashboard,
     alerts,
     loading,
+    refetch,
   } = useDashboard();
   const [instrument, setInstrument] = useState<Instrument>('NQ');
   const [tvExpanded, setTvExpanded] = useState(false);
   const [stratExpanded, setStratExpanded] = useState(false);
+  const [pnlLogVersion, setPnlLogVersion] = useState(0);
   const viewportWidth = useViewport();
   const isDesktop = viewportWidth >= 1024;
+
+  useEffect(() => {
+    setPnlLogVersion((v) => v + 1);
+  }, [dashboard]);
 
   const selectedAccountData = accounts?.find((a) => a.id === selectedAccount);
   const priceEntry = price ? price[priceSymbolFor(instrument)] ?? null : null;
@@ -831,6 +839,9 @@ export default function Dashboard() {
       loading={loading}
     />
   );
+  const pnlLogBlock = (
+    <PnLLog accountId={selectedAccount} refreshKey={pnlLogVersion} />
+  );
 
   const sideColumn = (
     <div style={columnStyle}>
@@ -840,6 +851,7 @@ export default function Dashboard() {
       <AIAnalysis />
       {statsBlock}
       {gaugesBlock}
+      {pnlLogBlock}
       {payoutBlock}
     </div>
   );
@@ -852,6 +864,7 @@ export default function Dashboard() {
       <PhaseTracker />
       <AIAnalysis />
       {statsBlock}
+      {pnlLogBlock}
       {gaugesBlock}
       {payoutBlock}
     </div>
@@ -878,6 +891,8 @@ export default function Dashboard() {
       ) : (
         mobileStack
       )}
+
+      <TradeEntryModal accountId={selectedAccount} onLogged={refetch} />
     </div>
   );
 }
