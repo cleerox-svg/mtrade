@@ -8,6 +8,8 @@ export interface PriceEntry {
 
 export type PriceMap = Record<string, PriceEntry>;
 
+export type AccountPhase = 'evaluation' | 'funded';
+
 export interface AlphaAccount {
   id: number;
   label: string;
@@ -20,6 +22,7 @@ export interface AlphaAccount {
   scaling_limit: number;
   is_active?: number;
   created_at?: string;
+  phase?: AccountPhase;
 }
 
 export interface PayoutChecks {

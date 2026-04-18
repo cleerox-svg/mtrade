@@ -11,7 +11,14 @@ import AlertOverlay from '../components/signals/AlertOverlay';
 import AIAnalysis from '../components/ai/AIAnalysis';
 import PnLLog from '../components/trading/PnLLog';
 import TradeEntryModal from '../components/trading/TradeEntryModal';
-import { useDashboard, AlphaAccount, Alert, PriceEntry } from '../hooks/useDashboard';
+import {
+  useDashboard,
+  AlphaAccount,
+  AccountPhase,
+  Alert,
+  PriceEntry,
+} from '../hooks/useDashboard';
+import { useAuth } from '../hooks/useAuth';
 
 type Instrument = 'ES' | 'NQ' | 'MES' | 'MNQ';
 const INSTRUMENTS: Instrument[] = ['ES', 'NQ', 'MES', 'MNQ'];
@@ -290,16 +297,166 @@ function AccountPill({
   );
 }
 
+const MATTHEW_EMAIL = 'mleerox91@gmail.com';
+
+const MATTHEW_50K_ADVANCED_PAYLOAD = {
+  label: '50K Advanced Eval',
+  account_size: 50000,
+  account_type: 'advanced',
+  drawdown_type: 'eod',
+  drawdown_limit: 1750,
+  profit_target: 4000,
+  max_contracts: 5,
+  scaling_limit: 5,
+} as const;
+
+function AdvancedSetupPrompt({ onCreated }: { onCreated: () => void }) {
+  const [creating, setCreating] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const createAccount = async () => {
+    setCreating(true);
+    setError(null);
+    try {
+      const res = await fetch('/api/alpha/accounts', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(MATTHEW_50K_ADVANCED_PAYLOAD),
+      });
+      if (!res.ok) throw new Error(`Request failed ${res.status}`);
+      onCreated();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Unable to create account');
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  return (
+    <GlassCard>
+      <div
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 10,
+          padding: '4px 0',
+        }}
+      >
+        <div
+          style={{
+            fontFamily: '"JetBrains Mono", monospace',
+            fontSize: 10,
+            letterSpacing: '0.16em',
+            color: 'var(--amber)',
+            textTransform: 'uppercase',
+          }}
+        >
+          ◆ Quick setup
+        </div>
+        <div
+          style={{
+            fontFamily: 'Outfit, sans-serif',
+            fontSize: 16,
+            fontWeight: 600,
+            color: 'var(--bright)',
+          }}
+        >
+          Set up your Alpha Futures 50K Advanced account
+        </div>
+        <div
+          style={{
+            fontFamily: 'Outfit, sans-serif',
+            fontSize: 13,
+            color: 'var(--muted)',
+            lineHeight: 1.5,
+          }}
+        >
+          EOD drawdown · $1,750 MLL · $4,000 profit target · 5 contracts.
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          <Button
+            variant="primary"
+            size="sm"
+            onClick={createAccount}
+            disabled={creating}
+          >
+            {creating ? 'Creating…' : 'Create 50K Advanced Eval'}
+          </Button>
+          <Link
+            to="/app/settings"
+            style={{
+              color: 'var(--label)',
+              textDecoration: 'none',
+              fontFamily: '"JetBrains Mono", monospace',
+              fontSize: 11,
+              letterSpacing: '0.08em',
+              textTransform: 'uppercase',
+            }}
+          >
+            Custom setup →
+          </Link>
+        </div>
+        {error && (
+          <div
+            style={{
+              fontFamily: '"JetBrains Mono", monospace',
+              fontSize: 11,
+              color: 'var(--danger)',
+            }}
+          >
+            {error}
+          </div>
+        )}
+      </div>
+    </GlassCard>
+  );
+}
+
+function PhaseTag({ phase }: { phase: AccountPhase }) {
+  const isFunded = phase === 'funded';
+  const color = isFunded ? 'var(--green)' : 'var(--amber)';
+  const bg = isFunded ? 'rgba(52,211,153,0.12)' : 'rgba(251,191,36,0.12)';
+  const border = isFunded ? 'rgba(52,211,153,0.45)' : 'rgba(251,191,36,0.45)';
+  const label = isFunded ? 'FUNDED' : 'EVALUATION';
+
+  return (
+    <span
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        padding: '4px 10px',
+        borderRadius: 999,
+        fontFamily: '"JetBrains Mono", monospace',
+        fontSize: 10,
+        fontWeight: 700,
+        letterSpacing: '0.14em',
+        color,
+        backgroundColor: bg,
+        border: `1px solid ${border}`,
+      }}
+    >
+      {label}
+    </span>
+  );
+}
+
 function AccountSelector({
   accounts,
   loading,
   selectedId,
   onSelect,
+  selectedPhase,
+  showMatthewPrompt,
+  onMatthewCreated,
 }: {
   accounts: AlphaAccount[] | null;
   loading: boolean;
   selectedId: number | null;
   onSelect: (id: number) => void;
+  selectedPhase: AccountPhase | null;
+  showMatthewPrompt: boolean;
+  onMatthewCreated: () => void;
 }) {
   if (loading && !accounts) {
     return (
@@ -312,6 +469,9 @@ function AccountSelector({
   }
 
   if (!accounts || accounts.length === 0) {
+    if (showMatthewPrompt) {
+      return <AdvancedSetupPrompt onCreated={onMatthewCreated} />;
+    }
     return (
       <div
         style={{
@@ -339,7 +499,7 @@ function AccountSelector({
   }
 
   return (
-    <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+    <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
       {accounts.map((a) => (
         <AccountPill
           key={a.id}
@@ -348,6 +508,7 @@ function AccountSelector({
           onClick={() => onSelect(a.id)}
         />
       ))}
+      {selectedPhase && <PhaseTag phase={selectedPhase} />}
     </div>
   );
 }
@@ -391,9 +552,11 @@ function InstrumentSelector({
 
 function StatsSection({
   dashboard,
+  account,
   loading,
 }: {
   dashboard: ReturnType<typeof useDashboard>['dashboard'];
+  account: AlphaAccount | undefined;
   loading: boolean;
 }) {
   const gridStyle: CSSProperties = {
@@ -443,6 +606,10 @@ function StatsSection({
   const gripColor = gripLocked ? 'var(--red)' : 'var(--amber)';
   const gripValue = gripLocked ? 'LOCKED' : 'UNLOCKED';
 
+  const isAdvanced = account?.account_type === 'advanced';
+  const winDays = dashboard.winning_days_count;
+  const winDaysColor = winDays >= 5 ? 'var(--green)' : 'var(--amber)';
+
   return (
     <div style={gridStyle} className="dashboard-stats-grid">
       <StatCube
@@ -467,15 +634,26 @@ function StatsSection({
         color="var(--red)"
       />
       <StatCube label="GRIP" value={gripValue} color={gripColor} />
+      {isAdvanced && (
+        <StatCube
+          label="Win Days"
+          value={`${winDays}/5`}
+          color={winDaysColor}
+        />
+      )}
     </div>
   );
 }
 
 function GaugesSection({
   dashboard,
+  account,
+  phase,
   loading,
 }: {
   dashboard: ReturnType<typeof useDashboard>['dashboard'];
+  account: AlphaAccount | undefined;
+  phase: AccountPhase;
   loading: boolean;
 }) {
   if (loading && !dashboard) {
@@ -492,6 +670,9 @@ function GaugesSection({
 
   if (!dashboard) return null;
 
+  const isAdvanced = account?.account_type === 'advanced';
+  const isFunded = phase === 'funded';
+
   const consistencyRatio = dashboard.consistency_applies
     ? Math.max(0, 100 - dashboard.consistency_pct)
     : 0;
@@ -502,19 +683,42 @@ function GaugesSection({
   const profitTarget = dashboard.profit_target;
   const profit = Math.max(0, dashboard.total_pnl);
 
+  const dlgLimit = dashboard.daily_loss_guard;
+  const dlgUsed = Math.max(0, dlgLimit - dashboard.daily_loss_guard_remaining);
+
+  const redlinePct =
+    drawdownLimit > 0 && dashboard.balance - dashboard.total_pnl !== 0
+      ? ((drawdownLimit / (dashboard.balance - dashboard.total_pnl || 1)) * 100).toFixed(1)
+      : '0';
+
+  const showRevLimit = !(isAdvanced && isFunded);
+  const revLabel = isAdvanced
+    ? 'REV LIMIT · 50% ON EVAL'
+    : 'REV LIMIT · 50% MAX';
+
+  const boostLabel = isAdvanced
+    ? 'BOOST · $4,000 TARGET'
+    : `BOOST · ${formatUsdCompact(profitTarget)} TARGET`;
+
+  const redlineLabel = isAdvanced
+    ? 'REDLINE · MLL 3.5% · $1,750'
+    : `REDLINE · MLL ${redlinePct}%`;
+
   return (
     <GlassCard>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+        {showRevLimit && (
+          <Gauge
+            label={revLabel}
+            value={consistencyRatio}
+            max={50}
+            warningAt={0.9}
+            criticalAt={1}
+            format={(v) => `${Math.round(v)}%`}
+          />
+        )}
         <Gauge
-          label="REV LIMIT · 50% MAX"
-          value={consistencyRatio}
-          max={50}
-          warningAt={0.9}
-          criticalAt={1}
-          format={(v) => `${Math.round(v)}%`}
-        />
-        <Gauge
-          label={`REDLINE · MLL ${drawdownLimit > 0 ? ((drawdownLimit / (dashboard.balance - dashboard.total_pnl || 1)) * 100).toFixed(1) : '0'}%`}
+          label={redlineLabel}
           value={drawdownUsed}
           max={drawdownLimit || 1}
           warningAt={0.7}
@@ -522,11 +726,21 @@ function GaugesSection({
           format={(v, m) => `${formatUsdCompact(v)} / ${formatUsdCompact(m)}`}
         />
         <Gauge
-          label={`BOOST · ${formatUsdCompact(profitTarget)} TARGET`}
+          label={boostLabel}
           value={profit}
           max={profitTarget || 1}
           format={(v, m) => `${formatUsdCompact(v)} / ${formatUsdCompact(m)}`}
         />
+        {isAdvanced && dlgLimit > 0 && (
+          <Gauge
+            label="DLG 2% · $1,000"
+            value={dlgUsed}
+            max={dlgLimit}
+            warningAt={0.6}
+            criticalAt={0.8}
+            format={(v, m) => `${formatUsdCompact(v)} / ${formatUsdCompact(m)}`}
+          />
+        )}
       </div>
     </GlassCard>
   );
@@ -607,9 +821,13 @@ function PayoutStatus({
           <>
             <PayoutDot
               passed={winDaysPassed}
-              label={`${dashboard.winning_days_count}/5 Win Days`}
+              label={`${dashboard.winning_days_count}/5 Win Days ($200+ each)`}
             />
-            <PayoutDot passed={minPayoutPassed} label="Min $1,000" />
+            <PayoutDot passed={minPayoutPassed} label="Min $1,000 payout" />
+            <PayoutDot
+              passed
+              label={`${dashboard.profit_split_pct}% profit split`}
+            />
           </>
         ) : (
           <>
@@ -738,6 +956,7 @@ export default function Dashboard() {
     loading,
     refetch,
   } = useDashboard();
+  const { user } = useAuth();
   const [instrument, setInstrument] = useState<Instrument>('NQ');
   const [tvExpanded, setTvExpanded] = useState(false);
   const [stratExpanded, setStratExpanded] = useState(false);
@@ -750,6 +969,12 @@ export default function Dashboard() {
   }, [dashboard]);
 
   const selectedAccountData = accounts?.find((a) => a.id === selectedAccount);
+  const selectedPhase: AccountPhase = selectedAccountData?.phase ?? 'evaluation';
+  const showMatthewPrompt =
+    !loading &&
+    (user?.email ?? '').toLowerCase() === MATTHEW_EMAIL &&
+    !!accounts &&
+    accounts.length === 0;
   const priceEntry = price ? price[priceSymbolFor(instrument)] ?? null : null;
   const strategyAlert = toStrategyAlert(
     findAlertForSymbol(alerts, priceSymbolFor(instrument)),
@@ -825,13 +1050,29 @@ export default function Dashboard() {
         loading={loading}
         selectedId={selectedAccount}
         onSelect={setSelectedAccount}
+        selectedPhase={selectedAccountData ? selectedPhase : null}
+        showMatthewPrompt={showMatthewPrompt}
+        onMatthewCreated={refetch}
       />
       <InstrumentSelector value={instrument} onChange={setInstrument} />
     </div>
   );
 
-  const statsBlock = <StatsSection dashboard={dashboard} loading={loading} />;
-  const gaugesBlock = <GaugesSection dashboard={dashboard} loading={loading} />;
+  const statsBlock = (
+    <StatsSection
+      dashboard={dashboard}
+      account={selectedAccountData}
+      loading={loading}
+    />
+  );
+  const gaugesBlock = (
+    <GaugesSection
+      dashboard={dashboard}
+      account={selectedAccountData}
+      phase={selectedPhase}
+      loading={loading}
+    />
+  );
   const payoutBlock = (
     <PayoutStatus
       dashboard={dashboard}
