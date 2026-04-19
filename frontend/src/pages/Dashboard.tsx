@@ -9,6 +9,8 @@ import StrategyChart, { StrategyAlertData } from '../components/charts/StrategyC
 import PhaseTracker from '../components/signals/PhaseTracker';
 import AlertOverlay from '../components/signals/AlertOverlay';
 import AIAnalysis from '../components/ai/AIAnalysis';
+import NewsFeed from '../components/news/NewsFeed';
+import EconomicCalendar from '../components/news/EconomicCalendar';
 import PnLLog from '../components/trading/PnLLog';
 import TradeEntryModal from '../components/trading/TradeEntryModal';
 import {
@@ -1090,6 +1092,8 @@ export default function Dashboard() {
       {controlRow}
       <PhaseTracker />
       <AIAnalysis />
+      <NewsFeed />
+      <EconomicCalendar />
       {statsBlock}
       {gaugesBlock}
       {pnlLogBlock}
@@ -1106,6 +1110,8 @@ export default function Dashboard() {
       <AIAnalysis />
       {statsBlock}
       {pnlLogBlock}
+      <NewsFeed collapsible defaultOpen={false} />
+      <EconomicCalendar collapsible defaultOpen={false} />
       {gaugesBlock}
       {payoutBlock}
     </div>
