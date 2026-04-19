@@ -46,6 +46,79 @@ interface ActiveSetupsResponse {
   setups: ActiveSetup[];
 }
 
+// ─────────────────────────── Trace types ───────────────────────────
+
+interface JournalListItem {
+  id: number;
+  date: string;
+  direction: string;
+  pnl: number | null;
+  symbol: string | null;
+  setup_id: number | null;
+  setup_phase: number | null;
+  entry_price: number | null;
+  stop_price: number | null;
+  target_price: number | null;
+  exit_price: number | null;
+  created_at: string;
+}
+
+interface JournalDetail extends JournalListItem {
+  contracts: number | null;
+  rr_target: number | null;
+  rr_achieved: number | null;
+  notes: string | null;
+  ai_analysis: string | null;
+  ai_entry_reasoning: string | null;
+}
+
+interface AiAnalysis {
+  entry_reasoning?: string;
+  what_worked?: string;
+  what_didnt?: string;
+  lessons?: string;
+  rating?: number;
+}
+
+interface SetupRow {
+  id: number;
+  phase: number | null;
+  sweep_direction: 'high' | 'low' | null;
+  sweep_level: number | null;
+  entry_price: number | null;
+  target_price: number | null;
+  stop_price: number | null;
+  risk_reward: number | null;
+  confidence: number | null;
+  status: string | null;
+  fvg_id: number | null;
+  ifvg_id: number | null;
+}
+
+interface SessionRow {
+  date: string;
+  symbol: string;
+  london_high: number | null;
+  london_low: number | null;
+  ny_high: number | null;
+  ny_low: number | null;
+}
+
+type TraceOutcome = 'win' | 'loss' | 'skipped';
+type TracePhaseState = 'passed' | 'break' | 'not-reached';
+
+interface TraceInfo {
+  journalId: number;
+  outcome: TraceOutcome;
+  reachedPhase: number;
+  breakPhase: number | null;
+  phaseStates: Record<number, TracePhaseState>;
+  phaseData: Record<number, string>;
+  confidence: number | null;
+  summary: string;
+  breakExplanation: string | null;
+}
+
 type ToastKind = 'success' | 'error' | 'warning';
 interface Toast {
   id: number;
@@ -268,20 +341,41 @@ function PhaseNode({
   config,
   winRate,
   horizontal,
+  traceState,
+  traceOutcome,
+  phaseDatum,
 }: {
   phase: PhaseDef;
   state: PhaseState;
   config: StrategyConfig | null;
   winRate: string;
   horizontal: boolean;
+  traceState?: TracePhaseState;
+  traceOutcome?: TraceOutcome;
+  phaseDatum?: string;
 }) {
-  const border =
-    state === 'completed'
+  const traceActive = !!traceState;
+  const pathColor =
+    traceOutcome === 'win' ? 'var(--green)' : 'var(--danger)';
+
+  const border = traceActive
+    ? traceState === 'passed'
+      ? pathColor
+      : traceState === 'break'
+        ? 'var(--danger)'
+        : 'var(--glass-border)'
+    : state === 'completed'
       ? 'var(--green)'
       : state === 'active'
         ? 'var(--amber)'
         : 'var(--glass-border)';
-  const leftBorderWidth = state === 'pending' ? 1 : 3;
+  const leftBorderWidth = traceActive
+    ? traceState === 'not-reached'
+      ? 1
+      : 3
+    : state === 'pending'
+      ? 1
+      : 3;
   const tone = toneColor(phase.tone);
 
   const cardStyle: CSSProperties = {
@@ -295,13 +389,28 @@ function PhaseNode({
     flexDirection: 'column',
     gap: 8,
     minHeight: horizontal ? 220 : undefined,
-    boxShadow:
-      state === 'active'
+    boxShadow: traceActive
+      ? traceState === 'break'
+        ? '0 0 18px rgba(239,68,68,0.25)'
+        : traceState === 'passed'
+          ? traceOutcome === 'win'
+            ? '0 0 14px rgba(52,211,153,0.18)'
+            : '0 0 14px rgba(239,68,68,0.15)'
+          : '0 2px 14px rgba(0,0,0,0.25)'
+      : state === 'active'
         ? `0 0 18px ${toneGlow(phase.tone)}`
         : '0 2px 14px rgba(0,0,0,0.25)',
     animation:
-      state === 'active' ? 'mtrade-soft-pulse 2.4s ease-in-out infinite' : 'none',
-    opacity: state === 'pending' ? 0.78 : 1,
+      !traceActive && state === 'active'
+        ? 'mtrade-soft-pulse 2.4s ease-in-out infinite'
+        : 'none',
+    opacity: traceActive
+      ? traceState === 'not-reached'
+        ? 0.3
+        : 1
+      : state === 'pending'
+        ? 0.78
+        : 1,
     transition: 'border-color 0.25s, box-shadow 0.25s, opacity 0.25s',
   };
 
@@ -362,27 +471,88 @@ function PhaseNode({
     gap: 6,
   };
 
-  const stateTag =
-    state === 'completed'
+  const stateTag = traceActive
+    ? traceState === 'passed'
+      ? { label: 'PASSED', color: pathColor }
+      : traceState === 'break'
+        ? {
+            label: traceOutcome === 'win' ? 'TARGET' : 'BROKE',
+            color: traceOutcome === 'win' ? 'var(--green)' : 'var(--danger)',
+          }
+        : { label: 'SKIPPED', color: 'var(--muted)' }
+    : state === 'completed'
       ? { label: 'DONE', color: 'var(--green)' }
       : state === 'active'
         ? { label: 'LIVE', color: 'var(--amber)' }
         : { label: 'IDLE', color: 'var(--muted)' };
 
+  const traceDotColor = traceActive
+    ? traceState === 'passed'
+      ? pathColor
+      : traceState === 'break'
+        ? 'var(--danger)'
+        : 'var(--muted)'
+    : null;
+
   const settingChips = phaseSettingChips(phase.num, config);
+  const showSettings = !traceActive && settingChips.length > 0;
 
   return (
     <div style={cardStyle}>
       <div style={headStyle}>
-        <span style={phaseTitle}>
-          Phase {phase.num} — {phase.name}
+        <span style={{ ...phaseTitle, display: 'flex', alignItems: 'center', gap: 8 }}>
+          {traceDotColor && (
+            <span
+              aria-hidden="true"
+              style={{
+                display: 'inline-block',
+                width: 8,
+                height: 8,
+                borderRadius: 999,
+                background: traceDotColor,
+                boxShadow:
+                  traceState !== 'not-reached'
+                    ? `0 0 8px ${traceDotColor}`
+                    : 'none',
+              }}
+            />
+          )}
+          <span>
+            Phase {phase.num} — {phase.name}
+          </span>
         </span>
         <span style={cologneStyle}>{phase.cologne}</span>
       </div>
 
       <div style={descStyle}>{phase.lookingFor}</div>
 
-      {settingChips.length > 0 && (
+      {traceActive && phaseDatum && traceState !== 'not-reached' && (
+        <div
+          style={{
+            fontFamily: '"JetBrains Mono", monospace',
+            fontSize: 11,
+            color:
+              traceState === 'break' ? 'var(--danger)' : 'var(--bright)',
+            background:
+              traceState === 'break'
+                ? 'rgba(239,68,68,0.08)'
+                : 'rgba(148,163,184,0.06)',
+            border: `1px solid ${
+              traceState === 'break'
+                ? 'rgba(239,68,68,0.35)'
+                : 'var(--glass-border)'
+            }`,
+            borderRadius: 8,
+            padding: '6px 8px',
+            lineHeight: 1.45,
+            whiteSpace: 'pre-wrap',
+          }}
+        >
+          {phaseDatum}
+        </div>
+      )}
+
+      {showSettings && (
         <div style={settingsRow}>
           {settingChips.map((c) => (
             <span key={c.key}>
@@ -466,10 +636,38 @@ function phaseSettingChips(
 function Connector({
   label,
   horizontal,
+  traceMode,
+  traceColor,
+  traceDim,
+  animate = true,
 }: {
   label: string;
   horizontal: boolean;
+  traceMode?: boolean;
+  traceColor?: string;
+  traceDim?: boolean;
+  animate?: boolean;
 }) {
+  const defaultGradientH =
+    'linear-gradient(90deg, rgba(148,163,184,0.2), rgba(251,44,90,0.45), rgba(148,163,184,0.2))';
+  const defaultGradientV =
+    'linear-gradient(180deg, rgba(148,163,184,0.2), rgba(251,44,90,0.45), rgba(148,163,184,0.2))';
+  const dimGradientH =
+    'linear-gradient(90deg, rgba(148,163,184,0.12), rgba(148,163,184,0.18), rgba(148,163,184,0.12))';
+  const dimGradientV =
+    'linear-gradient(180deg, rgba(148,163,184,0.12), rgba(148,163,184,0.18), rgba(148,163,184,0.12))';
+
+  const bgH = traceMode
+    ? traceDim
+      ? dimGradientH
+      : traceColor ?? defaultGradientH
+    : defaultGradientH;
+  const bgV = traceMode
+    ? traceDim
+      ? dimGradientV
+      : traceColor ?? defaultGradientV
+    : defaultGradientV;
+
   const trackStyle: CSSProperties = horizontal
     ? {
         position: 'relative',
@@ -477,30 +675,34 @@ function Connector({
         alignSelf: 'center',
         width: 28,
         height: 2,
-        background:
-          'linear-gradient(90deg, rgba(148,163,184,0.2), rgba(251,44,90,0.45), rgba(148,163,184,0.2))',
+        background: bgH,
         margin: '0 6px',
         overflow: 'visible',
+        opacity: traceDim ? 0.4 : 1,
       }
     : {
         position: 'relative',
         alignSelf: 'center',
         width: 2,
         height: 28,
-        background:
-          'linear-gradient(180deg, rgba(148,163,184,0.2), rgba(251,44,90,0.45), rgba(148,163,184,0.2))',
+        background: bgV,
         margin: '6px 0',
         overflow: 'visible',
+        opacity: traceDim ? 0.4 : 1,
       };
 
+  const dotBg = traceMode && !traceDim ? (traceColor ?? 'var(--red)') : 'var(--red)';
   const dotStyle: CSSProperties = {
     position: 'absolute',
     width: 6,
     height: 6,
     borderRadius: 999,
-    background: 'var(--red)',
-    boxShadow: '0 0 8px var(--red)',
-    animation: `${horizontal ? 'mtrade-flow-h' : 'mtrade-flow-v'} 2.2s linear infinite`,
+    background: dotBg,
+    boxShadow: `0 0 8px ${dotBg}`,
+    animation: animate
+      ? `${horizontal ? 'mtrade-flow-h' : 'mtrade-flow-v'} 2.2s linear infinite`
+      : 'none',
+    display: animate ? 'block' : 'none',
   };
 
   const dotH: CSSProperties = { ...dotStyle, top: -2, left: 0 };
@@ -548,10 +750,12 @@ function Flowchart({
   config,
   stats,
   currentPhase,
+  trace,
 }: {
   config: StrategyConfig | null;
   stats: SetupStats | null;
   currentPhase: number | null;
+  trace: TraceInfo | null;
 }) {
   const horizontal = useMediaMin(1100);
 
@@ -586,25 +790,66 @@ function Flowchart({
     ? { flex: '1 1 0', minWidth: 200 }
     : {};
 
+  const pathColor = trace
+    ? trace.outcome === 'win'
+      ? 'var(--green)'
+      : 'var(--danger)'
+    : undefined;
+  const pathGradientH = pathColor
+    ? `linear-gradient(90deg, ${pathColor}, ${pathColor})`
+    : undefined;
+  const pathGradientV = pathColor
+    ? `linear-gradient(180deg, ${pathColor}, ${pathColor})`
+    : undefined;
+
   return (
     <GlassCard title="◆ SIGNAL FLOW">
       <div style={containerStyle}>
-        {PHASES.map((phase, idx) => (
-          <Fragment key={phase.num}>
-            <div style={nodeWrap}>
-              <PhaseNode
-                phase={phase}
-                state={phaseStateFor(phase.num, currentPhase)}
-                config={config}
-                winRate={winRateFor(phase.num)}
-                horizontal={horizontal}
-              />
-            </div>
-            {idx < PHASES.length - 1 && phase.advanceTo && (
-              <Connector label={phase.advanceTo} horizontal={horizontal} />
-            )}
-          </Fragment>
-        ))}
+        {PHASES.map((phase, idx) => {
+          const traceState = trace ? trace.phaseStates[phase.num] : undefined;
+          const nextState =
+            trace && idx < PHASES.length - 1
+              ? trace.phaseStates[PHASES[idx + 1].num]
+              : undefined;
+          const connectorOnPath =
+            trace &&
+            traceState &&
+            traceState !== 'not-reached' &&
+            nextState &&
+            nextState !== 'not-reached';
+          return (
+            <Fragment key={phase.num}>
+              <div style={nodeWrap}>
+                <PhaseNode
+                  phase={phase}
+                  state={phaseStateFor(phase.num, currentPhase)}
+                  config={config}
+                  winRate={winRateFor(phase.num)}
+                  horizontal={horizontal}
+                  traceState={traceState}
+                  traceOutcome={trace?.outcome}
+                  phaseDatum={trace?.phaseData[phase.num]}
+                />
+              </div>
+              {idx < PHASES.length - 1 && phase.advanceTo && (
+                <Connector
+                  label={phase.advanceTo}
+                  horizontal={horizontal}
+                  traceMode={!!trace}
+                  traceColor={
+                    connectorOnPath
+                      ? horizontal
+                        ? pathGradientH
+                        : pathGradientV
+                      : undefined
+                  }
+                  traceDim={!!trace && !connectorOnPath}
+                  animate={!trace}
+                />
+              )}
+            </Fragment>
+          );
+        })}
       </div>
     </GlassCard>
   );
@@ -910,6 +1155,625 @@ function SegmentedBosTf({
   );
 }
 
+// ─────────────────────────── Trace a Trade ───────────────────────────
+
+function formatPx(n: number | null | undefined): string {
+  if (n == null || Number.isNaN(n)) return '—';
+  return Number(n).toLocaleString('en-US', {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  });
+}
+
+function formatPnl(n: number | null | undefined): string {
+  if (n == null || Number.isNaN(n)) return '—';
+  const abs = Math.abs(n).toLocaleString('en-US', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+  const sign = n > 0 ? '+' : n < 0 ? '-' : '';
+  return `${sign}$${abs}`;
+}
+
+function formatDate(d: string): string {
+  const dt = new Date(d.includes('T') ? d : `${d}T00:00:00Z`);
+  if (Number.isNaN(dt.getTime())) return d;
+  return dt.toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: '2-digit',
+  });
+}
+
+function parseAiAnalysis(raw: string | null | undefined): AiAnalysis | null {
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === 'object') return parsed as AiAnalysis;
+  } catch {
+    /* ignore */
+  }
+  return null;
+}
+
+function outcomeOf(pnl: number | null | undefined): TraceOutcome {
+  if (pnl == null) return 'skipped';
+  if (pnl > 0) return 'win';
+  if (pnl < 0) return 'loss';
+  return 'skipped';
+}
+
+function buildTraceInfo(
+  detail: JournalDetail,
+  setup: SetupRow | null,
+  session: SessionRow | null,
+): TraceInfo {
+  const outcome = outcomeOf(detail.pnl);
+  const reachedPhase = detail.setup_phase ?? setup?.phase ?? 5;
+  const breakPhase = outcome === 'loss' ? reachedPhase : null;
+
+  const phaseStates: Record<number, TracePhaseState> = {};
+  for (const p of PHASES) {
+    if (outcome === 'win') {
+      phaseStates[p.num] = p.num <= reachedPhase ? 'passed' : 'not-reached';
+    } else if (outcome === 'loss') {
+      if (p.num < reachedPhase) phaseStates[p.num] = 'passed';
+      else if (p.num === reachedPhase) phaseStates[p.num] = 'break';
+      else phaseStates[p.num] = 'not-reached';
+    } else {
+      phaseStates[p.num] = p.num < reachedPhase ? 'passed' : 'not-reached';
+    }
+  }
+
+  const phaseData: Record<number, string> = {};
+
+  // Phase 0 — London Range
+  if (session && (session.london_high != null || session.london_low != null)) {
+    phaseData[0] = `London H: ${formatPx(session.london_high)} / L: ${formatPx(session.london_low)}`;
+  } else {
+    phaseData[0] = `${detail.symbol ?? 'NQ'} session · ${formatDate(detail.date)}`;
+  }
+
+  // Phase 1 — Sweep
+  if (setup?.sweep_direction && setup?.sweep_level != null) {
+    const side = setup.sweep_direction === 'high' ? 'High' : 'Low';
+    phaseData[1] = `Swept London ${side} at ${formatPx(setup.sweep_level)}`;
+  } else if (detail.direction) {
+    const inferred = detail.direction === 'short' ? 'High' : 'Low';
+    phaseData[1] = `Sweep of London ${inferred} (${detail.direction})`;
+  }
+
+  // Phase 2 — BOS
+  const bosBias = setup?.sweep_direction
+    ? setup.sweep_direction === 'low'
+      ? 'bullish'
+      : 'bearish'
+    : detail.direction === 'long'
+      ? 'bullish'
+      : detail.direction === 'short'
+        ? 'bearish'
+        : null;
+  if (bosBias) {
+    phaseData[2] = `BOS confirmed · ${bosBias} displacement`;
+  }
+
+  // Phase 3 — FVG retrace
+  const fvgTf =
+    setup?.fvg_id != null ? '4H/1H' : 'FVG zone';
+  if (detail.entry_price != null) {
+    phaseData[3] = `Retraced into ${fvgTf} · tapped near ${formatPx(detail.entry_price)}`;
+  }
+
+  // Phase 4 — Entry setup
+  const confidence = setup?.confidence ?? null;
+  const rr = setup?.risk_reward ?? detail.rr_target ?? null;
+  if (confidence != null || rr != null) {
+    const parts: string[] = [];
+    if (setup?.ifvg_id != null) parts.push('IFVG armed');
+    else parts.push('Entry armed');
+    if (confidence != null) parts.push(`confidence ${confidence}%`);
+    if (rr != null) parts.push(`R:R 1:${Number(rr).toFixed(1)}`);
+    phaseData[4] = parts.join(' · ');
+  } else {
+    phaseData[4] = 'Entry validated';
+  }
+
+  // Phase 5 — Execute & Manage
+  const p5Parts: string[] = [];
+  if (detail.entry_price != null) p5Parts.push(`Entry ${formatPx(detail.entry_price)}`);
+  if (detail.target_price != null) p5Parts.push(`Target ${formatPx(detail.target_price)}`);
+  if (detail.stop_price != null) p5Parts.push(`Stop ${formatPx(detail.stop_price)}`);
+  const p5Line1 = p5Parts.join(', ');
+  const exitBits: string[] = [];
+  if (detail.exit_price != null) exitBits.push(`Exit ${formatPx(detail.exit_price)}`);
+  if (detail.pnl != null) exitBits.push(formatPnl(detail.pnl));
+  phaseData[5] =
+    exitBits.length > 0
+      ? `${p5Line1}\n${exitBits.join(' · ')}`
+      : p5Line1 || 'Position live';
+
+  // Break explanation
+  const ai = parseAiAnalysis(detail.ai_analysis);
+  let breakExplanation: string | null = null;
+  if (outcome === 'loss') {
+    if (ai?.what_didnt) {
+      breakExplanation = ai.what_didnt;
+    } else if (detail.exit_price != null && detail.target_price != null) {
+      const points = Math.abs(detail.target_price - detail.exit_price);
+      const dir = detail.direction === 'long' ? 'below' : 'above';
+      breakExplanation = `Price reversed at ${formatPx(detail.exit_price)} — ${points.toFixed(0)} points ${dir} target. Setup failed to reach target.`;
+    } else {
+      breakExplanation = `Trade closed at a loss of ${formatPnl(detail.pnl)}.`;
+    }
+  }
+
+  if (breakPhase != null && breakExplanation) {
+    const existing = phaseData[breakPhase];
+    phaseData[breakPhase] = existing
+      ? `${existing}\n⚠ ${breakExplanation}`
+      : `⚠ ${breakExplanation}`;
+  }
+
+  // Summary
+  const entryPhaseLabel = reachedPhase === 5 ? 'Phase 5' : `Phase ${reachedPhase}`;
+  const confStr = confidence != null ? ` with ${confidence}% confidence` : '';
+  let summary: string;
+  if (outcome === 'win') {
+    summary = `This setup entered at ${entryPhaseLabel}${confStr}. The thesis played out and price reached target — ${formatPnl(detail.pnl)}.`;
+  } else if (outcome === 'loss') {
+    const ptsShort =
+      detail.target_price != null && detail.exit_price != null
+        ? Math.abs(detail.target_price - detail.exit_price).toFixed(0)
+        : null;
+    const shortStr = ptsShort ? ` price reversed ${ptsShort} points short of target.` : '';
+    const lesson = ai?.lessons ? ` ${ai.lessons}` : '';
+    summary = `This setup entered at ${entryPhaseLabel}${confStr}. The entry was valid but${shortStr} ${formatPnl(detail.pnl)} loss.${lesson}`.trim();
+  } else {
+    summary = `Setup reached ${entryPhaseLabel}${confStr} — outcome pending or skipped.`;
+  }
+
+  return {
+    journalId: detail.id,
+    outcome,
+    reachedPhase,
+    breakPhase,
+    phaseStates,
+    phaseData,
+    confidence,
+    summary,
+    breakExplanation,
+  };
+}
+
+function TradeOptionRow({
+  trade,
+  selected,
+  onSelect,
+}: {
+  trade: JournalListItem;
+  selected: boolean;
+  onSelect: () => void;
+}) {
+  const outcome = outcomeOf(trade.pnl);
+  const outcomeColor =
+    outcome === 'win'
+      ? 'var(--green)'
+      : outcome === 'loss'
+        ? 'var(--danger)'
+        : 'var(--muted)';
+  const outcomeLabel =
+    outcome === 'win' ? 'WON' : outcome === 'loss' ? 'LOST' : '—';
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      aria-pressed={selected}
+      style={{
+        display: 'grid',
+        gridTemplateColumns: '72px 52px 80px 54px 1fr',
+        gap: 10,
+        alignItems: 'center',
+        padding: '8px 10px',
+        background: selected ? 'rgba(251,44,90,0.10)' : 'transparent',
+        border: selected
+          ? '1px solid rgba(251,44,90,0.35)'
+          : '1px solid var(--glass-border)',
+        borderRadius: 8,
+        color: 'var(--bright)',
+        fontFamily: '"JetBrains Mono", monospace',
+        fontSize: 11,
+        letterSpacing: '0.03em',
+        cursor: 'pointer',
+        width: '100%',
+        textAlign: 'left',
+      }}
+    >
+      <span style={{ color: 'var(--label)' }}>{formatDate(trade.date)}</span>
+      <span style={{ color: 'var(--muted)' }}>{trade.symbol ?? '—'}</span>
+      <span
+        style={{
+          color:
+            trade.direction === 'long'
+              ? 'var(--green)'
+              : trade.direction === 'short'
+                ? 'var(--red)'
+                : 'var(--muted)',
+          textTransform: 'uppercase',
+        }}
+      >
+        {trade.direction ?? '—'}
+      </span>
+      <span style={{ color: outcomeColor, fontWeight: 600 }}>{outcomeLabel}</span>
+      <span style={{ color: outcomeColor, textAlign: 'right' }}>
+        {formatPnl(trade.pnl)}
+      </span>
+    </button>
+  );
+}
+
+function TraceSummaryCard({ trace }: { trace: TraceInfo }) {
+  const color =
+    trace.outcome === 'win'
+      ? 'var(--green)'
+      : trace.outcome === 'loss'
+        ? 'var(--danger)'
+        : 'var(--muted)';
+  return (
+    <div
+      style={{
+        background: 'rgba(8,8,12,0.45)',
+        border: '1px solid var(--glass-border)',
+        borderLeft: `3px solid ${color}`,
+        borderRadius: 12,
+        padding: 14,
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 10,
+      }}
+    >
+      <div
+        style={{
+          fontFamily: 'Outfit, sans-serif',
+          fontSize: 11,
+          fontWeight: 700,
+          letterSpacing: '0.12em',
+          textTransform: 'uppercase',
+          color,
+        }}
+      >
+        Trace summary
+      </div>
+      <div
+        style={{
+          fontFamily: 'Outfit, sans-serif',
+          fontSize: 13,
+          color: 'var(--bright)',
+          lineHeight: 1.55,
+        }}
+      >
+        {trace.summary}
+      </div>
+      {trace.breakExplanation && (
+        <div
+          style={{
+            fontFamily: 'Outfit, sans-serif',
+            fontSize: 12,
+            color: 'var(--label)',
+            lineHeight: 1.55,
+            paddingTop: 8,
+            borderTop: '1px dashed var(--glass-border)',
+          }}
+        >
+          <span
+            style={{
+              color: 'var(--danger)',
+              fontWeight: 600,
+              letterSpacing: '0.04em',
+            }}
+          >
+            Where it broke down ·{' '}
+          </span>
+          {trace.breakExplanation}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function TraceTrade({
+  trace,
+  setTrace,
+}: {
+  trace: TraceInfo | null;
+  setTrace: (t: TraceInfo | null) => void;
+}) {
+  const [trades, setTrades] = useState<JournalListItem[] | null>(null);
+  const [loadingList, setLoadingList] = useState(true);
+  const [listError, setListError] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [query, setQuery] = useState('');
+  const [filter, setFilter] = useState<'all' | 'losses' | 'wins'>('losses');
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [detailError, setDetailError] = useState<string | null>(null);
+  const setupsRef = useRef<Map<number, SetupRow> | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoadingList(true);
+    fetch('/api/journal?days=30', { credentials: 'same-origin' })
+      .then((r) => {
+        if (!r.ok) throw new Error('fail');
+        return r.json() as Promise<JournalListItem[]>;
+      })
+      .then((data) => {
+        if (!cancelled) {
+          setTrades(Array.isArray(data) ? data : []);
+          setLoadingList(false);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setListError('Could not load recent trades.');
+          setLoadingList(false);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const loadSetupsIndex = useCallback(async (): Promise<Map<number, SetupRow>> => {
+    if (setupsRef.current) return setupsRef.current;
+    try {
+      const r = await fetch('/api/setups/history?days=30', {
+        credentials: 'same-origin',
+      });
+      if (!r.ok) throw new Error('fail');
+      const list = (await r.json()) as SetupRow[];
+      const map = new Map<number, SetupRow>();
+      for (const s of list) if (typeof s.id === 'number') map.set(s.id, s);
+      setupsRef.current = map;
+      return map;
+    } catch {
+      const empty = new Map<number, SetupRow>();
+      setupsRef.current = empty;
+      return empty;
+    }
+  }, []);
+
+  const handleSelect = useCallback(
+    async (journalId: number) => {
+      if (selectedId === journalId) {
+        setSelectedId(null);
+        setTrace(null);
+        return;
+      }
+      setSelectedId(journalId);
+      setDetailLoading(true);
+      setDetailError(null);
+      try {
+        const [detailRes, setupsIndex] = await Promise.all([
+          fetch(`/api/journal/${journalId}`, { credentials: 'same-origin' }),
+          loadSetupsIndex(),
+        ]);
+        if (!detailRes.ok) throw new Error('fail');
+        const detail = (await detailRes.json()) as JournalDetail;
+        const setup =
+          detail.setup_id != null ? setupsIndex.get(detail.setup_id) ?? null : null;
+
+        let session: SessionRow | null = null;
+        if (detail.date) {
+          try {
+            const sr = await fetch(`/api/sessions/${detail.date}`, {
+              credentials: 'same-origin',
+            });
+            if (sr.ok) {
+              const rows = (await sr.json()) as SessionRow[];
+              const sym = detail.symbol;
+              session =
+                (sym ? rows.find((r) => r.symbol === sym) : rows[0]) ?? null;
+            }
+          } catch {
+            /* ignore */
+          }
+        }
+
+        const info = buildTraceInfo(detail, setup, session);
+        setTrace(info);
+      } catch {
+        setDetailError('Could not load trade detail.');
+        setTrace(null);
+      } finally {
+        setDetailLoading(false);
+      }
+    },
+    [loadSetupsIndex, selectedId, setTrace],
+  );
+
+  const filteredTrades = (trades ?? []).filter((t) => {
+    const outcome = outcomeOf(t.pnl);
+    if (filter === 'losses' && outcome !== 'loss') return false;
+    if (filter === 'wins' && outcome !== 'win') return false;
+    if (query) {
+      const q = query.toLowerCase();
+      const hay = `${t.direction ?? ''} ${t.symbol ?? ''} ${t.date ?? ''}`.toLowerCase();
+      if (!hay.includes(q)) return false;
+    }
+    return true;
+  });
+
+  // When the default filter is 'all', surface losses first for easier triage.
+  const orderedTrades =
+    filter === 'all'
+      ? [...filteredTrades].sort((a, b) => {
+          const oa = outcomeOf(a.pnl);
+          const ob = outcomeOf(b.pnl);
+          const rank = (o: TraceOutcome) =>
+            o === 'loss' ? 0 : o === 'win' ? 1 : 2;
+          if (rank(oa) !== rank(ob)) return rank(oa) - rank(ob);
+          return a.date < b.date ? 1 : -1;
+        })
+      : filteredTrades;
+
+  const filterBtnStyle = (active: boolean): CSSProperties => ({
+    background: active ? 'rgba(251,44,90,0.14)' : 'transparent',
+    color: active ? 'var(--red)' : 'var(--label)',
+    border: active
+      ? '1px solid rgba(251,44,90,0.4)'
+      : '1px solid var(--glass-border)',
+    borderRadius: 6,
+    padding: '4px 10px',
+    fontFamily: 'Outfit, sans-serif',
+    fontSize: 11,
+    fontWeight: 600,
+    letterSpacing: '0.08em',
+    textTransform: 'uppercase',
+    cursor: 'pointer',
+  });
+
+  return (
+    <GlassCard title="◆ TRACE A TRADE">
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <div
+          style={{
+            display: 'flex',
+            flexWrap: 'wrap',
+            gap: 10,
+            alignItems: 'center',
+            justifyContent: 'space-between',
+          }}
+        >
+          <div
+            style={{
+              fontFamily: 'Outfit, sans-serif',
+              fontSize: 12,
+              color: 'var(--label)',
+              lineHeight: 1.4,
+              maxWidth: 520,
+            }}
+          >
+            Select a trade from the last 30 days to replay how it moved through
+            each phase. Losses surface first.
+          </div>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            {(['losses', 'wins', 'all'] as const).map((f) => (
+              <button
+                key={f}
+                type="button"
+                onClick={() => setFilter(f)}
+                style={filterBtnStyle(filter === f)}
+                aria-pressed={filter === f}
+              >
+                {f}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <input
+          type="text"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Search by symbol, direction, or date…"
+          style={{
+            background: '#0a0a10',
+            color: 'var(--bright)',
+            border: '1px solid var(--glass-border)',
+            borderRadius: 8,
+            padding: '8px 10px',
+            fontSize: 12,
+            fontFamily: 'Outfit, sans-serif',
+            outline: 'none',
+            width: '100%',
+            boxSizing: 'border-box',
+          }}
+        />
+
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: '72px 52px 80px 54px 1fr',
+            gap: 10,
+            padding: '4px 10px',
+            fontFamily: '"JetBrains Mono", monospace',
+            fontSize: 9,
+            letterSpacing: '0.15em',
+            textTransform: 'uppercase',
+            color: 'var(--muted)',
+          }}
+        >
+          <span>Date</span>
+          <span>Sym</span>
+          <span>Dir</span>
+          <span>Outcome</span>
+          <span style={{ textAlign: 'right' }}>P&amp;L</span>
+        </div>
+
+        <div
+          style={{
+            maxHeight: 240,
+            overflowY: 'auto',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 4,
+            paddingRight: 2,
+          }}
+        >
+          {loadingList ? (
+            <div
+              className="skeleton-shimmer"
+              style={{ height: 120, borderRadius: 10 }}
+              aria-hidden="true"
+            />
+          ) : listError ? (
+            <div style={{ color: 'var(--danger)', fontSize: 12 }}>
+              {listError}
+            </div>
+          ) : orderedTrades.length === 0 ? (
+            <div
+              style={{
+                fontFamily: 'Outfit, sans-serif',
+                fontSize: 12,
+                color: 'var(--muted)',
+                padding: '10px 0',
+              }}
+            >
+              No matching trades in the last 30 days.
+            </div>
+          ) : (
+            orderedTrades.map((t) => (
+              <TradeOptionRow
+                key={t.id}
+                trade={t}
+                selected={selectedId === t.id}
+                onSelect={() => handleSelect(t.id)}
+              />
+            ))
+          )}
+        </div>
+
+        {detailLoading && (
+          <div
+            style={{
+              fontFamily: '"JetBrains Mono", monospace',
+              fontSize: 11,
+              color: 'var(--muted)',
+            }}
+          >
+            Loading trace…
+          </div>
+        )}
+        {detailError && (
+          <div style={{ color: 'var(--danger)', fontSize: 12 }}>
+            {detailError}
+          </div>
+        )}
+        {trace && !detailLoading && <TraceSummaryCard trace={trace} />}
+      </div>
+    </GlassCard>
+  );
+}
+
 // ─────────────────────────── Toasts ───────────────────────────
 
 function ToastStack({ toasts }: { toasts: Toast[] }) {
@@ -963,6 +1827,7 @@ export default function Strategy() {
   const [stats, setStats] = useState<SetupStats | null>(null);
   const [currentPhase, setCurrentPhase] = useState<number | null>(null);
   const [configError, setConfigError] = useState<string | null>(null);
+  const [trace, setTrace] = useState<TraceInfo | null>(null);
   const debounceRef = useRef<number | null>(null);
   const { toasts, push } = useToasts();
 
@@ -1093,7 +1958,10 @@ export default function Strategy() {
         config={config}
         stats={stats}
         currentPhase={currentPhase}
+        trace={trace}
       />
+
+      <TraceTrade trace={trace} setTrace={setTrace} />
 
       <QuickSettings config={config} saveUpdate={saveUpdate} />
 
