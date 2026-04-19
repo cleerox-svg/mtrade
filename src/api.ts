@@ -1932,6 +1932,32 @@ Respond in JSON: { entry_reasoning, what_worked, what_didnt, lessons, rating }`;
       if (!entry) return json({ error: 'not found' }, 404);
       return json(entry);
     }
+
+    // PUT /api/journal/:id
+    if (!sub && method === 'PUT') {
+      const body = await request.json<Record<string, unknown>>();
+      const sets: string[] = [];
+      const vals: unknown[] = [];
+      if (body.notes !== undefined) {
+        sets.push('notes = ?');
+        vals.push(body.notes === null ? null : String(body.notes));
+      }
+      if (body.tags !== undefined) {
+        sets.push('tags = ?');
+        vals.push(body.tags === null ? null : String(body.tags));
+      }
+      if (sets.length === 0) return json({ error: 'no fields to update' }, 400);
+      const result = await env.DB.prepare(
+        `UPDATE journal_entries SET ${sets.join(', ')} WHERE id = ? AND user_id = ?`
+      ).bind(...vals, id, user.sub).run();
+      if (!result.meta.changes) return json({ error: 'not found' }, 404);
+      const entry = await env.DB.prepare(
+        `SELECT je.*, i.symbol FROM journal_entries je
+         LEFT JOIN instruments i ON je.instrument_id = i.id
+         WHERE je.id = ? AND je.user_id = ?`
+      ).bind(id, user.sub).first();
+      return json(entry);
+    }
   }
 
   return json({ error: 'Not found' }, 404);
