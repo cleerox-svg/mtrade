@@ -6,6 +6,7 @@ import { handleApiRoutes } from './api';
 import { fetchAndStoreCandles, computeSessionLevels } from './market-data';
 import { runStrategyEngine } from './strategy-engine';
 import { sendDrawdownWarning, sendConsistencyWarning, hasNotificationToday, logNotification, getUserSettings } from './notifications';
+import { fetchNews, fetchEconomicCalendar } from './news';
 import { getManifestJson, getServiceWorkerJs, getIconSvg, getFaviconSvg } from './pwa';
 
 function getCookie(request: Request, name: string): string | null {
@@ -236,9 +237,14 @@ export default {
       await runStrategyEngine(env);
 
       // Run Alpha Futures risk checks every 5 minutes (when minute is divisible by 5)
-      const minute = new Date().getMinutes();
+      const now = new Date();
+      const minute = now.getMinutes();
       if (minute % 5 === 0) {
         await checkAlphaRiskAlerts(env);
+        await fetchNews(env);
+      }
+      if (minute === 0) {
+        await fetchEconomicCalendar(env);
       }
     } catch (err) {
       console.error('Cron error:', err);

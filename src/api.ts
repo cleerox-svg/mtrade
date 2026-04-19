@@ -1960,5 +1960,56 @@ Respond in JSON: { entry_reasoning, what_worked, what_didnt, lessons, rating }`;
     }
   }
 
+  // GET /api/news — recent news items
+  if (path === '/api/news' && method === 'GET') {
+    const impact = url.searchParams.get('impact');
+    const hours = parseInt(url.searchParams.get('hours') || '24', 10);
+    const limit = Math.min(parseInt(url.searchParams.get('limit') || '20', 10), 100);
+    const since = new Date(Date.now() - hours * 3600 * 1000).toISOString();
+
+    const whereParts: string[] = [
+      "(published_at >= ? OR (published_at IS NULL AND created_at >= ?))",
+    ];
+    const binds: unknown[] = [since, since];
+    if (impact) {
+      whereParts.push('impact = ?');
+      binds.push(impact);
+    }
+
+    const sql =
+      `SELECT id, source, title, summary, url, published_at, impact, direction, instruments, created_at
+       FROM market_news
+       WHERE ${whereParts.join(' AND ')}
+       ORDER BY COALESCE(published_at, created_at) DESC
+       LIMIT ?`;
+    binds.push(limit);
+
+    const { results } = await env.DB.prepare(sql).bind(...binds).all();
+    return json(results);
+  }
+
+  // GET /api/news/calendar — upcoming US events for next 7 days
+  if (path === '/api/news/calendar' && method === 'GET') {
+    const today = new Date().toISOString().substring(0, 10);
+    const until = new Date(Date.now() + 7 * 86400 * 1000).toISOString().substring(0, 10);
+    const { results } = await env.DB.prepare(
+      `SELECT * FROM economic_events
+       WHERE date >= ? AND date <= ?
+       ORDER BY date ASC, time ASC`
+    ).bind(today, until).all();
+    return json(results);
+  }
+
+  // GET /api/news/:id — full news item with AI analysis
+  const newsItemMatch = path.match(/^\/api\/news\/(\d+)$/);
+  if (newsItemMatch && method === 'GET') {
+    const id = newsItemMatch[1];
+    const item = await env.DB.prepare(
+      'SELECT * FROM market_news WHERE id = ?'
+    ).bind(id).first();
+    if (!item) return json({ error: 'Not found' }, 404);
+    return json(item);
+  }
+
   return json({ error: 'Not found' }, 404);
 }
