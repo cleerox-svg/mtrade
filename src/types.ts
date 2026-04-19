@@ -5,6 +5,7 @@ export interface Env {
   GOOGLE_CLIENT_SECRET: string;
   JWT_SECRET: string;
   ANTHROPIC_API_KEY: string;
+  FINNHUB_API_KEY: string;
 }
 
 export interface User {
