@@ -1,9 +1,49 @@
-import { CSSProperties, useEffect, useState } from 'react';
+import { CSSProperties, useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import GlassCard from '../components/ui/GlassCard';
 import StatCube from '../components/ui/StatCube';
 import Button from '../components/ui/Button';
+import StrategyChart, {
+  StrategyInstrument,
+} from '../components/charts/StrategyChart';
 import { useApi } from '../hooks/useApi';
+
+interface SnapshotCandle {
+  timestamp: string;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume?: number;
+  timeframe?: string;
+}
+
+interface SnapshotSession {
+  london_high: number | null;
+  london_low: number | null;
+  ny_high?: number | null;
+  ny_low?: number | null;
+}
+
+interface SnapshotFvg {
+  high: number;
+  low: number;
+  type?: 'bullish' | 'bearish';
+}
+
+interface ChartSnapshot {
+  candles: SnapshotCandle[];
+  session: SnapshotSession | null;
+  captured_at?: string;
+  fvgs?: SnapshotFvg[];
+  ifvgs?: SnapshotFvg[];
+  bos_level?: number | null;
+}
+
+function symbolToInstrument(sym: string | null): StrategyInstrument {
+  if (sym === 'ES' || sym === 'NQ' || sym === 'MES' || sym === 'MNQ') return sym;
+  return 'NQ';
+}
 
 interface JournalDetail {
   id: number;
@@ -185,10 +225,32 @@ export default function JournalEntry() {
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saveOk, setSaveOk] = useState(false);
+  const [chartHeight, setChartHeight] = useState(() =>
+    typeof window !== 'undefined' && window.innerWidth >= 640 ? 420 : 280,
+  );
 
   useEffect(() => {
     if (data) setNotes(data.notes ?? '');
   }, [data]);
+
+  useEffect(() => {
+    const onResize = () => {
+      setChartHeight(window.innerWidth >= 640 ? 420 : 280);
+    };
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+
+  const snapshot = useMemo<ChartSnapshot | null>(() => {
+    if (!data?.chart_snapshot_svg) return null;
+    try {
+      const parsed = JSON.parse(data.chart_snapshot_svg);
+      if (parsed && typeof parsed === 'object') return parsed as ChartSnapshot;
+      return null;
+    } catch {
+      return null;
+    }
+  }, [data?.chart_snapshot_svg]);
 
   const containerStyle: CSSProperties = {
     display: 'flex',
@@ -429,6 +491,44 @@ export default function JournalEntry() {
           color="var(--white)"
         />
       </div>
+
+      <GlassCard title="◆ TRADE CHART">
+        {snapshot && Array.isArray(snapshot.candles) && snapshot.candles.length > 0 ? (
+          <StrategyChart
+            instrument={symbolToInstrument(entry.symbol)}
+            height={chartHeight}
+            staticData={{
+              candles: snapshot.candles,
+              session: snapshot.session ?? null,
+              fvgs: snapshot.fvgs ?? [],
+              ifvgs: snapshot.ifvgs ?? [],
+              actual_exit_price: entry.exit_price,
+            }}
+            alertData={{
+              entry_price: entry.entry_price,
+              stop_price: entry.stop_price,
+              target_price: entry.target_price,
+              bos_level: snapshot.bos_level ?? null,
+              is_active: 1,
+            }}
+          />
+        ) : (
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              height: chartHeight,
+              color: 'var(--muted)',
+              fontFamily: '"JetBrains Mono", monospace',
+              fontSize: 12,
+              letterSpacing: '0.08em',
+            }}
+          >
+            No chart data available
+          </div>
+        )}
+      </GlassCard>
 
       <GlassCard title="◈ NOTES">
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>

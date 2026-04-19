@@ -11,12 +11,21 @@ export interface StrategyAlertData {
   is_active?: number | boolean;
 }
 
+export interface StrategyStaticData {
+  candles: Candle[];
+  session?: SessionRow | null;
+  fvgs?: FvgRow[];
+  ifvgs?: FvgRow[];
+  actual_exit_price?: number | null;
+}
+
 export interface StrategyChartProps {
   instrument: StrategyInstrument;
   timeframe?: StrategyTimeframe;
   height: number;
   expanded?: boolean;
   alertData?: StrategyAlertData | null;
+  staticData?: StrategyStaticData | null;
 }
 
 interface Candle {
@@ -29,21 +38,21 @@ interface Candle {
 }
 
 interface SessionRow {
-  symbol: string;
+  symbol?: string;
   london_high: number | null;
   london_low: number | null;
-  ny_high: number | null;
-  ny_low: number | null;
+  ny_high?: number | null;
+  ny_low?: number | null;
 }
 
 interface FvgRow {
-  instrument_id: number;
-  timeframe: string;
-  timestamp: string;
+  instrument_id?: number;
+  timeframe?: string;
+  timestamp?: string;
   high: number;
   low: number;
-  type: 'bullish' | 'bearish';
-  status: 'active' | 'respected' | 'inverted' | 'invalidated';
+  type?: 'bullish' | 'bearish';
+  status?: 'active' | 'respected' | 'inverted' | 'invalidated';
 }
 
 const TIMEFRAMES: StrategyTimeframe[] = ['5m', '15m', '1H', '4H'];
@@ -75,7 +84,9 @@ export default function StrategyChart({
   height,
   expanded: _expanded,
   alertData,
+  staticData,
 }: StrategyChartProps) {
+  const isStatic = !!staticData;
   const containerRef = useRef<HTMLDivElement>(null);
   const [timeframe, setTimeframe] = useState<StrategyTimeframe>(
     timeframeProp ?? '15m',
@@ -104,6 +115,20 @@ export default function StrategyChart({
   }, []);
 
   useEffect(() => {
+    if (isStatic && staticData) {
+      const raw = Array.isArray(staticData.candles) ? staticData.candles : [];
+      const sorted = [...raw].sort((a, b) =>
+        a.timestamp < b.timestamp ? -1 : a.timestamp > b.timestamp ? 1 : 0,
+      );
+      setCandles(sorted);
+      setSession(staticData.session ?? null);
+      setFvgs(staticData.fvgs ?? []);
+      setIfvgs(staticData.ifvgs ?? []);
+      setLastFetch(sorted.length > 0 ? sorted[sorted.length - 1].timestamp : null);
+      setLoading(false);
+      return;
+    }
+
     let cancelled = false;
 
     async function load() {
@@ -157,12 +182,18 @@ export default function StrategyChart({
       cancelled = true;
       window.clearInterval(intervalId);
     };
-  }, [symbol, timeframe]);
+  }, [symbol, timeframe, isStatic, staticData]);
 
-  const statusColor =
-    lastFetch && ageMinutes(lastFetch) < 5 ? 'var(--green)' : 'var(--amber)';
-  const statusText =
-    lastFetch && ageMinutes(lastFetch) < 5 ? 'LIVE' : 'DELAYED';
+  const statusColor = isStatic
+    ? 'var(--label)'
+    : lastFetch && ageMinutes(lastFetch) < 5
+      ? 'var(--green)'
+      : 'var(--amber)';
+  const statusText = isStatic
+    ? 'TRADE SNAPSHOT'
+    : lastFetch && ageMinutes(lastFetch) < 5
+      ? 'LIVE'
+      : 'DELAYED';
 
   const selectorRowStyle: CSSProperties = {
     display: 'flex',
@@ -216,28 +247,32 @@ export default function StrategyChart({
     width: Math.max(320, Math.round(width)),
     height,
     loading,
+    isStatic,
+    actualExit: staticData?.actual_exit_price ?? null,
   });
 
   return (
     <div>
       <div style={selectorRowStyle}>
         <span style={tagStyle}>
-          <span style={dotStyle} aria-hidden="true" />
+          {!isStatic && <span style={dotStyle} aria-hidden="true" />}
           {statusText}
         </span>
-        <div style={{ display: 'flex', gap: 6, marginLeft: 'auto' }}>
-          {TIMEFRAMES.map((tf) => (
-            <button
-              key={tf}
-              type="button"
-              onClick={() => setTimeframe(tf)}
-              style={tfButtonStyle(tf === timeframe)}
-              aria-pressed={tf === timeframe}
-            >
-              {tf}
-            </button>
-          ))}
-        </div>
+        {!isStatic && (
+          <div style={{ display: 'flex', gap: 6, marginLeft: 'auto' }}>
+            {TIMEFRAMES.map((tf) => (
+              <button
+                key={tf}
+                type="button"
+                onClick={() => setTimeframe(tf)}
+                style={tfButtonStyle(tf === timeframe)}
+                aria-pressed={tf === timeframe}
+              >
+                {tf}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
       <div
         ref={containerRef}
@@ -257,6 +292,8 @@ interface RenderArgs {
   width: number;
   height: number;
   loading: boolean;
+  isStatic?: boolean;
+  actualExit?: number | null;
 }
 
 function escapeAttr(v: string | number): string {
@@ -272,17 +309,22 @@ function renderChartSvg({
   width,
   height,
   loading,
+  isStatic,
+  actualExit,
 }: RenderArgs): string {
   if (candles.length === 0) {
     const msg = loading ? 'Loading candles…' : 'No candle data';
     return `<div style="display:flex;align-items:center;justify-content:center;height:${height}px;color:var(--muted);font-family:'JetBrains Mono',monospace;font-size:12px">${msg}</div>`;
   }
 
-  const alertActive = !!(alert && (alert.is_active === 1 || alert.is_active === true));
+  const alertActive = isStatic
+    ? true
+    : !!(alert && (alert.is_active === 1 || alert.is_active === true));
   const entry = alertActive ? alert?.entry_price ?? null : null;
   const target = alertActive ? alert?.target_price ?? null : null;
   const stop = alertActive ? alert?.stop_price ?? null : null;
   const bosLevel = alertActive ? alert?.bos_level ?? null : null;
+  const exit = isStatic ? actualExit ?? null : null;
 
   const fvgZone = fvgs.length > 0
     ? { high: fvgs[0].high, low: fvgs[0].low }
@@ -303,6 +345,7 @@ function renderChartSvg({
   if (target != null) prices.push(target);
   if (stop != null) prices.push(stop);
   if (bosLevel != null) prices.push(bosLevel);
+  if (exit != null) prices.push(exit);
 
   const filtered = prices.filter((p) => p != null && Number.isFinite(p));
   if (filtered.length === 0) {
@@ -426,28 +469,38 @@ function renderChartSvg({
 
   if (target != null) {
     const y = priceY(target);
-    svg += `<line x1="${padL}" y1="${y}" x2="${padL + chartW}" y2="${y}" stroke="var(--green)" stroke-width="1"/>`;
+    const dash = isStatic ? ' stroke-dasharray="5,4"' : '';
+    svg += `<line x1="${padL}" y1="${y}" x2="${padL + chartW}" y2="${y}" stroke="var(--green)" stroke-width="1"${dash}/>`;
     svg += `<text x="${padL + 4}" y="${y - 3}" fill="var(--green)" font-family="JetBrains Mono,monospace" font-size="9">TARGET</text>`;
   }
   if (stop != null) {
     const y = priceY(stop);
-    svg += `<line x1="${padL}" y1="${y}" x2="${padL + chartW}" y2="${y}" stroke="var(--danger)" stroke-width="1"/>`;
+    const dash = isStatic ? ' stroke-dasharray="5,4"' : '';
+    svg += `<line x1="${padL}" y1="${y}" x2="${padL + chartW}" y2="${y}" stroke="var(--danger)" stroke-width="1"${dash}/>`;
     svg += `<text x="${padL + 4}" y="${y - 3}" fill="var(--danger)" font-family="JetBrains Mono,monospace" font-size="9">STOP</text>`;
   }
   if (entry != null) {
     const y = priceY(entry);
-    svg += '<g class="mtrade-entry-pulse">';
+    const openTag = isStatic ? '<g>' : '<g class="mtrade-entry-pulse">';
+    svg += openTag;
     svg += `<line x1="${padL}" y1="${y}" x2="${padL + chartW}" y2="${y}" stroke="var(--red)" stroke-width="1"/>`;
     svg += `<text x="${padL + 4}" y="${y - 3}" fill="var(--red)" font-family="JetBrains Mono,monospace" font-size="9">ENTRY &#9656;</text>`;
     svg += '</g>';
   }
+  if (exit != null) {
+    const y = priceY(exit);
+    svg += `<line x1="${padL}" y1="${y}" x2="${padL + chartW}" y2="${y}" stroke="var(--white)" stroke-width="1.6"/>`;
+    svg += `<text x="${padL + 4}" y="${y - 3}" fill="var(--white)" font-family="JetBrains Mono,monospace" font-size="9">EXIT</text>`;
+  }
 
-  const lastCandle = candles[candles.length - 1];
-  const lastClose = lastCandle.close;
-  const lastCloseY = priceY(lastClose);
-  svg += `<line x1="${padL}" y1="${lastCloseY}" x2="${padL + chartW}" y2="${lastCloseY}" stroke="var(--white)" stroke-width="1" opacity="0.5"/>`;
-  svg += `<rect x="${svgW - padR + 2}" y="${lastCloseY - 7}" width="58" height="14" rx="2" fill="var(--white)"/>`;
-  svg += `<text x="${svgW - padR + 5}" y="${lastCloseY + 3}" fill="#0a0a10" font-family="JetBrains Mono,monospace" font-size="8" font-weight="bold">${escapeAttr(lastClose.toFixed(2))}</text>`;
+  if (!isStatic) {
+    const lastCandle = candles[candles.length - 1];
+    const lastClose = lastCandle.close;
+    const lastCloseY = priceY(lastClose);
+    svg += `<line x1="${padL}" y1="${lastCloseY}" x2="${padL + chartW}" y2="${lastCloseY}" stroke="var(--white)" stroke-width="1" opacity="0.5"/>`;
+    svg += `<rect x="${svgW - padR + 2}" y="${lastCloseY - 7}" width="58" height="14" rx="2" fill="var(--white)"/>`;
+    svg += `<text x="${svgW - padR + 5}" y="${lastCloseY + 3}" fill="#0a0a10" font-family="JetBrains Mono,monospace" font-size="8" font-weight="bold">${escapeAttr(lastClose.toFixed(2))}</text>`;
+  }
 
   candles.forEach((c, i) => {
     const x = padL + i * candleW + (candleW - bodyW) / 2;
