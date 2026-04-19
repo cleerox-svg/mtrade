@@ -72,6 +72,35 @@ interface JournalDetail {
   similar_setups_json: string | null;
 }
 
+interface AiAnalysis {
+  entry_reasoning?: string;
+  what_worked?: string;
+  what_didnt?: string;
+  lessons?: string;
+  rating?: number;
+}
+
+interface SimilarSetup {
+  id: number;
+  date: string;
+  sweep_direction: string | null;
+  phase: number | null;
+  status: string | null;
+  risk_reward: number | null;
+  entry_price: number | null;
+  target_price: number | null;
+  stop_price: number | null;
+  confidence: number | null;
+  symbol: string | null;
+  fvg_timeframe: string | null;
+}
+
+interface JournalListItem {
+  id: number;
+  setup_id: number | null;
+  pnl: number | null;
+}
+
 const PHASE_INFO: Record<number, { name: string; cologne: string }> = {
   1: { name: 'Sweep', cologne: 'TOP NOTE' },
   2: { name: 'Displacement', cologne: 'HEART NOTE' },
@@ -185,6 +214,243 @@ function SkeletonBlock({ height, width }: { height: number; width?: number | str
   );
 }
 
+function RatingRow({ rating }: { rating: number }) {
+  const clamped = Math.max(0, Math.min(5, Math.round(rating || 0)));
+  return (
+    <div
+      style={{ display: 'inline-flex', gap: 6 }}
+      role="img"
+      aria-label={`${clamped} out of 5`}
+    >
+      {[0, 1, 2, 3, 4].map((i) => (
+        <span
+          key={i}
+          style={{
+            width: 12,
+            height: 12,
+            borderRadius: '50%',
+            backgroundColor: i < clamped ? 'var(--red)' : 'rgba(255,255,255,0.08)',
+            display: 'inline-block',
+          }}
+        />
+      ))}
+    </div>
+  );
+}
+
+function AnalysisSection({
+  heading,
+  body,
+  accent,
+}: {
+  heading: string;
+  body: string | undefined;
+  accent?: boolean;
+}) {
+  if (!body) return null;
+  return (
+    <div
+      style={{
+        padding: 16,
+        borderTop: '1px solid rgba(255,255,255,0.03)',
+        borderLeft: accent ? '2px solid var(--amber)' : undefined,
+        paddingLeft: accent ? 14 : 16,
+      }}
+    >
+      <div
+        style={{
+          fontFamily: 'Outfit, sans-serif',
+          fontSize: 14,
+          fontWeight: 600,
+          color: 'var(--red-soft)',
+          marginBottom: 8,
+        }}
+      >
+        {heading}
+      </div>
+      <div
+        style={{
+          fontFamily: 'Outfit, sans-serif',
+          fontSize: 13,
+          color: 'var(--text)',
+          lineHeight: 1.7,
+          whiteSpace: 'pre-wrap',
+        }}
+      >
+        {body}
+      </div>
+    </div>
+  );
+}
+
+function outcomeStyle(status: string | null | undefined): {
+  label: string;
+  color: string;
+  bg: string;
+  border: string;
+} {
+  const s = (status || '').toLowerCase();
+  if (s === 'won') {
+    return {
+      label: 'WON',
+      color: 'var(--green)',
+      bg: 'rgba(52,211,153,0.14)',
+      border: 'rgba(52,211,153,0.4)',
+    };
+  }
+  if (s === 'lost') {
+    return {
+      label: 'LOST',
+      color: 'var(--danger)',
+      bg: 'rgba(239,68,68,0.14)',
+      border: 'rgba(239,68,68,0.4)',
+    };
+  }
+  if (s === 'expired') {
+    return {
+      label: 'EXPIRED',
+      color: 'var(--muted)',
+      bg: 'rgba(100,116,139,0.14)',
+      border: 'rgba(100,116,139,0.4)',
+    };
+  }
+  return {
+    label: s.toUpperCase() || '—',
+    color: 'var(--muted)',
+    bg: 'rgba(100,116,139,0.1)',
+    border: 'rgba(100,116,139,0.3)',
+  };
+}
+
+function formatSimilarDate(iso: string): string {
+  const dt = new Date(iso.includes('T') ? iso : `${iso}T00:00:00Z`);
+  if (Number.isNaN(dt.getTime())) return iso;
+  return dt.toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  });
+}
+
+function sweepDirectionToDirection(sd: string | null | undefined): string {
+  const s = (sd || '').toLowerCase();
+  if (s === 'bullish' || s === 'long' || s === 'up') return 'long';
+  if (s === 'bearish' || s === 'short' || s === 'down') return 'short';
+  return 'long';
+}
+
+function SimilarCard({
+  match,
+  journalId,
+  journalPnl,
+}: {
+  match: SimilarSetup;
+  journalId: number | null;
+  journalPnl: number | null;
+}) {
+  const outcome = outcomeStyle(match.status);
+  const pnl = journalPnl;
+  const pnlColor =
+    pnl == null
+      ? 'var(--muted)'
+      : pnl > 0
+      ? 'var(--green)'
+      : pnl < 0
+      ? 'var(--danger)'
+      : 'var(--muted)';
+
+  const body = (
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 12,
+        padding: '10px 12px',
+        backgroundColor: 'rgba(255,255,255,0.02)',
+        border: '1px solid var(--glass-border)',
+        borderRadius: 10,
+        transition: 'background-color 0.15s ease, border-color 0.15s ease',
+        flexWrap: 'wrap',
+      }}
+      onMouseEnter={(e) => {
+        if (journalId) {
+          e.currentTarget.style.backgroundColor = 'rgba(251,44,90,0.04)';
+          e.currentTarget.style.borderColor = 'var(--glass-border-hover)';
+        }
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.02)';
+        e.currentTarget.style.borderColor = 'var(--glass-border)';
+      }}
+    >
+      <span
+        style={{
+          fontFamily: '"JetBrains Mono", monospace',
+          fontSize: 11,
+          color: 'var(--label)',
+          letterSpacing: '0.04em',
+          minWidth: 92,
+        }}
+      >
+        {formatSimilarDate(match.date)}
+      </span>
+      <DirectionPill direction={sweepDirectionToDirection(match.sweep_direction)} />
+      <InstrumentTag symbol={match.symbol} />
+      <span
+        style={{
+          fontFamily: '"JetBrains Mono", monospace',
+          fontSize: 13,
+          fontWeight: 700,
+          color: pnlColor,
+          minWidth: 72,
+        }}
+      >
+        {pnl != null ? formatUsd(pnl, { sign: true }) : '—'}
+      </span>
+      <span
+        style={{
+          fontFamily: '"JetBrains Mono", monospace',
+          fontSize: 12,
+          fontWeight: 700,
+          color: 'var(--amber)',
+        }}
+      >
+        {match.risk_reward != null ? `1:${match.risk_reward.toFixed(2)}` : '—'}
+      </span>
+      <span
+        style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          marginLeft: 'auto',
+          padding: '2px 8px',
+          borderRadius: 999,
+          fontFamily: '"JetBrains Mono", monospace',
+          fontSize: 10,
+          fontWeight: 700,
+          letterSpacing: '0.12em',
+          color: outcome.color,
+          backgroundColor: outcome.bg,
+          border: `1px solid ${outcome.border}`,
+        }}
+      >
+        {outcome.label}
+      </span>
+    </div>
+  );
+
+  if (journalId) {
+    return (
+      <Link
+        to={`/app/journal/${journalId}`}
+        style={{ textDecoration: 'none', color: 'inherit', display: 'block' }}
+      >
+        {body}
+      </Link>
+    );
+  }
+  return body;
+}
+
 function LoadingSkeleton() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -228,6 +494,14 @@ export default function JournalEntry() {
   const [chartHeight, setChartHeight] = useState(() =>
     typeof window !== 'undefined' && window.innerWidth >= 640 ? 420 : 280,
   );
+  const [analyzing, setAnalyzing] = useState(false);
+  const [analyzeError, setAnalyzeError] = useState<string | null>(null);
+  const [analysisOverride, setAnalysisOverride] = useState<AiAnalysis | null>(null);
+  const [findingSimilar, setFindingSimilar] = useState(false);
+  const [similarError, setSimilarError] = useState<string | null>(null);
+  const [similarOverride, setSimilarOverride] = useState<SimilarSetup[] | null>(null);
+
+  const { data: journalList } = useApi<JournalListItem[]>('/api/journal');
 
   useEffect(() => {
     if (data) setNotes(data.notes ?? '');
@@ -252,6 +526,44 @@ export default function JournalEntry() {
     }
   }, [data?.chart_snapshot_svg]);
 
+  const storedAnalysis = useMemo<AiAnalysis | null>(() => {
+    if (!data?.ai_analysis) return null;
+    try {
+      const parsed = JSON.parse(data.ai_analysis);
+      if (parsed && typeof parsed === 'object') return parsed as AiAnalysis;
+      return null;
+    } catch {
+      return null;
+    }
+  }, [data?.ai_analysis]);
+
+  const analysis = analysisOverride ?? storedAnalysis;
+
+  const storedSimilar = useMemo<SimilarSetup[] | null>(() => {
+    if (!data?.similar_setups_json) return null;
+    try {
+      const parsed = JSON.parse(data.similar_setups_json);
+      if (Array.isArray(parsed)) return parsed as SimilarSetup[];
+      return null;
+    } catch {
+      return null;
+    }
+  }, [data?.similar_setups_json]);
+
+  const similarMatches = similarOverride ?? storedSimilar;
+
+  const setupToJournal = useMemo(() => {
+    const map = new Map<number, { id: number; pnl: number | null }>();
+    if (Array.isArray(journalList)) {
+      for (const j of journalList) {
+        if (j.setup_id != null) {
+          map.set(j.setup_id, { id: j.id, pnl: j.pnl });
+        }
+      }
+    }
+    return map;
+  }, [journalList]);
+
   const containerStyle: CSSProperties = {
     display: 'flex',
     flexDirection: 'column',
@@ -271,6 +583,45 @@ export default function JournalEntry() {
     gap: 6,
     width: 'fit-content',
     transition: 'color 0.15s ease',
+  };
+
+  const runAnalyze = async () => {
+    if (!id) return;
+    setAnalyzing(true);
+    setAnalyzeError(null);
+    try {
+      const res = await fetch(`/api/journal/${id}/analyze`, {
+        method: 'POST',
+        credentials: 'same-origin',
+      });
+      if (!res.ok) throw new Error(`Analyze failed: ${res.status}`);
+      const body = (await res.json()) as AiAnalysis;
+      setAnalysisOverride(body);
+      refetch();
+    } catch (e) {
+      setAnalyzeError(e instanceof Error ? e.message : 'Unknown error');
+    } finally {
+      setAnalyzing(false);
+    }
+  };
+
+  const runFindSimilar = async () => {
+    if (!id) return;
+    setFindingSimilar(true);
+    setSimilarError(null);
+    try {
+      const res = await fetch(`/api/journal/${id}/similar`, {
+        credentials: 'same-origin',
+      });
+      if (!res.ok) throw new Error(`Find similar failed: ${res.status}`);
+      const body = (await res.json()) as { matches: SimilarSetup[] };
+      setSimilarOverride(Array.isArray(body.matches) ? body.matches : []);
+      refetch();
+    } catch (e) {
+      setSimilarError(e instanceof Error ? e.message : 'Unknown error');
+    } finally {
+      setFindingSimilar(false);
+    }
   };
 
   const saveNotes = async () => {
@@ -526,6 +877,202 @@ export default function JournalEntry() {
             }}
           >
             No chart data available
+          </div>
+        )}
+      </GlassCard>
+
+      <GlassCard title="◈ AI TRADE REVIEW">
+        {analysis ? (
+          <div style={{ display: 'flex', flexDirection: 'column' }}>
+            {typeof analysis.rating === 'number' && (
+              <div style={{ padding: '0 0 12px 0' }}>
+                <RatingRow rating={analysis.rating} />
+              </div>
+            )}
+            <AnalysisSection heading="Entry Reasoning" body={analysis.entry_reasoning} />
+            <AnalysisSection heading="What Worked" body={analysis.what_worked} />
+            <AnalysisSection heading="What Didn't Work" body={analysis.what_didnt} />
+            <AnalysisSection heading="Lessons" body={analysis.lessons} accent />
+            <div style={{ paddingTop: 16 }}>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={runAnalyze}
+                loading={analyzing}
+                disabled={analyzing}
+              >
+                Re-analyze
+              </Button>
+              {analyzeError && (
+                <span
+                  style={{
+                    marginLeft: 12,
+                    fontFamily: 'Outfit, sans-serif',
+                    fontSize: 12,
+                    color: 'var(--danger)',
+                  }}
+                >
+                  {analyzeError}
+                </span>
+              )}
+            </div>
+          </div>
+        ) : (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={runAnalyze}
+              loading={analyzing}
+              disabled={analyzing}
+            >
+              Analyze Trade
+            </Button>
+            {analyzeError && (
+              <span
+                style={{
+                  fontFamily: 'Outfit, sans-serif',
+                  fontSize: 12,
+                  color: 'var(--danger)',
+                }}
+              >
+                {analyzeError}
+              </span>
+            )}
+          </div>
+        )}
+      </GlassCard>
+
+      <GlassCard title="◧ SIMILAR SETUPS">
+        {similarMatches ? (
+          similarMatches.length === 0 ? (
+            <div
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 12,
+              }}
+            >
+              <div
+                style={{
+                  fontFamily: 'Outfit, sans-serif',
+                  fontSize: 13,
+                  color: 'var(--muted)',
+                }}
+              >
+                No similar setups found in the last 30 days
+              </div>
+              <div>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={runFindSimilar}
+                  loading={findingSimilar}
+                  disabled={findingSimilar}
+                >
+                  Find Similar
+                </Button>
+                {similarError && (
+                  <span
+                    style={{
+                      marginLeft: 12,
+                      fontFamily: 'Outfit, sans-serif',
+                      fontSize: 12,
+                      color: 'var(--danger)',
+                    }}
+                  >
+                    {similarError}
+                  </span>
+                )}
+              </div>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              {(() => {
+                const shown = similarMatches.slice(0, 5);
+                const won = shown.filter((m) => (m.status || '').toLowerCase() === 'won').length;
+                const lost = shown.filter((m) => (m.status || '').toLowerCase() === 'lost').length;
+                const rrs = shown
+                  .map((m) => m.risk_reward)
+                  .filter((v): v is number => typeof v === 'number' && Number.isFinite(v));
+                const avgRr =
+                  rrs.length > 0
+                    ? rrs.reduce((a, b) => a + b, 0) / rrs.length
+                    : null;
+                return (
+                  <div
+                    style={{
+                      fontFamily: 'Outfit, sans-serif',
+                      fontSize: 13,
+                      color: 'var(--text)',
+                    }}
+                  >
+                    {shown.length} similar setup{shown.length === 1 ? '' : 's'} found:{' '}
+                    {won} won, {lost} lost
+                    {avgRr != null && `. Avg R:R 1:${avgRr.toFixed(1)}`}
+                  </div>
+                );
+              })()}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {similarMatches.slice(0, 5).map((m) => {
+                  const linked = setupToJournal.get(m.id);
+                  return (
+                    <SimilarCard
+                      key={m.id}
+                      match={m}
+                      journalId={linked?.id ?? null}
+                      journalPnl={linked?.pnl ?? null}
+                    />
+                  );
+                })}
+              </div>
+              <div>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={runFindSimilar}
+                  loading={findingSimilar}
+                  disabled={findingSimilar}
+                >
+                  Refresh
+                </Button>
+                {similarError && (
+                  <span
+                    style={{
+                      marginLeft: 12,
+                      fontFamily: 'Outfit, sans-serif',
+                      fontSize: 12,
+                      color: 'var(--danger)',
+                    }}
+                  >
+                    {similarError}
+                  </span>
+                )}
+              </div>
+            </div>
+          )
+        ) : (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={runFindSimilar}
+              loading={findingSimilar}
+              disabled={findingSimilar}
+            >
+              Find Similar
+            </Button>
+            {similarError && (
+              <span
+                style={{
+                  fontFamily: 'Outfit, sans-serif',
+                  fontSize: 12,
+                  color: 'var(--danger)',
+                }}
+              >
+                {similarError}
+              </span>
+            )}
           </div>
         )}
       </GlassCard>
