@@ -181,6 +181,81 @@ function useAlertIndicator() {
   return active;
 }
 
+const NEWS_LAST_SEEN_KEY = 'mtrade:news-last-seen';
+const NEWS_SEEN_EVENT = 'mtrade:news-seen';
+
+function readLastSeen(): number {
+  try {
+    const raw = window.localStorage.getItem(NEWS_LAST_SEEN_KEY);
+    const n = raw ? parseInt(raw, 10) : 0;
+    return Number.isFinite(n) ? n : 0;
+  } catch {
+    return 0;
+  }
+}
+
+function writeLastSeen(id: number) {
+  try {
+    window.localStorage.setItem(NEWS_LAST_SEEN_KEY, String(id));
+  } catch {
+    /* ignore */
+  }
+}
+
+function useNewsBadge() {
+  const [maxHighId, setMaxHighId] = useState(0);
+  const [lastSeen, setLastSeen] = useState<number>(() =>
+    typeof window !== 'undefined' ? readLastSeen() : 0,
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function load() {
+      try {
+        const res = await fetch('/api/news?hours=24&limit=15', {
+          credentials: 'same-origin',
+        });
+        if (!res.ok) return;
+        const data = (await res.json()) as Array<{
+          id: number;
+          impact: string;
+        }>;
+        if (cancelled || !Array.isArray(data)) return;
+        const high = data.filter(
+          (n) => n.impact === 'high' || n.impact === 'critical',
+        );
+        const maxId = high.reduce((m, n) => (n.id > m ? n.id : m), 0);
+        setMaxHighId(maxId);
+      } catch {
+        /* ignore */
+      }
+    }
+
+    load();
+    const id = window.setInterval(load, 60_000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+    };
+  }, []);
+
+  useEffect(() => {
+    function onSeen() {
+      const current = readLastSeen();
+      setMaxHighId((mx) => {
+        if (mx > current) writeLastSeen(mx);
+        setLastSeen(Math.max(current, mx));
+        return mx;
+      });
+    }
+    window.addEventListener(NEWS_SEEN_EVENT, onSeen);
+    return () => window.removeEventListener(NEWS_SEEN_EVENT, onSeen);
+  }, []);
+
+  return maxHighId > 0 && maxHighId > lastSeen;
+}
+
 export default function Sidebar({
   collapsed,
   onToggleCollapse,
@@ -190,6 +265,7 @@ export default function Sidebar({
 }: SidebarProps) {
   const width = collapsed ? 64 : 240;
   const alertActive = useAlertIndicator();
+  const newsBadgeActive = useNewsBadge();
 
   const asideStyle: CSSProperties = {
     width,
@@ -263,6 +339,8 @@ export default function Sidebar({
         <nav className="flex-1 overflow-y-auto py-3" aria-label="Main">
           {NAV_ITEMS.map((item) => {
             const showDot = alertActive && item.label === 'Dashboard';
+            const showNewsBadge =
+              newsBadgeActive && item.label === 'Dashboard';
             const dotStyle: CSSProperties = {
               width: 8,
               height: 8,
@@ -270,6 +348,23 @@ export default function Sidebar({
               background: 'var(--red)',
               boxShadow: '0 0 8px var(--red), 0 0 14px rgba(251,44,90,0.6)',
               animation: 'mtrade-pulse 1.4s ease-in-out infinite',
+              flexShrink: 0,
+            };
+            const newsBadgeStyle: CSSProperties = {
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              minWidth: 16,
+              height: 16,
+              padding: '0 5px',
+              borderRadius: 9999,
+              background: 'var(--red)',
+              color: 'var(--white)',
+              fontFamily: '"JetBrains Mono", monospace',
+              fontSize: 8,
+              fontWeight: 700,
+              letterSpacing: '0.1em',
+              boxShadow: '0 0 6px rgba(251,44,90,0.6)',
               flexShrink: 0,
             };
             return (
@@ -286,16 +381,41 @@ export default function Sidebar({
               >
                 <span className="sidebar-nav-icon">{item.icon}</span>
                 {!collapsed && <span className="sidebar-nav-label">{item.label}</span>}
-                {showDot && !collapsed && (
+                {!collapsed && (showDot || showNewsBadge) && (
                   <span
-                    aria-label="Alert active"
-                    style={{ ...dotStyle, marginLeft: 'auto' }}
-                  />
+                    style={{
+                      marginLeft: 'auto',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 6,
+                    }}
+                  >
+                    {showNewsBadge && (
+                      <span aria-label="New high-impact news" style={newsBadgeStyle}>
+                        NEW
+                      </span>
+                    )}
+                    {showDot && (
+                      <span aria-label="Alert active" style={dotStyle} />
+                    )}
+                  </span>
                 )}
-                {showDot && collapsed && (
+                {collapsed && showDot && (
                   <span
                     aria-label="Alert active"
                     style={{ ...dotStyle, position: 'absolute', top: 8, right: 10 }}
+                  />
+                )}
+                {collapsed && showNewsBadge && !showDot && (
+                  <span
+                    aria-label="New high-impact news"
+                    style={{
+                      ...dotStyle,
+                      position: 'absolute',
+                      top: 8,
+                      right: 10,
+                      animation: undefined,
+                    }}
                   />
                 )}
               </NavLink>
