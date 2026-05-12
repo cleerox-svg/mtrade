@@ -233,13 +233,15 @@ export default {
   async scheduled(_event: ScheduledEvent, env: Env, _ctx: ExecutionContext): Promise<void> {
     try {
       await fetchAndStoreCandles(env);
-      await computeSessionLevels(env);
       await runStrategyEngine(env);
 
       // Run Alpha Futures risk checks every 5 minutes (when minute is divisible by 5)
       const now = new Date();
       const minute = now.getMinutes();
       if (minute % 5 === 0) {
+        // Session levels rebuild from ~1 day of 1m candles; once every 5 min is
+        // plenty for intraday session high/low tracking and keeps D1 reads down.
+        await computeSessionLevels(env);
         await checkAlphaRiskAlerts(env);
         await fetchNews(env);
       }
