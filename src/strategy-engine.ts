@@ -182,18 +182,14 @@ export async function scanForFVGs(
 
           if (!type) continue;
 
-          // Check for duplicate
-          const existing = await env.DB.prepare(
-            `SELECT id FROM fair_value_gaps
-             WHERE instrument_id = ? AND timeframe = ? AND timestamp = ?`
-          ).bind(inst.id, tf, c2.timestamp).first();
-
-          if (existing) continue;
-
-          await env.DB.prepare(
-            `INSERT INTO fair_value_gaps (instrument_id, timeframe, timestamp, high, low, type, status)
+          // Relies on the UNIQUE(instrument_id, timeframe, timestamp) index
+          // from migration 0012 to dedupe without a prior SELECT.
+          const inserted = await env.DB.prepare(
+            `INSERT OR IGNORE INTO fair_value_gaps (instrument_id, timeframe, timestamp, high, low, type, status)
              VALUES (?, ?, ?, ?, ?, ?, 'active')`
           ).bind(inst.id, tf, c2.timestamp, gapHigh!, gapLow!, type).run();
+
+          if (!inserted.meta?.changes) continue;
 
           console.log(`FVG detected: ${inst.symbol} ${tf} ${type} at ${gapLow!.toFixed(2)}-${gapHigh!.toFixed(2)}`);
         }
