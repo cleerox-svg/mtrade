@@ -148,7 +148,7 @@ export async function scanForFVGs(
         const { results: candles } = await env.DB.prepare(
           `SELECT id, timestamp, open, high, low, close FROM candles
            WHERE instrument_id = ? AND timeframe = ?
-           ORDER BY timestamp DESC LIMIT 20`
+           ORDER BY timestamp DESC LIMIT 5`
         ).bind(inst.id, tf).all<{
           id: number; timestamp: string; open: number; high: number; low: number; close: number;
         }>();
