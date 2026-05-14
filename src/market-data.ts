@@ -66,12 +66,24 @@ async function insertCandles(
   timestamps: number[],
   quote: YahooQuote
 ): Promise<number> {
+  // Yahoo returns a full day/week of candles every cron run, but only the
+  // tail is actually new. Look up the latest stored timestamp once and skip
+  // anything we already have — saves ~1.86M wasted INSERT OR IGNORE calls
+  // per hour at our current cron cadence.
+  const latest = await env.DB.prepare(
+    `SELECT timestamp FROM candles
+     WHERE instrument_id = ? AND timeframe = ?
+     ORDER BY timestamp DESC LIMIT 1`
+  ).bind(instrumentId, timeframe).first<{ timestamp: string }>();
+  const latestMs = latest ? new Date(latest.timestamp).getTime() : 0;
+
   let inserted = 0;
   const batchSize = 50;
 
   for (let b = 0; b < timestamps.length; b += batchSize) {
     const stmts: D1PreparedStatement[] = [];
     for (let i = b; i < Math.min(b + batchSize, timestamps.length); i++) {
+      if (timestamps[i] * 1000 <= latestMs) continue;
       const o = quote.open[i];
       const h = quote.high[i];
       const l = quote.low[i];
