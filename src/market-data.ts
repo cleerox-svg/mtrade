@@ -59,24 +59,28 @@ function unixToISO(ts: number): string {
   return new Date(ts * 1000).toISOString();
 }
 
+async function loadLatestCandleTimestamps(env: Env): Promise<Map<string, number>> {
+  // Single grouped query replaces one MAX-timestamp lookup per (instrument,
+  // timeframe) inside insertCandles. Cuts ~8.5k DB queries/day to ~1.4k.
+  const { results } = await env.DB.prepare(
+    `SELECT instrument_id, timeframe, MAX(timestamp) AS ts
+     FROM candles GROUP BY instrument_id, timeframe`
+  ).all<{ instrument_id: number; timeframe: string; ts: string | null }>();
+  const map = new Map<string, number>();
+  for (const r of results) {
+    if (r.ts) map.set(`${r.instrument_id}:${r.timeframe}`, new Date(r.ts).getTime());
+  }
+  return map;
+}
+
 async function insertCandles(
   env: Env,
   instrumentId: number,
   timeframe: string,
   timestamps: number[],
-  quote: YahooQuote
+  quote: YahooQuote,
+  latestMs: number
 ): Promise<number> {
-  // Yahoo returns a full day/week of candles every cron run, but only the
-  // tail is actually new. Look up the latest stored timestamp once and skip
-  // anything we already have — saves ~1.86M wasted INSERT OR IGNORE calls
-  // per hour at our current cron cadence.
-  const latest = await env.DB.prepare(
-    `SELECT timestamp FROM candles
-     WHERE instrument_id = ? AND timeframe = ?
-     ORDER BY timestamp DESC LIMIT 1`
-  ).bind(instrumentId, timeframe).first<{ timestamp: string }>();
-  const latestMs = latest ? new Date(latest.timestamp).getTime() : 0;
-
   let inserted = 0;
   const batchSize = 50;
 
@@ -155,31 +159,33 @@ function aggregate4H(
 export async function fetchAndStoreCandles(env: Env): Promise<void> {
   const now = new Date();
   const minute = now.getUTCMinutes();
+  const latest = await loadLatestCandleTimestamps(env);
+  const getLatest = (id: number, tf: string) => latest.get(`${id}:${tf}`) ?? 0;
 
   for (const inst of INSTRUMENTS) {
     try {
       // 1m candles — every run
       const m1 = await fetchYahooCandles(inst.yahoo, '1m', '1d');
-      if (m1) await insertCandles(env, inst.id, '1m', m1.timestamps, m1.quote);
+      if (m1) await insertCandles(env, inst.id, '1m', m1.timestamps, m1.quote, getLatest(inst.id, '1m'));
 
       // 5m and 15m — every 5th minute
       if (minute % 5 === 0) {
         const m5 = await fetchYahooCandles(inst.yahoo, '5m', '5d');
-        if (m5) await insertCandles(env, inst.id, '5m', m5.timestamps, m5.quote);
+        if (m5) await insertCandles(env, inst.id, '5m', m5.timestamps, m5.quote, getLatest(inst.id, '5m'));
 
         const m15 = await fetchYahooCandles(inst.yahoo, '15m', '5d');
-        if (m15) await insertCandles(env, inst.id, '15m', m15.timestamps, m15.quote);
+        if (m15) await insertCandles(env, inst.id, '15m', m15.timestamps, m15.quote, getLatest(inst.id, '15m'));
       }
 
       // 1H and 4H — every 15th minute
       if (minute % 15 === 0) {
         const h1 = await fetchYahooCandles(inst.yahoo, '1h', '10d');
-        if (h1) await insertCandles(env, inst.id, '1H', h1.timestamps, h1.quote);
+        if (h1) await insertCandles(env, inst.id, '1H', h1.timestamps, h1.quote, getLatest(inst.id, '1H'));
 
         const h1for4 = await fetchYahooCandles(inst.yahoo, '1h', '30d');
         if (h1for4) {
           const agg = aggregate4H(h1for4.timestamps, h1for4.quote);
-          await insertCandles(env, inst.id, '4H', agg.timestamps, agg.quote);
+          await insertCandles(env, inst.id, '4H', agg.timestamps, agg.quote, getLatest(inst.id, '4H'));
         }
       }
     } catch (err) {
