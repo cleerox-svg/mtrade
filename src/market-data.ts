@@ -70,6 +70,26 @@ function unixToISO(ts: number): string {
   return new Date(ts * 1000).toISOString();
 }
 
+/**
+ * Yahoo's chart API returns candle timestamps with sub-second offsets that
+ * vary between polls (e.g. 18:30:00, 18:30:03, 18:30:08 all for the same
+ * 1m bar). Without alignment we'd store every poll as a separate row and
+ * the UNIQUE constraint would never catch the duplicate. Floor to the
+ * timeframe boundary so each real bar maps to exactly one timestamp.
+ */
+const TIMEFRAME_INTERVAL_SECONDS: Record<string, number> = {
+  '1m': 60,
+  '5m': 300,
+  '15m': 900,
+  '1H': 3600,
+  '4H': 14400,
+};
+
+function alignTimestamp(tsSeconds: number, timeframe: string): number {
+  const interval = TIMEFRAME_INTERVAL_SECONDS[timeframe] ?? 60;
+  return Math.floor(tsSeconds / interval) * interval;
+}
+
 async function resolveLatestMs(
   env: Env,
   instrumentId: number,
@@ -102,17 +122,22 @@ async function insertCandles(
 ): Promise<number | null> {
   const latestMs = await resolveLatestMs(env, instrumentId, timeframe);
 
-  const newCandles: { tsMs: number; o: number; h: number; l: number; c: number; v: number }[] = [];
+  // Yahoo may include multiple entries for the same aligned bar (different
+  // sub-second offsets within one minute). After aligning, dedupe by tsMs
+  // keeping the last occurrence — Yahoo orders ascending, so the latest
+  // value reflects the most recent intra-bar sample.
+  const candlesByTs = new Map<number, { tsMs: number; o: number; h: number; l: number; c: number; v: number }>();
   for (let i = 0; i < timestamps.length; i++) {
-    const tsMs = timestamps[i] * 1000;
+    const tsMs = alignTimestamp(timestamps[i], timeframe) * 1000;
     if (tsMs <= latestMs) continue;
     const o = quote.open[i];
     const h = quote.high[i];
     const l = quote.low[i];
     const c = quote.close[i];
     if (o == null || h == null || l == null || c == null) continue;
-    newCandles.push({ tsMs, o, h, l, c, v: quote.volume[i] ?? 0 });
+    candlesByTs.set(tsMs, { tsMs, o, h, l, c, v: quote.volume[i] ?? 0 });
   }
+  const newCandles = Array.from(candlesByTs.values()).sort((a, b) => a.tsMs - b.tsMs);
 
   if (newCandles.length === 0) return null;
 
