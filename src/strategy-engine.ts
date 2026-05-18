@@ -78,12 +78,27 @@ const DEFAULT_CONFIG: Omit<StrategyConfig, 'user_id'> = {
   kill_switch_date: null,
 };
 
+// Strategy configs change rarely (via settings UI) but were being re-fetched
+// every cron minute (~2.4k queries/day). Module-scoped TTL cache: cron picks
+// up changes within CONFIG_TTL_MS; API handlers can force-invalidate via
+// invalidateStrategyConfigCache().
+const CONFIG_TTL_MS = 60_000;
+let configCache: { configs: StrategyConfig[]; fetchedAt: number } | null = null;
+
 async function loadStrategyConfigs(env: Env): Promise<StrategyConfig[]> {
+  if (configCache && Date.now() - configCache.fetchedAt < CONFIG_TTL_MS) {
+    return configCache.configs;
+  }
+
   const { results: users } = await env.DB.prepare(
     'SELECT DISTINCT user_id FROM alpha_accounts WHERE is_active = 1'
   ).all<{ user_id: string }>();
 
-  if (users.length === 0) return [{ user_id: 'system', ...DEFAULT_CONFIG }];
+  if (users.length === 0) {
+    const configs = [{ user_id: 'system', ...DEFAULT_CONFIG }];
+    configCache = { configs, fetchedAt: Date.now() };
+    return configs;
+  }
 
   const configs: StrategyConfig[] = [];
   for (const u of users) {
@@ -95,7 +110,17 @@ async function loadStrategyConfigs(env: Env): Promise<StrategyConfig[]> {
     ).bind(u.user_id).first<StrategyConfig>();
     configs.push(row ?? { user_id: u.user_id, ...DEFAULT_CONFIG });
   }
+  configCache = { configs, fetchedAt: Date.now() };
   return configs;
+}
+
+/**
+ * Invalidate the strategy config cache. Call this from API handlers that
+ * mutate strategy_config or alpha_accounts so the next cron tick sees the
+ * change immediately rather than waiting up to CONFIG_TTL_MS.
+ */
+export function invalidateStrategyConfigCache(): void {
+  configCache = null;
 }
 
 /** Merge multiple user configs into a single effective config for the engine. */
@@ -134,7 +159,8 @@ function calculateContracts(config: Omit<StrategyConfig, 'user_id'>): number {
 
 export async function scanForFVGs(
   env: Env,
-  fvgConfig?: { fvg_scan_1h: number; fvg_scan_4h: number }
+  fvgConfig?: { fvg_scan_1h: number; fvg_scan_4h: number },
+  changedCombos?: Set<string>
 ): Promise<void> {
   let timeframes = ['5m', '15m', '1H', '4H'];
   if (fvgConfig) {
@@ -144,55 +170,48 @@ export async function scanForFVGs(
 
   for (const inst of INSTRUMENTS) {
     for (const tf of timeframes) {
+      // A new FVG can only form when a fresh candle closes. Skip combos that
+      // didn't receive a new candle on this cron tick.
+      if (changedCombos && !changedCombos.has(`${inst.id}:${tf}`)) continue;
+
       try {
+        // Fetch just the latest three candles. They form the only triplet
+        // that could newly produce an FVG — older triplets were evaluated on
+        // prior cron runs and would be no-ops (INSERT OR IGNORE).
         const { results: candles } = await env.DB.prepare(
-          `SELECT id, timestamp, open, high, low, close FROM candles
+          `SELECT timestamp, high, low FROM candles
            WHERE instrument_id = ? AND timeframe = ?
-           ORDER BY timestamp DESC LIMIT 5`
-        ).bind(inst.id, tf).all<{
-          id: number; timestamp: string; open: number; high: number; low: number; close: number;
-        }>();
+           ORDER BY timestamp DESC LIMIT 3`
+        ).bind(inst.id, tf).all<{ timestamp: string; high: number; low: number }>();
 
         if (candles.length < 3) continue;
 
-        // Reverse to ascending order
-        const asc = candles.slice().reverse();
+        const [c3, c2, c1] = candles; // DESC: c3 newest, c1 oldest of the triplet
 
-        for (let i = 0; i <= asc.length - 3; i++) {
-          const c1 = asc[i];
-          const c2 = asc[i + 1]; // displacement candle
-          const c3 = asc[i + 2];
+        let type: 'bullish' | 'bearish' | null = null;
+        let gapHigh: number;
+        let gapLow: number;
 
-          let type: 'bullish' | 'bearish' | null = null;
-          let gapHigh: number;
-          let gapLow: number;
-
-          // Bullish FVG: gap between candle 1's high and candle 3's low
-          if (c1.high < c3.low) {
-            type = 'bullish';
-            gapLow = c1.high;
-            gapHigh = c3.low;
-          }
-          // Bearish FVG: gap between candle 3's high and candle 1's low
-          else if (c1.low > c3.high) {
-            type = 'bearish';
-            gapHigh = c1.low;
-            gapLow = c3.high;
-          }
-
-          if (!type) continue;
-
-          // Relies on the UNIQUE(instrument_id, timeframe, timestamp) index
-          // from migration 0012 to dedupe without a prior SELECT.
-          const inserted = await env.DB.prepare(
-            `INSERT OR IGNORE INTO fair_value_gaps (instrument_id, timeframe, timestamp, high, low, type, status)
-             VALUES (?, ?, ?, ?, ?, ?, 'active')`
-          ).bind(inst.id, tf, c2.timestamp, gapHigh!, gapLow!, type).run();
-
-          if (!inserted.meta?.changes) continue;
-
-          console.log(`FVG detected: ${inst.symbol} ${tf} ${type} at ${gapLow!.toFixed(2)}-${gapHigh!.toFixed(2)}`);
+        if (c1.high < c3.low) {
+          type = 'bullish';
+          gapLow = c1.high;
+          gapHigh = c3.low;
+        } else if (c1.low > c3.high) {
+          type = 'bearish';
+          gapHigh = c1.low;
+          gapLow = c3.high;
         }
+
+        if (!type) continue;
+
+        const inserted = await env.DB.prepare(
+          `INSERT OR IGNORE INTO fair_value_gaps (instrument_id, timeframe, timestamp, high, low, type, status)
+           VALUES (?, ?, ?, ?, ?, ?, 'active')`
+        ).bind(inst.id, tf, c2.timestamp, gapHigh!, gapLow!, type).run();
+
+        if (!inserted.meta?.changes) continue;
+
+        console.log(`FVG detected: ${inst.symbol} ${tf} ${type} at ${gapLow!.toFixed(2)}-${gapHigh!.toFixed(2)}`);
       } catch (err) {
         console.error(`scanForFVGs error ${inst.symbol} ${tf}:`, err);
       }
@@ -202,12 +221,19 @@ export async function scanForFVGs(
 
 // ── 2. Update FVG Statuses ──
 
-export async function updateFVGStatuses(env: Env): Promise<void> {
+export async function updateFVGStatuses(
+  env: Env,
+  changedInstruments?: Set<number>
+): Promise<void> {
   const fiveDaysAgo = new Date(Date.now() - 5 * 86400000).toISOString();
 
   for (const inst of INSTRUMENTS) {
+    // Status transitions are driven by the latest 1m close. If no new 1m
+    // candle arrived for this instrument, every FVG would re-evaluate to
+    // the same status as last tick — skip the work.
+    if (changedInstruments && !changedInstruments.has(inst.id)) continue;
+
     try {
-      // Get latest 1m candle close
       const latest = await env.DB.prepare(
         `SELECT close, high, low FROM candles
          WHERE instrument_id = ? AND timeframe = '1m'
@@ -595,7 +621,10 @@ Respond: {"confidence":0-100,"signal":"ACCORD"|"BASE NOTE"|"HEART NOTE"|"TOP NOT
   }
 }
 
-export async function runSetupStateMachine(env: Env): Promise<void> {
+export async function runSetupStateMachine(
+  env: Env,
+  changedInstruments?: Set<number>
+): Promise<void> {
   const now = new Date();
   const todayET = getETDate(now);
   const etHour = getETHour(now);
@@ -624,8 +653,12 @@ export async function runSetupStateMachine(env: Env): Promise<void> {
   }
 
   for (const inst of INSTRUMENTS) {
+    // Setup phase transitions all hinge on the latest 1m candle (sweep
+    // detection, BOS confirmation, FVG retracement). If no new 1m candle
+    // arrived for this instrument this tick, nothing can advance — skip.
+    if (changedInstruments && !changedInstruments.has(inst.id)) continue;
+
     try {
-      // Get or create today's setup for this instrument
       let setup = await env.DB.prepare(
         `SELECT * FROM setups
          WHERE instrument_id = ? AND date = ? AND status IN ('forming', 'ready')
@@ -1075,17 +1108,35 @@ export async function runSetupStateMachine(env: Env): Promise<void> {
 
 // ── 5. Main entry point for cron ──
 
-export async function runStrategyEngine(env: Env): Promise<void> {
+export async function runStrategyEngine(
+  env: Env,
+  changedCombos?: Set<string>
+): Promise<void> {
   if (!isFuturesMarketOpen()) {
     console.log('Strategy engine: market closed, skipping');
     return;
   }
 
-  // Load configs for FVG timeframe filtering (FVG scanning always runs globally)
+  if (changedCombos && changedCombos.size === 0) {
+    // Nothing new from Yahoo this tick — every downstream check would be a
+    // no-op against unchanged data. Save the DB round-trips.
+    return;
+  }
+
+  // Derive the set of instruments that had a new 1m candle. Status/setup
+  // updates only need to run for those.
+  const changedInstruments = changedCombos
+    ? new Set(
+      Array.from(changedCombos)
+        .filter(k => k.endsWith(':1m'))
+        .map(k => parseInt(k.split(':')[0], 10))
+    )
+    : undefined;
+
   const configs = await loadStrategyConfigs(env);
   const fvgConfig = mergeConfigs(configs);
 
-  await scanForFVGs(env, { fvg_scan_1h: fvgConfig.fvg_scan_1h, fvg_scan_4h: fvgConfig.fvg_scan_4h });
-  await updateFVGStatuses(env);
-  await runSetupStateMachine(env);
+  await scanForFVGs(env, { fvg_scan_1h: fvgConfig.fvg_scan_1h, fvg_scan_4h: fvgConfig.fvg_scan_4h }, changedCombos);
+  await updateFVGStatuses(env, changedInstruments);
+  await runSetupStateMachine(env, changedInstruments);
 }

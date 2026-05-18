@@ -232,20 +232,24 @@ export default {
   },
   async scheduled(_event: ScheduledEvent, env: Env, _ctx: ExecutionContext): Promise<void> {
     try {
-      await fetchAndStoreCandles(env);
-      await runStrategyEngine(env);
+      // fetchAndStoreCandles returns the set of (instrument, timeframe)
+      // combos that received a new candle this tick. The strategy engine
+      // skips work for combos/instruments that didn't change, which is
+      // most of them most ticks.
+      const changedCombos = await fetchAndStoreCandles(env);
+      await runStrategyEngine(env, changedCombos);
 
-      // Run Alpha Futures risk checks every 5 minutes (when minute is divisible by 5)
       const now = new Date();
       const minute = now.getMinutes();
       if (minute % 5 === 0) {
-        // Session levels rebuild from ~1 day of 1m candles; once every 5 min is
-        // plenty for intraday session high/low tracking and keeps D1 reads down.
-        await computeSessionLevels(env);
         await checkAlphaRiskAlerts(env);
         await fetchNews(env);
       }
       if (minute === 0) {
+        // Hourly reconciliation backstop. Session levels are normally kept
+        // up to date incrementally by insertCandles; this catches any drift
+        // (e.g. from cold-start gaps) by re-aggregating once an hour.
+        await computeSessionLevels(env);
         await fetchEconomicCalendar(env);
       }
     } catch (err) {
