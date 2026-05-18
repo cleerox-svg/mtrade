@@ -1,6 +1,7 @@
 import { Env, JwtPayload } from './types';
 import { sendTestNotification, getUserSettings } from './notifications';
 import { checkTradeCompliance, quickTradeCheck, TradeInput, QuickCheckInput } from './compliance';
+import { invalidateStrategyConfigCache } from './strategy-engine';
 
 type Json = (data: unknown, status?: number) => Response;
 
@@ -268,6 +269,7 @@ export async function handleApiRoutes(
       body.drawdown_type, drawdownLimit, profitTarget,
       maxContracts, scalingLimit
     ).run();
+    invalidateStrategyConfigCache();
     return json({ id: result.meta.last_row_id }, 201);
   }
 
@@ -285,6 +287,7 @@ export async function handleApiRoutes(
       body.drawdown_limit, body.profit_target, body.max_contracts,
       body.scaling_limit, body.is_active ?? 1, id, user.sub
     ).run();
+    invalidateStrategyConfigCache();
     return json({ ok: true });
   }
 
@@ -1663,6 +1666,8 @@ If you have linked Alpha Futures accounts, this section shows your **TACH gauges
       ).bind(...vals).run();
     }
 
+    invalidateStrategyConfigCache();
+
     const updated = await env.DB.prepare(
       'SELECT * FROM strategy_config WHERE user_id = ?'
     ).bind(user.sub).first();
@@ -1698,6 +1703,8 @@ If you have linked Alpha Futures accounts, this section shows your **TACH gauges
         preset.default_contracts, body.preset).run();
     }
 
+    invalidateStrategyConfigCache();
+
     const updated = await env.DB.prepare(
       'SELECT * FROM strategy_config WHERE user_id = ?'
     ).bind(user.sub).first();
@@ -1726,6 +1733,8 @@ If you have linked Alpha Futures accounts, this section shows your **TACH gauges
         `INSERT INTO strategy_config (user_id, kill_switch, kill_switch_date) VALUES (?, ?, ?)`
       ).bind(user.sub, enabled, enabled ? todayET : null).run();
     }
+
+    invalidateStrategyConfigCache();
 
     const updated = await env.DB.prepare(
       'SELECT * FROM strategy_config WHERE user_id = ?'

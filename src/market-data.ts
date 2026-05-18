@@ -7,6 +7,9 @@ const INSTRUMENTS: { symbol: string; yahoo: string; id: number }[] = [
   { symbol: 'MNQ', yahoo: 'MNQ=F', id: 4 },
 ];
 
+// Strategy engine only tracks session levels for ES and NQ. Micros piggyback.
+const SESSION_INSTRUMENT_IDS = new Set([1, 2]);
+
 const YAHOO_HEADERS = {
   'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
   Accept: 'application/json',
@@ -29,6 +32,14 @@ interface YahooResult {
     error: { code: string; description: string } | null;
   };
 }
+
+/**
+ * Map of `${instrumentId}:${timeframe}` → unix ms of newest stored candle.
+ * Module-scoped: a warm Worker isolate reuses this across cron ticks, so we
+ * only hit D1 with the MAX(timestamp) seek on cold start. Updated by
+ * insertCandles after every successful insert.
+ */
+const latestCandlesCache = new Map<string, number>();
 
 async function fetchYahooCandles(
   yahooSymbol: string,
@@ -59,59 +70,164 @@ function unixToISO(ts: number): string {
   return new Date(ts * 1000).toISOString();
 }
 
+async function resolveLatestMs(
+  env: Env,
+  instrumentId: number,
+  timeframe: string
+): Promise<number> {
+  const key = `${instrumentId}:${timeframe}`;
+  const cached = latestCandlesCache.get(key);
+  if (cached !== undefined) return cached;
+  const row = await env.DB.prepare(
+    `SELECT timestamp FROM candles
+     WHERE instrument_id = ? AND timeframe = ?
+     ORDER BY timestamp DESC LIMIT 1`
+  ).bind(instrumentId, timeframe).first<{ timestamp: string }>();
+  const ms = row ? new Date(row.timestamp).getTime() : 0;
+  latestCandlesCache.set(key, ms);
+  return ms;
+}
+
+/**
+ * Returns the newest inserted timestamp (ms), or null if nothing was new.
+ * For 1m candles on session-tracked instruments, also applies incremental
+ * session-level updates so we don't need a separate 1-day scan from cron.
+ */
 async function insertCandles(
   env: Env,
   instrumentId: number,
   timeframe: string,
   timestamps: number[],
   quote: YahooQuote
-): Promise<number> {
-  // Look up the latest stored timestamp once per (instrument, timeframe).
-  // With UNIQUE(instrument_id, timeframe, timestamp), this is a single
-  // O(log n) index seek that returns one row. A previous attempt to
-  // batch this across all combos with GROUP BY blew up to a full table
-  // scan (818M rows/day) because SQLite/D1 doesn't apply the min/max
-  // optimization to GROUP BY queries.
-  const latest = await env.DB.prepare(
-    `SELECT timestamp FROM candles
-     WHERE instrument_id = ? AND timeframe = ?
-     ORDER BY timestamp DESC LIMIT 1`
-  ).bind(instrumentId, timeframe).first<{ timestamp: string }>();
-  const latestMs = latest ? new Date(latest.timestamp).getTime() : 0;
+): Promise<number | null> {
+  const latestMs = await resolveLatestMs(env, instrumentId, timeframe);
 
-  let inserted = 0;
+  const newCandles: { tsMs: number; o: number; h: number; l: number; c: number; v: number }[] = [];
+  for (let i = 0; i < timestamps.length; i++) {
+    const tsMs = timestamps[i] * 1000;
+    if (tsMs <= latestMs) continue;
+    const o = quote.open[i];
+    const h = quote.high[i];
+    const l = quote.low[i];
+    const c = quote.close[i];
+    if (o == null || h == null || l == null || c == null) continue;
+    newCandles.push({ tsMs, o, h, l, c, v: quote.volume[i] ?? 0 });
+  }
+
+  if (newCandles.length === 0) return null;
+
   const batchSize = 50;
+  for (let b = 0; b < newCandles.length; b += batchSize) {
+    const slice = newCandles.slice(b, b + batchSize);
+    const stmts = slice.map(c =>
+      env.DB.prepare(
+        'INSERT OR IGNORE INTO candles (instrument_id, timeframe, timestamp, open, high, low, close, volume) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+      ).bind(instrumentId, timeframe, unixToISO(c.tsMs / 1000), c.o, c.h, c.l, c.c, c.v)
+    );
+    await env.DB.batch(stmts);
+  }
 
-  for (let b = 0; b < timestamps.length; b += batchSize) {
-    const stmts: D1PreparedStatement[] = [];
-    for (let i = b; i < Math.min(b + batchSize, timestamps.length); i++) {
-      if (timestamps[i] * 1000 <= latestMs) continue;
-      const o = quote.open[i];
-      const h = quote.high[i];
-      const l = quote.low[i];
-      const c = quote.close[i];
-      if (o == null || h == null || l == null || c == null) continue;
-      const vol = quote.volume[i] ?? 0;
-      const ts = unixToISO(timestamps[i]);
-      stmts.push(
-        env.DB.prepare(
-          'INSERT OR IGNORE INTO candles (instrument_id, timeframe, timestamp, open, high, low, close, volume) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
-        ).bind(instrumentId, timeframe, ts, o, h, l, c, vol)
-      );
-      inserted++;
-    }
-    if (stmts.length > 0) {
-      await env.DB.batch(stmts);
+  const newestMs = newCandles[newCandles.length - 1].tsMs;
+  latestCandlesCache.set(`${instrumentId}:${timeframe}`, newestMs);
+
+  if (timeframe === '1m' && SESSION_INSTRUMENT_IDS.has(instrumentId)) {
+    await applyIncrementalSessions(env, instrumentId, newCandles);
+  }
+
+  return newestMs;
+}
+
+type SessionName = 'london' | 'ny' | 'asia';
+
+/**
+ * Determine which trading session a candle belongs to (if any) and which
+ * `sessions` row date to attribute it to.
+ *
+ * - London: 02:00–05:00 ET, date = candle's ET date
+ * - NY:     09:30–12:00 ET, date = candle's ET date
+ * - Asia:   yesterday 18:00 ET → today 02:00 ET (anchored on the morning
+ *           date so `sessions.date` matches the rest of "today")
+ */
+function classifySession(tsMs: number): { name: SessionName; date: string } | null {
+  const d = new Date(tsMs);
+  const etStr = d.toLocaleString('en-US', { timeZone: 'America/New_York', hour12: false });
+  // toLocaleString format: "M/D/YYYY, HH:MM:SS"
+  const [datePart, timePart = '0:0:0'] = etStr.split(', ');
+  const [mStr, dStr, yStr] = datePart.split('/');
+  const [hStr, minStr] = timePart.split(':');
+  const etDate = `${yStr}-${mStr.padStart(2, '0')}-${dStr.padStart(2, '0')}`;
+  const hour = parseInt(hStr, 10) + parseInt(minStr || '0', 10) / 60;
+
+  if (hour >= 2 && hour < 5) return { name: 'london', date: etDate };
+  if (hour >= 9.5 && hour < 12) return { name: 'ny', date: etDate };
+  if (hour >= 18) {
+    // Evening: belongs to tomorrow's session row
+    const tomorrow = new Date(Date.UTC(parseInt(yStr, 10), parseInt(mStr, 10) - 1, parseInt(dStr, 10) + 1));
+    const y = tomorrow.getUTCFullYear();
+    const m = String(tomorrow.getUTCMonth() + 1).padStart(2, '0');
+    const dd = String(tomorrow.getUTCDate()).padStart(2, '0');
+    return { name: 'asia', date: `${y}-${m}-${dd}` };
+  }
+  if (hour < 2) return { name: 'asia', date: etDate };
+  return null;
+}
+
+/**
+ * Incrementally update sessions rows for the newly inserted 1m candles.
+ * Buckets by (date, session) then issues one UPSERT per bucket that merges
+ * via MAX/MIN against any existing values for that session.
+ */
+async function applyIncrementalSessions(
+  env: Env,
+  instrumentId: number,
+  newCandles: { tsMs: number; h: number; l: number }[]
+): Promise<void> {
+  type Bucket = { date: string; name: SessionName; hi: number; lo: number };
+  const buckets = new Map<string, Bucket>();
+
+  for (const c of newCandles) {
+    const s = classifySession(c.tsMs);
+    if (!s) continue;
+    const key = `${s.date}:${s.name}`;
+    const b = buckets.get(key);
+    if (b) {
+      if (c.h > b.hi) b.hi = c.h;
+      if (c.l < b.lo) b.lo = c.l;
+    } else {
+      buckets.set(key, { date: s.date, name: s.name, hi: c.h, lo: c.l });
     }
   }
-  return inserted;
+
+  if (buckets.size === 0) return;
+
+  const sqlBySession: Record<SessionName, string> = {
+    london: `INSERT INTO sessions (date, instrument_id, london_high, london_low)
+             VALUES (?, ?, ?, ?)
+             ON CONFLICT(date, instrument_id) DO UPDATE SET
+               london_high = MAX(COALESCE(london_high, excluded.london_high), excluded.london_high),
+               london_low  = MIN(COALESCE(london_low,  excluded.london_low),  excluded.london_low)`,
+    ny: `INSERT INTO sessions (date, instrument_id, ny_high, ny_low)
+         VALUES (?, ?, ?, ?)
+         ON CONFLICT(date, instrument_id) DO UPDATE SET
+           ny_high = MAX(COALESCE(ny_high, excluded.ny_high), excluded.ny_high),
+           ny_low  = MIN(COALESCE(ny_low,  excluded.ny_low),  excluded.ny_low)`,
+    asia: `INSERT INTO sessions (date, instrument_id, asia_high, asia_low)
+           VALUES (?, ?, ?, ?)
+           ON CONFLICT(date, instrument_id) DO UPDATE SET
+             asia_high = MAX(COALESCE(asia_high, excluded.asia_high), excluded.asia_high),
+             asia_low  = MIN(COALESCE(asia_low,  excluded.asia_low),  excluded.asia_low)`,
+  };
+
+  const stmts = Array.from(buckets.values()).map(b =>
+    env.DB.prepare(sqlBySession[b.name]).bind(b.date, instrumentId, b.hi, b.lo)
+  );
+  await env.DB.batch(stmts);
 }
 
 function aggregate4H(
   timestamps: number[],
   quote: YahooQuote
 ): { timestamps: number[]; quote: YahooQuote } {
-  // Group 1h candles into 4-hour windows (0, 4, 8, 12, 16, 20 UTC)
   const buckets = new Map<number, { ts: number; o: number; h: number; l: number; c: number; v: number }>();
 
   for (let i = 0; i < timestamps.length; i++) {
@@ -154,44 +270,54 @@ function aggregate4H(
   return out;
 }
 
-export async function fetchAndStoreCandles(env: Env): Promise<void> {
+/**
+ * Set of `${instrumentId}:${timeframe}` keys that had at least one new
+ * candle inserted on this cron tick. Downstream cron work is gated on this
+ * so we don't redo work for combos where nothing changed.
+ */
+export type CandleChanges = Set<string>;
+
+export async function fetchAndStoreCandles(env: Env): Promise<CandleChanges> {
   const now = new Date();
   const minute = now.getUTCMinutes();
+  const changed: CandleChanges = new Set();
+
+  const record = (instId: number, tf: string, ms: number | null) => {
+    if (ms !== null) changed.add(`${instId}:${tf}`);
+  };
 
   for (const inst of INSTRUMENTS) {
     try {
-      // 1m candles — every run
       const m1 = await fetchYahooCandles(inst.yahoo, '1m', '1d');
-      if (m1) await insertCandles(env, inst.id, '1m', m1.timestamps, m1.quote);
+      if (m1) record(inst.id, '1m', await insertCandles(env, inst.id, '1m', m1.timestamps, m1.quote));
 
-      // 5m and 15m — every 5th minute
       if (minute % 5 === 0) {
         const m5 = await fetchYahooCandles(inst.yahoo, '5m', '5d');
-        if (m5) await insertCandles(env, inst.id, '5m', m5.timestamps, m5.quote);
+        if (m5) record(inst.id, '5m', await insertCandles(env, inst.id, '5m', m5.timestamps, m5.quote));
 
         const m15 = await fetchYahooCandles(inst.yahoo, '15m', '5d');
-        if (m15) await insertCandles(env, inst.id, '15m', m15.timestamps, m15.quote);
+        if (m15) record(inst.id, '15m', await insertCandles(env, inst.id, '15m', m15.timestamps, m15.quote));
       }
 
-      // 1H and 4H — every 15th minute
       if (minute % 15 === 0) {
         const h1 = await fetchYahooCandles(inst.yahoo, '1h', '10d');
-        if (h1) await insertCandles(env, inst.id, '1H', h1.timestamps, h1.quote);
+        if (h1) record(inst.id, '1H', await insertCandles(env, inst.id, '1H', h1.timestamps, h1.quote));
 
         const h1for4 = await fetchYahooCandles(inst.yahoo, '1h', '30d');
         if (h1for4) {
           const agg = aggregate4H(h1for4.timestamps, h1for4.quote);
-          await insertCandles(env, inst.id, '4H', agg.timestamps, agg.quote);
+          record(inst.id, '4H', await insertCandles(env, inst.id, '4H', agg.timestamps, agg.quote));
         }
       }
     } catch (err) {
       console.error(`Error processing ${inst.symbol}:`, err);
     }
   }
+
+  return changed;
 }
 
 function getETDate(now: Date): string {
-  // Get current date in America/New_York
   const etStr = now.toLocaleString('en-US', { timeZone: 'America/New_York' });
   const etDate = new Date(etStr);
   const y = etDate.getFullYear();
@@ -201,7 +327,6 @@ function getETDate(now: Date): string {
 }
 
 function getETHourMinute(isoTimestamp: string): number {
-  // Parse ISO timestamp and get hour.fraction in ET
   const d = new Date(isoTimestamp);
   const etStr = d.toLocaleString('en-US', { timeZone: 'America/New_York', hour12: false });
   const parts = etStr.split(', ')[1]?.split(':') || etStr.split(' ')[1]?.split(':') || [];
@@ -210,16 +335,21 @@ function getETHourMinute(isoTimestamp: string): number {
   return h + m / 60;
 }
 
+/**
+ * Periodic reconciliation backstop. The primary source of session levels is
+ * the incremental UPSERT inside insertCandles; this function exists to catch
+ * any drift (e.g. candles that were stored before incremental was deployed).
+ * Cron now calls it at most once an hour rather than every five minutes.
+ */
 export async function computeSessionLevels(env: Env): Promise<void> {
   const now = new Date();
   const todayET = getETDate(now);
-  // Also compute for yesterday (for Asia session which spans evenings)
   const yesterday = new Date(now.getTime() - 86400000);
   const yesterdayET = getETDate(yesterday);
 
   for (const inst of INSTRUMENTS) {
+    if (!SESSION_INSTRUMENT_IDS.has(inst.id)) continue;
     try {
-      // Get all 1m candles from the last 2 days
       const { results: candles } = await env.DB.prepare(
         `SELECT timestamp, high, low FROM candles
          WHERE instrument_id = ? AND timeframe = '1m'
@@ -240,24 +370,18 @@ export async function computeSessionLevels(env: Env): Promise<void> {
         const etTime = getETHourMinute(c.timestamp);
         const candleDateET = getETDate(new Date(c.timestamp));
 
-        // London: 02:00 - 05:00 ET today
         if (candleDateET === todayET && etTime >= 2 && etTime < 5) {
           if (londonHigh === null || c.high > londonHigh) londonHigh = c.high;
           if (londonLow === null || c.low < londonLow) londonLow = c.low;
         }
-
-        // NY: 09:30 - 12:00 ET today
         if (candleDateET === todayET && etTime >= 9.5 && etTime < 12) {
           if (nyHigh === null || c.high > nyHigh) nyHigh = c.high;
           if (nyLow === null || c.low < nyLow) nyLow = c.low;
         }
-
-        // Asia: 18:00 - 00:00 ET yesterday evening
         if (candleDateET === yesterdayET && etTime >= 18) {
           if (asiaHigh === null || c.high > asiaHigh) asiaHigh = c.high;
           if (asiaLow === null || c.low < asiaLow) asiaLow = c.low;
         }
-        // Asia also covers 00:00 - 02:00 ET today
         if (candleDateET === todayET && etTime < 2) {
           if (asiaHigh === null || c.high > asiaHigh) asiaHigh = c.high;
           if (asiaLow === null || c.low < asiaLow) asiaLow = c.low;
