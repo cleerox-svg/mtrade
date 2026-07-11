@@ -26,8 +26,14 @@ visible with evidence, not to wave changes through.
     (2%), consistency (40% standard/zero, none advanced), drawdown modes
     (trailing peak-to-valley vs EOD vs static), safety-net unlock. Check
     boundary values and off-by-one on the 70%/85% drawdown alert thresholds.
-  - Cron cost/idempotency: candle insert dedup, change-gating, no unbounded
-    per-tick D1 scans introduced by a change.
+  - **Efficiency & scalability (mandatory gate, no quick fixes):** enforce
+    `docs/backend-efficiency-standard.md` on any change touching D1 or the
+    Worker. Reject changes that add a full-table scan on a growing table, an
+    unbatched multi-row write, an N+1 query loop, `SELECT *` on a hot path, an
+    unbounded result set, or uncapped per-tick/cron work. Where feasible, run
+    `EXPLAIN QUERY PLAN` on new/changed queries and confirm `SEARCH … USING
+    INDEX` (not `SCAN`); confirm hot reads are covered by their index. Ask "does
+    this hold at 100× the rows/users?" — if the answer is a scan, it fails.
   - API contract: routes return the shapes the frontend hooks expect.
 
 ## Current state of testing (bootstrap responsibility)

@@ -80,6 +80,12 @@ Independent steps run in parallel; only real dependencies serialize.
 - Backend: `npx tsc --noEmit` (root).
 - Frontend: `cd frontend && npm run build` (`tsc --noEmit && vite build`).
 - Finance changes additionally require `qa-test-engineer` boundary testing.
+- **Any D1/Worker change must pass the efficiency & scalability standard** in
+  `docs/backend-efficiency-standard.md` — index-served reads (covering where
+  hot), bounded result sets, batched/idempotent writes, change-gated recurring
+  work, and correctness at 100× current rows/users. No quick fixes: a change
+  that adds a scan, an unbatched write, or uncapped per-tick work is not done.
+  Enforced by `backend-engineer` and gated by `qa-test-engineer`.
 
 ## 4. Rollout plan
 1. **Land the scaffolding** (this change): `CLAUDE.md`, `.claude/agents/*`, this doc.

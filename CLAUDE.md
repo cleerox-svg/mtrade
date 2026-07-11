@@ -51,9 +51,17 @@ This model applies to every session working in this repo.
   `min_rr`/`min_confidence` changes real financial exposure — surface it to the
   user for explicit confirmation first (`market-compliance-officer` /
   `day-trading-strategist` will flag these).
-- **Respect cron cost discipline.** The Worker fires every minute; work is
-  change-gated and several migrations exist purely to cut D1 spend. Do not add
-  unconditional per-tick D1 scans or full-table reads.
+- **Efficiency & scalability are mandatory — no quick fixes.** Every D1 read
+  and write and all Worker usage must be the most efficient and scalable option
+  available, at 100× today's rows/users, not just correct for now. Reads must be
+  index-served (prefer covering indexes); writes batched, idempotent, and
+  skip-unchanged; recurring/cron work change-gated and market-hours aware. The
+  Worker fires every minute forever, so an inefficiency recurs on every tick.
+  This is enforced by `backend-engineer` and `qa-test-engineer` against the
+  checklist in **`docs/backend-efficiency-standard.md`** — a change that adds a
+  full-table scan, an unbatched write, or uncapped per-tick work is not done,
+  even if it typechecks. If the optimal fix is large, do it properly or surface
+  the tradeoff to the user; do not land a quick fix.
 - **Migrations are append-only.** Add a new numbered `migrations/NNNN_*.sql`;
   never edit an applied one. Keep them idempotent.
 - **Secrets come from `Env`** (`src/types.ts`): `JWT_SECRET`, `GOOGLE_CLIENT_*`,

@@ -33,14 +33,30 @@ running as a single Cloudflare Worker (`src/index.ts`) backed by D1 (SQLite).
   `FINNHUB_API_KEY`.
 - **Auth**: `/api/*` requires the `mtrade_session` JWT cookie; `/app/*` serves the
   built React SPA from the `ASSETS` binding. `allowed_emails` is an invite gate.
-- **Cron cost discipline is a first-class concern.** The Worker fires every
-  minute. Work is change-gated: `fetchAndStoreCandles` returns a `Set` of
-  changed `instrumentId:timeframe` combos and the strategy engine skips
-  unchanged combos. Module-scoped warm-isolate caches exist on purpose
-  (`latestCandlesCache`, strategy `configCache` 60s TTL). Several migrations
-  (0012–0014) exist purely to cut D1 spend. **Never** add an unconditional
-  per-tick D1 scan or full-table read without justifying the cost, and prefer
-  covering indexes for hot queries.
+- **Efficiency & scalability are mandatory — no quick fixes.** This is the
+  non-negotiable standard for your work. Every D1 read and write and all Worker
+  usage must be the most efficient, scalable option available — designed to hold
+  at 100× today's rows and users, not merely correct for current data. You must
+  follow and enforce **`docs/backend-efficiency-standard.md`**; its enforcement
+  checklist is part of your definition of done. In short:
+  - **Reads**: index-served only (no scans on growing tables); prefer *covering*
+    indexes so hot reads never touch the base table; `SELECT` only needed
+    columns; bound every result set (`LIMIT` + ordered index, seek over OFFSET).
+  - **Writes**: `env.DB.batch([...])` for multi-row; idempotent
+    (`INSERT OR IGNORE`/upsert); skip unchanged rows; migrations append-only.
+  - **Worker/cron**: minimize round-trips (batch/`Promise.all`, no N+1); the
+    Worker fires every minute, so all recurring work is change-gated and
+    market-hours aware; use warm-isolate caches (with TTL + invalidation) for
+    hot, rarely-changing reads.
+  - Verify plans with `EXPLAIN QUERY PLAN` (expect `SEARCH … USING INDEX`, not
+    `SCAN`); the SQLite planner is weak, so don't assume SQL beats an
+    index-served seek (a batched `MAX … GROUP BY` was reverted for this).
+  Precedents already in the code: change-gated cron (`fetchAndStoreCandles`
+  returns a `Set` of changed combos; engine skips unchanged), warm-isolate
+  caches (`latestCandlesCache`, `configCache` 60s TTL), batched candle inserts
+  (size 50), and cost-driven migrations 0012–0014. If the optimal solution is
+  large, do it properly or flag the tradeoff to the user — never land a quick fix
+  that adds a scan, an unbatched write, or uncapped per-tick work.
 - **D1/SQLite limits**: no complex query planner. Keep indexes covering; avoid
   `GROUP BY` the optimizer can't use (see the reverted batched-MAX commit in
   history). Migrations are append-only and applied in CI via
@@ -56,7 +72,9 @@ running as a single Cloudflare Worker (`src/index.ts`) backed by D1 (SQLite).
 
 ## Definition of done (enforce before returning)
 1. `npx tsc --noEmit` passes at the repo root (config includes `src/**/*.ts`).
-2. New/changed D1 access has an appropriate index and does not add per-tick cost.
+2. The efficiency checklist in `docs/backend-efficiency-standard.md` passes:
+   new/changed queries are index-served (covering where hot), result sets
+   bounded, writes batched/idempotent, and no unconditional per-tick cost added.
 3. Any new schema is a new numbered migration in `migrations/` (never edit an
    applied one) and is idempotent (`CREATE TABLE IF NOT EXISTS`, `INSERT OR IGNORE`).
 4. External calls are failure-tolerant; secrets come from `Env`, never hardcoded.
