@@ -3,6 +3,30 @@
 **Status:** Proposal for review. This is a plan + feasibility assessment + open
 questions, not an implementation. Nothing here is built yet.
 
+## Decisions locked (Matthew, Jul 2026)
+1. **Accounts: build the live bridge now** — not manual-first. A near-real-time
+   accounts view is a priority, so the always-on companion bridge is in scope
+   from the start.
+2. **Chart data: reuse my prop feed** — pull live candles from the existing
+   Tradovate/Rithmic/ProjectX account feed rather than paying a separate vendor.
+3. **Branding: plain trading terms** — drop the perfume/fragrance metaphor
+   (TOP NOTE/ACCORD/"fragrances"). Use standard ICT language everywhere:
+   Sweep / BOS / FVG / IFVG / Continuation / Entry; confidence as a number.
+4. **Strategy: Matthew will dictate an updated strategy** — the current ICT
+   detection logic is a starting point, but the rules will be rebuilt/adjusted
+   from his walkthrough. **This is the gating item: no detection changes land
+   until that session happens.**
+
+### Consequence — one bridge serves both #1 and #2
+Because the account feed and the market-data feed both come from the **same
+prop platform (Tradovate/Rithmic/ProjectX)**, decisions 1 and 2 collapse into a
+**single always-on companion bridge**: one process authenticates once, then (a)
+snapshots account balance/positions/PnL and (b) streams live candles, pushing
+both to an authenticated `/api/sync` endpoint → D1. This avoids two integrations,
+two auth flows, and two data bills. ProjectX (REST) is the most web-friendly if
+available on his account; Tradovate needs a registered commercial app; Rithmic
+needs signed agreements. Confirm which platform his Lucid accounts use first.
+
 **Vision (Matthew's words, distilled):** a single cockpit Matthew logs into that
 shows (1) all his funded prop accounts at a glance, (2) a chart configured to his
 strategy with his indicators running live while he watches TradingView on a
@@ -136,22 +160,32 @@ on the Cockpit, not pages.
 
 ## 3. Phased roadmap
 
-- **Phase 0 — De-Alpha + reframe (foundation).** Introduce the Lucid account
-  model + rewritten compliance; migrate/retire Alpha tables; update copy. Ship
-  Tier-0 manual account entry. *(backend + market-compliance-officer + content +
-  QA)*
-- **Phase 1 — Charts V2.** Lightweight Charts with the full strategy overlay;
-  data-source abstraction with labeled delayed Yahoo; instrument/timeframe config.
-  *(frontend + day-trading-strategist + backend + QA)*
-- **Phase 2 — Journal V2.** R2 screenshot upload + Claude-vision review + manual
+Reordered to reflect the locked decisions (bridge is now first-class, not
+optional; branding goes plain; strategy detection waits on Matthew's walkthrough).
+
+- **Phase 0 — De-Alpha + plain-language reframe (foundation).** Lucid account
+  model + rewritten compliance (EOD trailing, plan-specific consistency, 100%
+  first $10k then 90/10, daily $500 payouts); migrate/retire Alpha tables;
+  **rename all fragrance copy to plain ICT terms.** *(backend +
+  market-compliance-officer + content + QA)*
+- **Phase 1 — Companion bridge + `/api/sync` (unblocks accounts AND live data).**
+  A small always-on service authenticates to the prop platform
+  (ProjectX/Tradovate/Rithmic) and pushes both account snapshots and live candles
+  to an authenticated ingest endpoint → D1. This one component satisfies
+  decisions 1 and 2. *(backend + a small out-of-repo bridge service + QA)*
+- **Phase 2 — Charts V2.** Lightweight Charts with the strategy overlay, fed by
+  the bridge's live candles (delayed Yahoo kept only as labeled fallback);
+  instrument/timeframe config. *(frontend + backend + QA)*
+- **Phase 3 — Journal V2.** R2 screenshot upload + Claude-vision review + manual
   trade entry + analytics (win rate / avg win / avg loss / avg R:R / expectancy).
   *(backend + frontend + content + QA)*
-- **Phase 3 — Secret-weapon automation.** Outbound Trade Syncer webhook on armed
-  setups, with a safety switch and audit log. *(backend + day-trading-strategist
-  + market-compliance-officer + QA)*
-- **Phase 4 (optional) — Live account bridge + live data.** Companion bridge for
-  near-real-time Lucid balances; Databento (or prop feed) for live candles.
-  *(backend + a small out-of-repo bridge service)*
+- **Phase 4 — Strategy rebuild (gated on Matthew's walkthrough).** Rebuild/adjust
+  the detection logic to his dictated rules; wire the outbound **Trade Syncer
+  webhook** on armed setups with a safety switch + audit log. *(day-trading-
+  strategist + backend + market-compliance-officer + QA)*
+
+**Gating note:** Phase 4 detection work does not start until Matthew walks
+through his current rules. Phases 0–3 can proceed in parallel with that session.
 
 Each phase is a reviewable PR under the orchestrator + sub-agent model in
 `CLAUDE.md`. Every D1/Worker change is held to
